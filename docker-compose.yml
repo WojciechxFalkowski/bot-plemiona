@@ -1,0 +1,50 @@
+# docker-compose.yml
+version: "3.8"
+
+services:
+  # postgres:
+  #   image: postgres:14-alpine
+  #   container_name: offer-tracker-db
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_DB: offertracker
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      # args:
+      #   - BACKEND_PORT=${BACKEND_PORT}
+    container_name: bot-plemiona-backend
+    environment:
+      BACKEND_PORT: ${BACKEND_PORT}
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    # depends_on:
+    #   - postgres
+    # environment:
+    #   DB_HOST: postgres
+    #   DB_PORT: 5432
+    #   DB_USERNAME: postgres
+    #   DB_PASSWORD: postgres
+    #   DB_DATABASE: offertracker
+    #   DB_SYNCHRONIZE: 'true'
+    #   FRONTEND_URL: http://localhost:5173
+    restart: unless-stopped
+
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #     args:
+  #       - VITE_API_URL=${VITE_API_URL}
+  #   container_name: offer-tracker-frontend
+  #   ports:
+  #     - ${VITE_PORT}:${VITE_PORT}
+  #   restart: unless-stopped
