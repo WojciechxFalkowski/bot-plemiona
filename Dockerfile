@@ -1,33 +1,26 @@
-# Build stage
-FROM node:20.11.1-alpine AS build
+FROM node:20.11.1
 
-WORKDIR /app
+# Ustawienie zmiennej środowiskowej NODE_ENV na produkcję
+# ENV NODE_ENV production
 
-# Copy package files and install dependencies
-COPY package*.json ./
+# Kopiowanie plików package.json i package-lock.json
+COPY package.json package-lock.json ./
+
+# Instalacja zależności
 RUN npm install
-
-# Copy source code and build
+RUN npx playwright install
+RUN npx playwright install-deps
+# Kopiowanie całego kodu źródłowego
 COPY . .
+
+# Budowanie aplikacji w trybie produkcyjnym
 RUN npm run build
 
-# Production stage
-FROM node:20.11.1-alpine
+# Pruning development dependencies
+RUN npm prune --production
 
-WORKDIR /app
+# Przebudowanie bcrypt
+RUN npm rebuild bcrypt --build-from-source
 
-# Set NODE_ENV to production for optimized runtime
-ENV NODE_ENV=production
-
-# Copy package files from build stage
-COPY package*.json ./
-
-# Install only production dependencies and rebuild bcrypt if needed
-RUN npm ci --only=production && \
-    npm rebuild bcrypt --build-from-source
-
-# Copy built application from build stage
-COPY --from=build /app/dist ./dist
-
-# Run application
-CMD ["node", "dist/main.js"]
+# Uruchomienie aplikacji w trybie produkcyjnym
+CMD ["node", "dist/src/main.js"]
