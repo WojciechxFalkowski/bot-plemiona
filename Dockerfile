@@ -1,27 +1,33 @@
-FROM node:20.11.1
+# Build stage
+FROM node:20.11.1-alpine AS build
 
 WORKDIR /app
 
-# Ustawienie zmiennej środowiskowej NODE_ENV na produkcję
-# ENV NODE_ENV production
-
-# Kopiowanie plików package.json i package-lock.json
+# Copy package files and install dependencies
 COPY package*.json ./
-
-# Instalacja zależności
 RUN npm install
 
-# Kopiowanie całego kodu źródłowego
+# Copy source code and build
 COPY . .
-
-# Budowanie aplikacji w trybie produkcyjnym
 RUN npm run build
 
-# Pruning development dependencies
-RUN npm prune --production
+# Production stage
+FROM node:20.11.1-alpine
 
-# Przebudowanie bcrypt
-RUN npm rebuild bcrypt --build-from-source
+WORKDIR /app
 
-# Uruchomienie aplikacji w trybie produkcyjnym
+# Set NODE_ENV to production for optimized runtime
+ENV NODE_ENV=production
+
+# Copy package files from build stage
+COPY package*.json ./
+
+# Install only production dependencies and rebuild bcrypt if needed
+RUN npm ci --only=production && \
+    npm rebuild bcrypt --build-from-source
+
+# Copy built application from build stage
+COPY --from=build /app/dist ./dist
+
+# Run application
 CMD ["node", "dist/main.js"]
