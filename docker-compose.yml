@@ -26,7 +26,7 @@ services:
       BACKEND_PORT: ${BACKEND_PORT}
     ports:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
-
+    restart: always
     # depends_on:
     #   - postgres
     # environment:
@@ -37,7 +37,6 @@ services:
     #   DB_DATABASE: offertracker
     #   DB_SYNCHRONIZE: 'true'
     #   FRONTEND_URL: http://localhost:5173
-    restart: unless-stopped
 
   # frontend:
   #   build:
