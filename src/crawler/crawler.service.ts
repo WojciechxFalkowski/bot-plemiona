@@ -82,20 +82,20 @@ export class CrawlerService implements OnModuleInit {
 	 * Automatically starts the scavenging bot when the application initializes
 	 */
 	async onModuleInit() {
-		// this.logger.log('Initializing Plemiona Scavenging Bot');
+		this.logger.log('Initializing Plemiona Scavenging Bot');
 
-		// // Check if auto-scavenging is enabled (default to false if not set)
-		// const autoScavengingEnabled = await this.isAutoScavengingEnabled();
+		// Check if auto-scavenging is enabled (default to false if not set)
+		const autoScavengingEnabled = await this.isAutoScavengingEnabled();
 
-		// if (autoScavengingEnabled) {
-		// 	this.logger.log('Auto-scavenging is enabled. Starting bot in headless mode...');
-		// 	// Start the bot in headless mode
-		// 	this.runScavengingBot({ headless: true }).catch(err => {
-		// 		this.logger.error('Error starting bot on initialization:', err);
-		// 	});
-		// } else {
-		// 	this.logger.warn('Auto-scavenging is disabled. Bot will not start automatically.');
-		// }
+		if (autoScavengingEnabled) {
+			this.logger.log('Auto-scavenging is enabled. Starting bot in headless mode...');
+			// Start the bot in headless mode
+			this.runScavengingBot({ headless: true }).catch(err => {
+				this.logger.error('Error starting bot on initialization:', err);
+			});
+		} else {
+			this.logger.warn('Auto-scavenging is disabled. Bot will not start automatically.');
+		}
 	}
 
 	/**
