@@ -23,6 +23,7 @@ interface ScavengeLevelStatus {
 	isLocked: boolean;
 	isBusy: boolean;
 	isAvailable: boolean;
+	isUnlocking: boolean; // Nowa flaga dla stanu odblokowywania
 	containerLocator: Locator; // Locator kontenera danego poziomu
 }
 
@@ -476,22 +477,26 @@ export class CrawlerService implements OnModuleInit {
 			// Sprawdź, czy poziom jest zablokowany (szukając przycisku Odblokowanie)
 			const isLocked = await container.locator(levelSelectors.levelUnlockButton).isVisible({ timeout: 1000 }); // Krótki timeout
 
+			// Sprawdź, czy poziom jest w trakcie odblokowywania
+			const isUnlocking = await container.locator('.unlocking-view').isVisible({ timeout: 1000 });
+
 			// Sprawdź, czy poziom ma przycisk Start (jest potencjalnie dostępny)
 			const hasStartButton = await container.locator(levelSelectors.levelStartButton).isVisible({ timeout: 1000 }); // Krótki timeout
 
 			// Określ stan:
-			const isAvailable = !isLocked && hasStartButton;
-			// Zajęty, jeśli nie jest zablokowany i nie jest dostępny (nie ma przycisku Start)
-			const isBusy = !isLocked && !isAvailable;
+			const isAvailable = !isLocked && !isUnlocking && hasStartButton;
+			// Zajęty, jeśli nie jest zablokowany, nie jest w trakcie odblokowywania i nie jest dostępny (nie ma przycisku Start)
+			const isBusy = !isLocked && !isUnlocking && !isAvailable;
 
 			statuses.push({
 				level,
 				isLocked,
 				isBusy,
 				isAvailable,
+				isUnlocking,
 				containerLocator: container
 			});
-			this.logger.debug(`Level ${level} status: Locked=${isLocked}, Busy=${isBusy}, Available=${isAvailable} (Start button found: ${hasStartButton})`);
+			this.logger.debug(`Level ${level} status: Locked=${isLocked}, Unlocking=${isUnlocking}, Busy=${isBusy}, Available=${isAvailable} (Start button found: ${hasStartButton})`);
 		}
 
 		// Zwróć statusy (maksymalnie 4)
@@ -614,6 +619,25 @@ export class CrawlerService implements OnModuleInit {
 			const levelStatuses = await this.getScavengingLevelStatuses(page);
 			const busyLevels = levelStatuses.filter(s => s.isBusy);
 			const availableLevels = levelStatuses.filter(s => s.isAvailable);
+			const unlockingLevels = levelStatuses.filter(s => s.isUnlocking);
+
+			// Log info o poziomach w trakcie odblokowywania
+			if (unlockingLevels.length > 0) {
+				this.logger.log(`Found ${unlockingLevels.length} levels being unlocked: ${unlockingLevels.map(l => l.level).join(', ')}`);
+
+				// Opcjonalnie: Próba odczytania czasu pozostałego do odblokowania
+				for (const levelStatus of unlockingLevels) {
+					try {
+						const countdownElement = levelStatus.containerLocator.locator('.unlock-countdown-text');
+						if (await countdownElement.isVisible({ timeout: 2000 })) {
+							const timeText = await countdownElement.textContent({ timeout: 2000 });
+							this.logger.debug(`Level ${levelStatus.level} unlock time remaining: ${timeText}`);
+						}
+					} catch (error) {
+						this.logger.debug(`Could not read unlock time for level ${levelStatus.level}`);
+					}
+				}
+			}
 
 			// Sprawdź, czy są aktywne misje zbieractwa
 			if (busyLevels.length > 0) {

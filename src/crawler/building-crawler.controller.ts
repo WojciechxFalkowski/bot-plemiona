@@ -139,7 +139,23 @@ export class BuildingCrawlerController {
     @ApiOperation({ summary: 'Set the complete building queue' })
     @ApiBody({
         type: [BuildingDto],
-        description: 'Array of buildings to add to the queue'
+        description: 'Array of buildings to add to the queue',
+        examples: {
+            example1: {
+                value: [
+                    {
+                        "buildingId": "farm",
+                        "level": 12,
+                        "priority": 1
+                    },
+                    {
+                        "buildingId": "barracks",
+                        "level": 5,
+                        "priority": 2
+                    }
+                ]
+            }
+        }
     })
     @SwaggerApiResponse({
         status: 200,
@@ -165,7 +181,16 @@ export class BuildingCrawlerController {
     @ApiOperation({ summary: 'Add a building to the queue' })
     @ApiBody({
         type: BuildingDto,
-        description: 'Building to add to the queue'
+        description: 'Building to add to the queue',
+        examples: {
+            example1: {
+                value: {
+                    "buildingId": "farm",
+                    "level": 12,
+                    "priority": 1
+                }
+            }
+        }
     })
     @SwaggerApiResponse({
         status: 200,
