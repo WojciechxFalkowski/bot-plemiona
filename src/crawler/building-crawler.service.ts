@@ -24,7 +24,6 @@ export class BuildingCrawlerService implements OnModuleInit {
     private queueManager: BuildingQueueManager | null = null;
     private isRunning = false;
     private timerId: NodeJS.Timeout | null = null;
-
     // Constants for Plemiona Login
     private readonly PLEMIONA_LOGIN_URL = 'https://www.plemiona.pl/';
     private readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=${worldName}`;
@@ -34,7 +33,6 @@ export class BuildingCrawlerService implements OnModuleInit {
     private readonly maxIntervalMinutes = 15;
     private villageId = '12142'; // Default village ID
     private world = '214'; // Default world
-
     // Game credentials from environment variables
     private readonly PLEMIONA_USERNAME: string;
     private readonly PLEMIONA_PASSWORD: string;
@@ -137,6 +135,10 @@ export class BuildingCrawlerService implements OnModuleInit {
         try {
             this.logger.log('Starting building process...');
 
+            if (this.exampleQueue.length === 0) {
+                this.logger.log('No buildings to build. Exiting.');
+                return;
+            }
             // Initialize queue manager
             this.queueManager = new BuildingQueueManager(page, this.villageId);
 
@@ -148,7 +150,6 @@ export class BuildingCrawlerService implements OnModuleInit {
             // Clean up the queue (remove completed buildings)
             await this.queueManager.cleanQueue();
 
-            this.logger.log('queueManager -> processQueue');
             // Process the queue (try to build the next building)
             const result = await this.queueManager.processQueue();
 
@@ -272,78 +273,7 @@ export class BuildingCrawlerService implements OnModuleInit {
 
         this.logger.log(`Scheduling next run in ${minutes}m ${seconds}s`);
 
-        this.timerId = setTimeout(() => this.runNextCycle(), delay);
-    }
-
-    /**
-     * Run the next building cycle
-     */
-    private async runNextCycle(): Promise<void> {
-        if (!this.isRunning) {
-            this.logger.log('Service is no longer running, skipping next cycle');
-            return;
-        }
-
-        this.logger.log('Starting next building cycle...');
-
-        try {
-            // Create a new browser and page for this cycle
-            const { browser, context, page } = await createBrowserPage({ headless: true });
-            this.browser = browser;
-            this.page = page;
-
-            // Authenticate
-            try {
-                await this.addPlemionaCookies(context);
-                await page.goto(`https://pl${this.PLEMIONA_TARGET_WORLD}.plemiona.pl/game.php?village=${this.villageId}&screen=main`, { waitUntil: 'networkidle' });
-
-                // Check if logged in
-                if (!(await page.isVisible('#menu_row'))) {
-                    // Cookies failed, go to login page
-                    await page.goto(this.PLEMIONA_LOGIN_URL, { waitUntil: 'networkidle' });
-                    await this.loginToPlemiona(page);
-
-                    // Select world
-                    if (await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.PLEMIONA_TARGET_WORLD))) {
-                        await page.getByText(this.PLEMIONA_TARGET_WORLD).click();
-                        await page.waitForLoadState('networkidle', { timeout: 15000 });
-
-                        // Navigate to main building screen
-                        await page.goto(`https://pl${this.PLEMIONA_TARGET_WORLD}.plemiona.pl/game.php?village=${this.villageId}&screen=main`, { waitUntil: 'networkidle' });
-                    } else {
-                        throw new Error('World selector not visible after login');
-                    }
-                }
-
-                // Initialize queue manager
-                this.queueManager = new BuildingQueueManager(page, this.villageId);
-
-                // Clean up the queue
-                await this.queueManager.cleanQueue();
-
-                // Process queue
-                const result = await this.queueManager.processQueue();
-                if (result) {
-                    this.logger.log('Successfully queued a building for construction');
-                } else {
-                    this.logger.log('No buildings were queued for construction');
-                }
-
-                // Schedule next run
-                this.scheduleNextRun();
-
-            } catch (error) {
-                this.logger.error('Error during building cycle:', error);
-                this.scheduleNextRun(600); // Try again in 10 minutes
-            } finally {
-                // Clean up browser
-                await this.cleanup();
-            }
-
-        } catch (error) {
-            this.logger.error('Failed to initialize browser for next cycle:', error);
-            this.scheduleNextRun(600); // Try again in 10 minutes
-        }
+        this.timerId = setTimeout(() => this.start(), delay);//delay
     }
 
     /**
@@ -441,4 +371,4 @@ export class BuildingCrawlerService implements OnModuleInit {
     isActive(): boolean {
         return this.isRunning;
     }
-} 
+}

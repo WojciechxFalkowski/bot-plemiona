@@ -536,27 +536,15 @@ export class CrawlerService implements OnModuleInit {
 
 		const unitsToSendTotal: Partial<Record<ScavengingUnit, number>> = {};
 
-		// 1. Oblicz ile jednostek każdego typu MOŻNA wysłać (uwzględniając limity i rezerwy)
+		// 1. Tylko Pikinierzy (spear) są wysyłani, reszta jednostek = 0
 		for (const unit of unitOrder) {
-			if (scavengingSettings.archers === 0 && (unit === 'archer' || unit === 'marcher')) {
-				continue; // Pomiń łuczników, jeśli wyłączone
-			}
-			let available = availableUnits[unit] || 0;
-			const config = unitSettings[unit];
-
-			if (available <= config.untouchable) {
-				available = 0;
+			if (unit === 'spear') {
+				let available = availableUnits[unit] || 0;
+				// Limit maksymalny 1000 pikinierów
+				unitsToSendTotal[unit] = Math.min(available, 1000);
 			} else {
-				available -= config.untouchable;
-				if (available >= config.conditional_safeguard) {
-					available -= config.conditional_safeguard;
-				} else {
-					// Jeśli nie starcza na safeguard, nie zostawiamy nic (wysyłamy co jest ponad untouchable)
-				}
+				unitsToSendTotal[unit] = 0;
 			}
-
-			// Zastosuj globalny limit max_unit_number
-			unitsToSendTotal[unit] = Math.min(available, config.max_unit_number);
 		}
 		this.logger.debug('Total units eligible for sending (after limits):', unitsToSendTotal);
 
