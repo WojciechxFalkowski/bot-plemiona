@@ -26,30 +26,17 @@ import {
 	ScavengingTimeData,
 	LevelDispatchPlan
 } from './utils/scavenging.interfaces';
-
-// Interfejs dla pliku cookie
-interface PlemionaCookie {
-	name: string;
-	value: string;
-	domain: string;
-	path: string;
-	expires: number;
-}
+import { AuthUtils } from './utils/auth.utils';
+import { PlemionaCredentials } from './utils/auth.interfaces';
+import { VillageUtils } from './utils/village.utils';
+import { VillageCollectionOptions } from './utils/village.interfaces';
 
 @Injectable()
 export class CrawlerService implements OnModuleInit {
 	private readonly logger = new Logger(CrawlerService.name);
-	// Constants for Plemiona Login
-	private readonly PLEMIONA_LOGIN_URL = 'https://www.plemiona.pl/'; // Replace with the actual login page if different
-	private readonly PLEMIONA_USERNAME_SELECTOR = 'textbox[name="Nazwa gracza:"]';
-	private readonly PLEMIONA_PASSWORD_SELECTOR = 'textbox[name="Hasło:"]';
-	private readonly PLEMIONA_LOGIN_BUTTON_SELECTOR = 'link[name="Logowanie"]';
-	private readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=${worldName}`; // Example: 'Świat 214'
 
 	// Game credentials from environment variables
-	private readonly PLEMIONA_USERNAME: string;
-	private readonly PLEMIONA_PASSWORD: string;
-	private readonly PLEMIONA_TARGET_WORLD: string;
+	private readonly credentials: PlemionaCredentials;
 
 	private villageData: VillageData[] = [];
 
@@ -64,18 +51,16 @@ export class CrawlerService implements OnModuleInit {
 		private configService: ConfigService
 	) {
 		// Initialize credentials from environment variables with default values if not set
-		this.PLEMIONA_USERNAME = this.configService.get<string>('PLEMIONA_USERNAME') || '';
-		this.PLEMIONA_PASSWORD = this.configService.get<string>('PLEMIONA_PASSWORD') || '';
-		this.PLEMIONA_TARGET_WORLD = this.configService.get<string>('PLEMIONA_TARGET_WORLD') || '';
+		this.credentials = {
+			username: this.configService.get<string>('PLEMIONA_USERNAME') || '',
+			password: this.configService.get<string>('PLEMIONA_PASSWORD') || '',
+			targetWorld: this.configService.get<string>('PLEMIONA_TARGET_WORLD') || ''
+		};
 
-		// Check for missing credentials
-		const missingCredentials: string[] = [];
-		if (!this.PLEMIONA_USERNAME) missingCredentials.push('PLEMIONA_USERNAME');
-		if (!this.PLEMIONA_PASSWORD) missingCredentials.push('PLEMIONA_PASSWORD');
-		if (!this.PLEMIONA_TARGET_WORLD) missingCredentials.push('PLEMIONA_TARGET_WORLD');
-
-		if (missingCredentials.length > 0) {
-			this.logger.warn(`Missing environment variables: ${missingCredentials.join(', ')}. Fallback to cookies will be attempted.`);
+		// Validate credentials
+		const validation = AuthUtils.validateCredentials(this.credentials);
+		if (!validation.isValid) {
+			this.logger.warn(`Invalid credentials: missing fields: ${validation.missingFields.join(', ')}, errors: ${validation.errors.join(', ')}. Fallback to cookies will be attempted.`);
 		} else {
 			this.logger.log('Plemiona credentials loaded from environment variables successfully.');
 		}
@@ -123,48 +108,24 @@ export class CrawlerService implements OnModuleInit {
 	 * @param options Opcje uruchomienia przeglądarki (np. headless).
 	 */
 	public async runScavengingBot(options?: { headless?: boolean }): Promise<void> {
-		this.logger.log(`Starting Plemiona Scavenging Bot for user: ${this.PLEMIONA_USERNAME}`);
+		this.logger.log(`Starting Plemiona Scavenging Bot for user: ${this.credentials.username}`);
 		const { browser, context, page } = await createBrowserPage(options);
 
 		try {
-			let cookiesAdded = false;
-			try {
-				await this.addPlemionaCookies(context);
-				cookiesAdded = true;
-			} catch (cookieError) {
-				this.logger.warn('Failed to add cookies. Will attempt manual login.', cookieError);
-				// Continue with manual login
-			}
+			// Use AuthUtils for comprehensive login and world selection
+			const loginResult = await AuthUtils.loginAndSelectWorld(
+				page,
+				this.credentials,
+				this.settingsService
+			);
 
-			await page.goto(this.PLEMIONA_LOGIN_URL, { waitUntil: 'networkidle' });
-			this.logger.log(`Navigated to ${this.PLEMIONA_LOGIN_URL}`);
-
-			const worldSelectorVisible = await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.PLEMIONA_TARGET_WORLD));
-
-			if (worldSelectorVisible && cookiesAdded) {
-				this.logger.log('Login via cookies appears successful (world selector visible).');
+			if (loginResult.success && loginResult.worldSelected) {
+				this.logger.log(`Login successful using method: ${loginResult.method}`);
+				// --- Uruchomienie procesu zbieractwa --- 
+				await this.performScavenging(page);
 			} else {
-				this.logger.log('World selector not immediately visible, attempting manual login.');
-				await this.loginToPlemiona(page); // Fallback to manual login
-				this.logger.log('Manual login attempted.');
-			}
-
-			// --- World Selection ---
-			if (await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.PLEMIONA_TARGET_WORLD))) {
-				try {
-					await page.getByText(this.PLEMIONA_TARGET_WORLD).click();
-					this.logger.log(`Selected world: ${this.PLEMIONA_TARGET_WORLD}`);
-					await page.waitForLoadState('networkidle', { timeout: 15000 }); // Czekaj na załadowanie strony świata
-					this.logger.log('World page loaded.');
-
-					// --- Uruchomienie procesu zbieractwa --- 
-					await this.performScavenging(page);
-
-				} catch (worldSelectionOrScavengingError) {
-					this.logger.error(`Error during world selection or scavenging: ${worldSelectionOrScavengingError}`);
-				}
-			} else {
-				this.logger.warn('World selector not visible after login attempt. Cannot proceed to scavenging.');
+				this.logger.error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+				throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
 			}
 
 		} catch (error) {
@@ -190,7 +151,7 @@ export class CrawlerService implements OnModuleInit {
 			// Najpierw zbierz informacje o wszystkich wioskach
 			let villages: VillageData[] = [];
 			try {
-				villages = await this.collectVillageOverviewData(page);
+				villages = await VillageUtils.collectVillageOverviewData(page);
 				if (!villages || villages.length === 0) {
 					this.logger.warn('No villages found. Cannot perform scavenging.');
 					await this.scheduleNextScavengeRun(page, 300);
@@ -489,69 +450,6 @@ export class CrawlerService implements OnModuleInit {
 	}
 
 	/**
-	 * Adds Plemiona cookies to the browser context.
-	 * Now fetches cookies from the database using SettingsService.
-	 * @param context - The Playwright BrowserContext object.
-	 */
-	private async addPlemionaCookies(context: BrowserContext): Promise<void> {
-		try {
-			// Fetch cookies from settings
-			const cookiesData = await this.settingsService.getSetting<PlemionaCookie[]>(SettingsKey.PLEMIONA_COOKIES);
-
-			if (!cookiesData || cookiesData.length === 0) {
-				throw new Error('No Plemiona cookies found in settings');
-			}
-
-			// Transform cookies data from DB to the full format needed by Playwright
-			const cookies = cookiesData.map(cookie => ({
-				...cookie,
-				httpOnly: true,  // Default values for static properties
-				secure: true,
-				sameSite: 'Lax' as 'Lax' | 'Strict' | 'None'
-			}));
-
-			await context.addCookies(cookies);
-			this.logger.log('Successfully added Plemiona cookies to browser context.');
-		} catch (error) {
-			this.logger.error('Failed to add Plemiona cookies', error);
-			// Let the caller handle this failure
-		}
-	}
-
-	/**
-	 * Navigates to the Plemiona login page and fills in credentials.
-	 * Assumes cookies didn't grant access.
-	 * @param page - The Playwright Page object.
-	 */
-	private async loginToPlemiona(page: Page): Promise<void> {
-		// No navigation needed here usually, as we are already on the page from performPlemionaLogin
-		// If navigation IS needed, uncomment below:
-		// await page.goto(this.PLEMIONA_LOGIN_URL, { waitUntil: 'networkidle' });
-		// this.logger.log(`Navigated to ${this.PLEMIONA_LOGIN_URL} for manual login`);
-
-		try {
-			// --- Fill Username ---
-			await page.getByRole('textbox', { name: 'Nazwa gracza:' }).fill(this.PLEMIONA_USERNAME);
-			this.logger.log('Filled username for manual login.');
-
-			// --- Fill Password ---
-			await page.getByRole('textbox', { name: 'Hasło:' }).fill(this.PLEMIONA_PASSWORD);
-			this.logger.log('Filled password for manual login.');
-
-			// --- Click Login ---
-			await page.getByRole('link', { name: 'Logowanie' }).click();
-			this.logger.log('Clicked login button for manual login.');
-
-			// Wait for potential page load/redirect after login click
-			await page.waitForTimeout(3000); // Adjust as needed or use waitForNavigation/waitForSelector
-		} catch (error) {
-			this.logger.error('Error during manual login steps', error);
-			// Rethrow or handle as appropriate for performPlemionaLogin
-			throw error;
-		}
-	}
-
-	/**
 	 * This method is intended for scheduled execution (Cron).
 	 * It runs the login process in headless mode by default.
 	 */
@@ -576,30 +474,45 @@ export class CrawlerService implements OnModuleInit {
 	 */
 	public async collectVillageInformation(): Promise<void> {
 		this.logger.log('Starting village information collection using POM approach');
-		// TODO: Implement village information collection using Page Object Models
-		// This will include:
-		// - Resource amounts (wood, clay, iron, population)
-		// - Building levels for all structures
-		// - Village coordinates and name
-		// - Army units count
-		// - Research levels
-		this.logger.log('Village information collection method called - implementation pending');
 
-		this.logger.log(`Starting Plemiona Scavenging Bot for user: ${this.PLEMIONA_USERNAME}`);
+		this.logger.log(`Starting Plemiona Scavenging Bot for user: ${this.credentials.username}`);
 		const { browser, context, page } = await createBrowserPage({ headless: true });
 
 		try {
-			await this.loginAndSelectServer(page);
+			const loginResult = await AuthUtils.loginAndSelectWorld(
+				page,
+				this.credentials,
+				this.settingsService
+			);
 
-			// Collect basic village information after successful login
-			const villageData = await this.collectVillageOverviewData(page);
-
-			// Collect detailed information for each village
-			if (villageData && villageData.length > 0) {
-				await this.collectDetailedVillageData(page, villageData);
+			if (!loginResult.success) {
+				throw new Error(`Login failed: ${loginResult.error}`);
 			}
 
-			this.villageData = villageData;
+			// Use VillageUtils for comprehensive village information collection
+			const collectionOptions: VillageCollectionOptions = {
+				includeDetailedData: true,
+				skipBrokenVillages: true,
+				delayBetweenVillages: 1000,
+				timeoutPerVillage: 30000
+			};
+
+			const collectionResult = await VillageUtils.collectVillageInformation(page, collectionOptions);
+
+			if (collectionResult.success) {
+				this.villageData = collectionResult.data;
+				this.logger.log(`Successfully collected data for ${collectionResult.villagesProcessed}/${collectionResult.totalVillages} villages`);
+
+				if (collectionResult.villagesWithErrors > 0) {
+					this.logger.warn(`${collectionResult.villagesWithErrors} villages had errors during collection`);
+					collectionResult.errors.forEach(error => {
+						this.logger.warn(`Village ${error.villageName} (${error.villageId}): ${error.error} [${error.stage}]`);
+					});
+				}
+			} else {
+				this.logger.error('Village information collection failed');
+			}
+
 		} catch (error) {
 			this.logger.error('Error during village information collection:', error);
 		} finally {
@@ -609,205 +522,6 @@ export class CrawlerService implements OnModuleInit {
 				this.logger.log('Browser closed after village information collection.');
 			}
 		}
-	}
-
-	/**
-	 * Collects village overview data using Page Object Model
-	 * @param page - The Playwright Page object
-	 */
-	private async collectVillageOverviewData(page: Page): Promise<VillageData[]> {
-		this.logger.log('=========================== Starting village overview data collection ===========================');
-
-		try {
-			// Create instance of Village Overview Page Object
-			const villageOverviewPage = new VillageOverviewPage(page);
-
-			// Navigate to village overview page
-			await villageOverviewPage.navigate();
-			this.logger.log('Successfully navigated to village overview page');
-
-			// Wait for table to load
-			await villageOverviewPage.waitForTableLoad();
-
-			// Get village count
-			const villageCount = await villageOverviewPage.getVillageCount();
-			this.logger.log(`Found ${villageCount} villages to process`);
-
-			// Extract all village data
-			const villageData = await villageOverviewPage.extractVillageData();
-
-			// Log collected data
-			this.logger.log('=== VILLAGE OVERVIEW DATA ===');
-			villageData.forEach((village, index) => {
-				this.logger.log(`Village ${index + 1}:`);
-				this.logger.log(`  ID: ${village.id}`);
-				this.logger.log(`  Name: ${village.name}`);
-				this.logger.log(`  Coordinates: ${village.coordinates}`);
-				this.logger.log(`  Points: ${village.points.toLocaleString()}`);
-				this.logger.log(`  Resources: Wood=${village.resources.wood.toLocaleString()}, Clay=${village.resources.clay.toLocaleString()}, Iron=${village.resources.iron.toLocaleString()}`);
-				this.logger.log(`  Storage: ${village.storage.toLocaleString()}`);
-				this.logger.log(`  Population: ${village.population.current}/${village.population.max}`);
-				this.logger.log('  ---');
-			});
-			this.logger.log(`=== TOTAL VILLAGES: ${villageData.length} ===`);
-
-			return villageData;
-
-		} catch (error) {
-			this.logger.error('Error collecting village overview data:', error);
-			throw error;
-		}
-	}
-
-	/**
-	 * Handles login process and server selection for Plemiona.
-	 * This method combines cookie-based login, manual login fallback, and world selection.
-	 * @param page - The Playwright Page object to perform login operations on.
-	 */
-	private async loginAndSelectServer(page: Page): Promise<void> {
-		this.logger.log('Starting login and server selection process');
-
-		let cookiesAdded = false;
-		try {
-			await this.addPlemionaCookies(page.context());
-			cookiesAdded = true;
-		} catch (cookieError) {
-			this.logger.warn('Failed to add cookies. Will attempt manual login.', cookieError);
-			// Continue with manual login
-		}
-
-		await page.goto(this.PLEMIONA_LOGIN_URL, { waitUntil: 'networkidle' });
-		this.logger.log(`Navigated to ${this.PLEMIONA_LOGIN_URL}`);
-
-		const worldSelectorVisible = await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.PLEMIONA_TARGET_WORLD));
-
-		if (worldSelectorVisible && cookiesAdded) {
-			this.logger.log('Login via cookies appears successful (world selector visible).');
-		} else {
-			this.logger.log('World selector not immediately visible, attempting manual login.');
-			await this.loginToPlemiona(page); // Fallback to manual login
-			this.logger.log('Manual login attempted.');
-		}
-
-		// --- World Selection ---
-		if (await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.PLEMIONA_TARGET_WORLD))) {
-			try {
-				await page.getByText(this.PLEMIONA_TARGET_WORLD).click();
-				this.logger.log(`Selected world: ${this.PLEMIONA_TARGET_WORLD}`);
-				await page.waitForLoadState('networkidle', { timeout: 15000 }); // Czekaj na załadowanie strony świata
-				this.logger.log('World page loaded successfully.');
-			} catch (worldSelectionError) {
-				this.logger.error(`Error during world selection: ${worldSelectionError}`);
-				throw worldSelectionError;
-			}
-		} else {
-			this.logger.warn('World selector not visible after login attempt. Cannot proceed.');
-			throw new Error('World selector not visible after login attempt');
-		}
-	}
-
-	/**
-	 * Collects detailed information for each village including building levels, army units, and queues
-	 * @param page - The Playwright Page object
-	 * @param villageData - Array of basic village data to enhance with detailed information
-	 */
-	private async collectDetailedVillageData(page: Page, villageData: VillageData[]): Promise<VillageData[]> {
-		this.logger.log(`Starting detailed data collection for ${villageData.length} villages...`);
-
-		// Create instance of Village Detail Page Object
-		const villageDetailPage = new VillageDetailPage(page);
-
-		// Process each village one by one
-		for (let i = 0; i < villageData.length; i++) {
-			const village = villageData[i];
-			this.logger.log(`Processing detailed data for village ${i + 1}/${villageData.length}: ${village.name} (${village.id})`);
-
-			try {
-				// Navigate to specific village
-				await villageDetailPage.navigateToVillage(village.id);
-				this.logger.log(`Successfully navigated to village ${village.name}`);
-
-				// Collect building levels
-				this.logger.log(`Collecting building levels for ${village.name}...`);
-				village.buildingLevels = await villageDetailPage.extractBuildingLevels();
-
-				// Collect army units
-				this.logger.log(`Collecting army units for ${village.name}...`);
-				village.armyUnits = await villageDetailPage.extractArmyUnits();
-
-				// Collect build queue
-				this.logger.log(`Collecting build queue for ${village.name}...`);
-				village.buildQueue = await villageDetailPage.extractBuildQueue();
-
-				// Collect research queue
-				this.logger.log(`Collecting research queue for ${village.name}...`);
-				village.researchQueue = await villageDetailPage.extractResearchQueue();
-
-				// Log detailed information
-				this.logDetailedVillageData(village, i + 1);
-
-				// Small delay between villages to avoid overwhelming the server
-				await page.waitForTimeout(1000);
-
-			} catch (error) {
-				this.logger.error(`Error collecting detailed data for village ${village.name} (${village.id}):`, error);
-				// Continue with next village even if current one fails
-				continue;
-			}
-		}
-
-		this.logger.log('=== DETAILED VILLAGE DATA COLLECTION COMPLETED ===');
-		return villageData;
-	}
-
-	/**
-	 * Logs detailed village data in a formatted way
-	 * @param village - Village data to log
-	 * @param index - Village index for display
-	 */
-	private logDetailedVillageData(village: VillageData, index: number): void {
-		this.logger.log(`=== DETAILED DATA FOR VILLAGE ${index}: ${village.name} ===`);
-
-		// Log building levels
-		if (village.buildingLevels) {
-			this.logger.log('Building Levels:');
-			this.logger.log(`  Military: Barracks=${village.buildingLevels.barracks}, Stable=${village.buildingLevels.stable}, Workshop=${village.buildingLevels.workshop}`);
-			this.logger.log(`  Resources: Timber=${village.buildingLevels.timber_camp}, Clay=${village.buildingLevels.clay_pit}, Iron=${village.buildingLevels.iron_mine}`);
-			this.logger.log(`  Infrastructure: HQ=${village.buildingLevels.headquarters}, Farm=${village.buildingLevels.farm}, Warehouse=${village.buildingLevels.warehouse}, Wall=${village.buildingLevels.wall}`);
-		}
-
-		// Log army units
-		if (village.armyUnits) {
-			this.logger.log('Army Units:');
-			this.logger.log(`  Barracks: Spear=${village.armyUnits.barracks.spear}, Sword=${village.armyUnits.barracks.sword}, Axe=${village.armyUnits.barracks.axe}, Archer=${village.armyUnits.barracks.archer}`);
-			this.logger.log(`  Stable: Scout=${village.armyUnits.stable.scout}, LC=${village.armyUnits.stable.light_cavalry}, MA=${village.armyUnits.stable.mounted_archer}, HC=${village.armyUnits.stable.heavy_cavalry}`);
-			this.logger.log(`  Workshop: Ram=${village.armyUnits.workshop.ram}, Catapult=${village.armyUnits.workshop.catapult}`);
-			if (village.armyUnits.church) {
-				this.logger.log(`  Church: Paladin=${village.armyUnits.church.paladin}`);
-			}
-		}
-
-		// Log build queue
-		if (village.buildQueue && village.buildQueue.length > 0) {
-			this.logger.log('Build Queue:');
-			village.buildQueue.forEach((item, idx) => {
-				this.logger.log(`  ${idx + 1}. ${item.building} Level ${item.level} - ${item.timeRemaining} remaining`);
-			});
-		} else {
-			this.logger.log('Build Queue: Empty');
-		}
-
-		// Log research queue
-		if (village.researchQueue && village.researchQueue.length > 0) {
-			this.logger.log('Research Queue:');
-			village.researchQueue.forEach((item, idx) => {
-				this.logger.log(`  ${idx + 1}. ${item.technology} - ${item.timeRemaining} remaining`);
-			});
-		} else {
-			this.logger.log('Research Queue: Empty');
-		}
-
-		this.logger.log('---');
 	}
 
 	/**
@@ -848,7 +562,7 @@ export class CrawlerService implements OnModuleInit {
 			this.logger.error(`Error in addBuildingToQueue for building ${buildingId} level ${targetLevel} in village ${villageName}:`, error);
 			throw error;
 		}
-	} 
+	}
 
 	/**
 	 * Zwraca zebrane dane o czasach scavenging
