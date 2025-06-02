@@ -729,3 +729,10 @@ Wszystkie metody obsługują błędy poprzez:
    // When: exportVillageData() format='json'
    // Then: Zwraca poprawny JSON string
    ```
+
+
+
+TODO KIEDYŚ
+```
+Chciałbym móc sterować "isAutoScavengingEnabled" ale per wioska, a nie tak jak do tej pory jedna flaga true / false na wszystkie wioski. Chciałbym mieć do tego endpointy, aby móc wybrać dla każdego miasta, czy chce mieć auto zbieractwo czy nie.
+```

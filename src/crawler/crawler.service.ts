@@ -9,7 +9,7 @@ import {
 	availableUnitSelectors,
 	unitInputNames,
 	levelSelectors,
-	scheduleBufferSeconds,
+	getRandomScheduleBuffer,
 	ScavengingUnit
 } from '../utils/scavenging.config'; // Import konfiguracji
 import { setTimeout } from 'timers/promises'; // Użycie promisowej wersji setTimeout
@@ -72,7 +72,12 @@ export class CrawlerService implements OnModuleInit {
 	async onModuleInit() {
 		// this.collectVillageInformation();
 		//TODO uncomment this 
+		this.startScavengingBot();
 
+
+	}
+
+	public async startScavengingBot() {
 		this.logger.log('Initializing Plemiona Scavenging Bot');
 
 		// Check if auto-scavenging is enabled (default to false if not set)
@@ -192,7 +197,7 @@ export class CrawlerService implements OnModuleInit {
 
 					// 1. Odczytaj dostępne jednostki w tej wiosce
 					const availableUnits = await ScavengingUtils.getAvailableUnits(page);
-					this.logger.log(`Available units in ${village.name}:`, availableUnits);
+					// this.logger.log(`Available units in ${village.name}:`, availableUnits);
 
 					// Sprawdź, czy wioska ma jakiekolwiek jednostki do wysłania
 					const totalUnitsAvailable = Object.values(availableUnits).reduce((sum, count) => sum + (count || 0), 0);
@@ -375,8 +380,9 @@ export class CrawlerService implements OnModuleInit {
 
 		if (optimalTime !== null) {
 			// Użyj czasu z nowej logiki + buffer
-			delaySeconds = optimalTime + scheduleBufferSeconds;
-			this.logger.log(`Using optimal schedule time: ${optimalTime}s + buffer ${scheduleBufferSeconds}s = ${delaySeconds}s`);
+			const bufferSeconds = getRandomScheduleBuffer();
+			delaySeconds = optimalTime + bufferSeconds;
+			this.logger.log(`Using optimal schedule time: ${optimalTime}s + buffer ${bufferSeconds}s = ${delaySeconds}s`);
 		} else {
 			// Fallback do starej logiki odczytu bezpośrednio ze strony
 			this.logger.warn('Could not calculate optimal schedule time, falling back to page reading...');
@@ -384,8 +390,9 @@ export class CrawlerService implements OnModuleInit {
 			const fallbackResult = await ScavengingUtils.getFallbackScheduleTime(page);
 
 			if (fallbackResult.successfullyReadTime && fallbackResult.maxRemainingTimeSeconds > 0) {
-				delaySeconds = fallbackResult.maxRemainingTimeSeconds + scheduleBufferSeconds;
-				this.logger.log(`Fallback: Found max remaining time: ${fallbackResult.maxRemainingTimeSeconds}s + buffer ${scheduleBufferSeconds}s = ${delaySeconds}s`);
+				const bufferSeconds = getRandomScheduleBuffer();
+				delaySeconds = fallbackResult.maxRemainingTimeSeconds + bufferSeconds;
+				this.logger.log(`Fallback: Found max remaining time: ${fallbackResult.maxRemainingTimeSeconds}s + buffer ${bufferSeconds}s = ${delaySeconds}s`);
 			} else {
 				this.logger.warn(`Fallback failed or no active missions found. Using default delay: ${fallbackDelaySeconds}s`);
 				delaySeconds = fallbackDelaySeconds;

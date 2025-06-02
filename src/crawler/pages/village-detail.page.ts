@@ -355,7 +355,6 @@ export class VillageDetailPage {
                 const mappedKey = buildingMapping[buildingId];
                 if (mappedKey) {
                     buildingLevels[mappedKey] = level;
-                    console.log(`Extracted ${buildingId} (${mappedKey}) = Level ${level}`);
                 }
             }
 
@@ -680,7 +679,6 @@ export class VillageDetailPage {
             // Extract unit counts from recruitment form
             const extractedUnits = await this.parseBarracksUnitsFromHTML();
 
-            console.log('Extracted barracks units:', extractedUnits);
             return extractedUnits;
 
         } catch (error) {
@@ -751,7 +749,6 @@ export class VillageDetailPage {
                     if (countMatch) {
                         const currentCount = parseInt(countMatch[1], 10);
                         barracksUnits[unitType as keyof typeof barracksUnits] = currentCount;
-                        console.log(`Found ${unitType}: ${currentCount} units in village`);
                     } else {
                         console.warn(`Could not parse unit count for ${unitType}: "${countText}"`);
                     }
@@ -818,7 +815,6 @@ export class VillageDetailPage {
             // Extract unit counts from recruitment form
             const extractedUnits = await this.parseStableUnitsFromHTML();
 
-            console.log('Extracted stable units:', extractedUnits);
             return extractedUnits;
 
         } catch (error) {
@@ -905,7 +901,6 @@ export class VillageDetailPage {
                     if (countMatch) {
                         const currentCount = parseInt(countMatch[1], 10);
                         stableUnits[ourUnitType] = currentCount;
-                        console.log(`Found ${gameUnitType} (${ourUnitType}): ${currentCount} units in village`);
                     } else {
                         console.warn(`Could not parse unit count for ${gameUnitType}: "${countText}"`);
                     }
@@ -970,7 +965,6 @@ export class VillageDetailPage {
             // Extract unit counts from recruitment form
             const extractedUnits = await this.parseWorkshopUnitsFromHTML();
 
-            console.log('Extracted workshop units:', extractedUnits);
             return extractedUnits;
 
         } catch (error) {
@@ -1053,7 +1047,6 @@ export class VillageDetailPage {
                     if (countMatch) {
                         const currentCount = parseInt(countMatch[1], 10);
                         workshopUnits[ourUnitType] = currentCount;
-                        console.log(`Found ${gameUnitType} (${ourUnitType}): ${currentCount} units in village`);
                     } else {
                         console.warn(`Could not parse unit count for ${gameUnitType}: "${countText}"`);
                     }

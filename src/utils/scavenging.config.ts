@@ -112,4 +112,7 @@ export const levelSelectors = {
 };
 
 // Bufor czasowy (w sekundach) dodawany do czasu najdłuższej misji przed kolejnym uruchomieniem
-export const scheduleBufferSeconds = 20; // 20 sekund
+// Losowy bufor z zakresu 15-30 sekund dla uniknięcia wykrycia bota
+export function getRandomScheduleBuffer(): number {
+	return Math.floor(Math.random() * (30 - 15 + 1)) + 15; // Losowa wartość 15-30 sekund
+}

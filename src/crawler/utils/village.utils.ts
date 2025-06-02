@@ -130,9 +130,6 @@ export class VillageUtils {
             // Wyciągnij wszystkie dane wiosek
             const villageData = await villageOverviewPage.extractVillageData();
 
-            // Zaloguj zebrane dane
-            this.logVillageOverviewData(villageData);
-
             return villageData;
 
         } catch (error) {
@@ -248,26 +245,6 @@ export class VillageUtils {
         this.logger.log(`Processed: ${result.villagesProcessed}/${result.totalVillages}, Errors: ${result.villagesWithErrors}, Time: ${result.processingTime}ms`);
 
         return result;
-    }
-
-    /**
-     * Loguje dane przeglądu wiosek w sformatowany sposób
-     * @param villageData - Dane wiosek do zalogowania
-     */
-    static logVillageOverviewData(villageData: VillageData[]): void {
-        this.logger.log('=== VILLAGE OVERVIEW DATA ===');
-        villageData.forEach((village, index) => {
-            this.logger.log(`Village ${index + 1}:`);
-            this.logger.log(`  ID: ${village.id}`);
-            this.logger.log(`  Name: ${village.name}`);
-            this.logger.log(`  Coordinates: ${village.coordinates}`);
-            this.logger.log(`  Points: ${village.points.toLocaleString()}`);
-            this.logger.log(`  Resources: Wood=${village.resources.wood.toLocaleString()}, Clay=${village.resources.clay.toLocaleString()}, Iron=${village.resources.iron.toLocaleString()}`);
-            this.logger.log(`  Storage: ${village.storage.toLocaleString()}`);
-            this.logger.log(`  Population: ${village.population.current}/${village.population.max}`);
-            this.logger.log('  ---');
-        });
-        this.logger.log(`=== TOTAL VILLAGES: ${villageData.length} ===`);
     }
 
     /**
