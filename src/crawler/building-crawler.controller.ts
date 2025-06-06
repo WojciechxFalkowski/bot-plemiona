@@ -1,59 +1,18 @@
-import { Controller, Get, Post, Body, Delete, Param, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Delete, Param, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { BuildingCrawlerService } from './building-crawler.service';
+import { CrawlerService } from './crawler.service';
 import { BuildingQueueItem } from '../models/tribal-wars/building-queue-manager';
 import { ApiOperation, ApiResponse as SwaggerApiResponse, ApiTags, ApiBody, ApiParam } from '@nestjs/swagger';
-import { IsString, IsNumber, IsInt, Min, IsNotEmpty } from 'class-validator';
-
-/**
- * Data Transfer Object for building operations
- */
-export class BuildingDto {
-    /**
-     * ID of the building (e.g. 'barracks', 'farm', 'wall')
-     * @example 'barracks'
-     */
-    @IsString()
-    @IsNotEmpty()
-    buildingId: string;
-
-    /**
-     * Target level to upgrade the building to
-     * @example 3
-     */
-    @IsInt()
-    @Min(1)
-    level: number;
-
-    /**
-     * Priority in the building queue (lower number = higher priority)
-     * @example 1
-     */
-    @IsInt()
-    @Min(1)
-    priority: number;
-}
-
-/**
- * Response structure for API operations
- */
-class SuccessResponse {
-    /**
-     * Whether the operation was successful
-     * @example true
-     */
-    success: boolean;
-
-    /**
-     * Message describing the result
-     * @example "Building crawler started successfully"
-     */
-    message: string;
-}
+import { CreateBuildingCrawlerDto } from '@/building-crawler/dto/create-building-crawler.dto';
+import { SuccessResponse } from '@/utils/response';
 
 @ApiTags('Building Crawler')
 @Controller('building-crawler')
 export class BuildingCrawlerController {
-    constructor(private readonly buildingCrawlerService: BuildingCrawlerService) { }
+    constructor(
+        private readonly buildingCrawlerService: BuildingCrawlerService,
+        private readonly crawlerService: CrawlerService
+    ) { }
 
     /**
      * Start the building crawler
@@ -138,7 +97,7 @@ export class BuildingCrawlerController {
     @Post('queue')
     @ApiOperation({ summary: 'Set the complete building queue' })
     @ApiBody({
-        type: [BuildingDto],
+        type: [CreateBuildingCrawlerDto],
         description: 'Array of buildings to add to the queue',
         examples: {
             example1: {
@@ -146,12 +105,14 @@ export class BuildingCrawlerController {
                     {
                         "buildingId": "farm",
                         "level": 12,
-                        "priority": 1
+                        "priority": 1,
+                        "village": "Moja Wioska"
                     },
                     {
                         "buildingId": "barracks",
                         "level": 5,
-                        "priority": 2
+                        "priority": 2,
+                        "village": "12345"
                     }
                 ]
             }
@@ -169,50 +130,6 @@ export class BuildingCrawlerController {
         } catch (error) {
             throw new HttpException(
                 `Failed to update building queue: ${error.message}`,
-                HttpStatus.INTERNAL_SERVER_ERROR
-            );
-        }
-    }
-
-    /**
-     * Add a building to the construction queue
-     */
-    @Post('queue/add')
-    @ApiOperation({ summary: 'Add a building to the queue' })
-    @ApiBody({
-        type: BuildingDto,
-        description: 'Building to add to the queue',
-        examples: {
-            example1: {
-                value: {
-                    "buildingId": "farm",
-                    "level": 12,
-                    "priority": 1
-                }
-            }
-        }
-    })
-    @SwaggerApiResponse({
-        status: 200,
-        description: 'Building added to queue',
-        type: SuccessResponse
-    })
-    addBuildingToQueue(@Body() buildingDto: BuildingDto) {
-        try {
-            const { buildingId, level, priority } = buildingDto;
-
-            if (!buildingId || !level || priority === undefined) {
-                throw new HttpException(
-                    'buildingId, level, and priority are required',
-                    HttpStatus.BAD_REQUEST
-                );
-            }
-
-            this.buildingCrawlerService.addToQueue(buildingId, level, priority);
-            return { success: true, message: `Building ${buildingId} (level ${level}) added to queue` };
-        } catch (error) {
-            throw new HttpException(
-                `Failed to add building to queue: ${error.message}`,
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }

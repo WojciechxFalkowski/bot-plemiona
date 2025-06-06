@@ -6,6 +6,8 @@ import { ConfigService } from '@nestjs/config';
 import { SettingsService } from '../settings/settings.service';
 import { SettingsKey } from '../settings/settings-keys.enum';
 import { createBrowserPage } from '../utils/browser.utils';
+import { PlemionaCredentials } from './utils/auth.interfaces';
+import { AuthUtils } from './utils/auth.utils';
 
 // Interface for Plemiona cookie
 interface PlemionaCookie {
@@ -34,10 +36,7 @@ export class BuildingCrawlerService implements OnModuleInit {
     private villageId = '12142'; // Default village ID
     private world = '214'; // Default world
     // Game credentials from environment variables
-    private readonly PLEMIONA_USERNAME: string;
-    private readonly PLEMIONA_PASSWORD: string;
-    private readonly PLEMIONA_TARGET_WORLD: string;
-
+    private readonly credentials: PlemionaCredentials;
     // Example queue - make it non-readonly so it can be modified
     private exampleQueue: BuildingQueueItem[] = [];
 
@@ -46,15 +45,13 @@ export class BuildingCrawlerService implements OnModuleInit {
         private configService: ConfigService
     ) {
         // Initialize credentials from environment variables with default values if not set
-        this.PLEMIONA_USERNAME = this.configService.get<string>('PLEMIONA_USERNAME') || '';
-        this.PLEMIONA_PASSWORD = this.configService.get<string>('PLEMIONA_PASSWORD') || '';
-        this.PLEMIONA_TARGET_WORLD = this.configService.get<string>('PLEMIONA_TARGET_WORLD') || '';
+        this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
 
         // Check for missing credentials
         const missingCredentials: string[] = [];
-        if (!this.PLEMIONA_USERNAME) missingCredentials.push('PLEMIONA_USERNAME');
-        if (!this.PLEMIONA_PASSWORD) missingCredentials.push('PLEMIONA_PASSWORD');
-        if (!this.PLEMIONA_TARGET_WORLD) missingCredentials.push('PLEMIONA_TARGET_WORLD');
+        if (!this.credentials.username) missingCredentials.push('PLEMIONA_USERNAME');
+        if (!this.credentials.password) missingCredentials.push('PLEMIONA_PASSWORD');
+        if (!this.credentials.targetWorld) missingCredentials.push('PLEMIONA_TARGET_WORLD');
 
         if (missingCredentials.length > 0) {
             this.logger.warn(`Missing environment variables: ${missingCredentials.join(', ')}. Fallback to cookies will be attempted.`);
@@ -73,7 +70,7 @@ export class BuildingCrawlerService implements OnModuleInit {
      * @param options - Browser options
      */
     async start(options?: { headless?: boolean }): Promise<void> {
-        this.logger.log(`Starting Plemiona Building Bot for user: ${this.PLEMIONA_USERNAME}`);
+        this.logger.log(`Starting Plemiona Building Bot for user: ${this.credentials.username}`);
         const { browser, context, page } = await createBrowserPage(options);
 
         try {
@@ -89,21 +86,21 @@ export class BuildingCrawlerService implements OnModuleInit {
             await page.goto(this.PLEMIONA_LOGIN_URL, { waitUntil: 'networkidle' });
             this.logger.log(`Navigated to ${this.PLEMIONA_LOGIN_URL}`);
 
-            const worldSelectorVisible = await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.PLEMIONA_TARGET_WORLD));
+            const worldSelectorVisible = await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.credentials.targetWorld));
 
             if (worldSelectorVisible && cookiesAdded) {
                 this.logger.log('Login via cookies appears successful (world selector visible).');
             } else {
                 this.logger.log('World selector not immediately visible, attempting manual login.');
-                await this.loginToPlemiona(page); // Fallback to manual login
+                await AuthUtils.loginToPlemiona(page, this.credentials); // Fallback to manual login
                 this.logger.log('Manual login attempted.');
             }
 
             // --- World Selection ---
-            if (await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.PLEMIONA_TARGET_WORLD))) {
+            if (await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.credentials.targetWorld))) {
                 try {
-                    await page.getByText(this.PLEMIONA_TARGET_WORLD).click();
-                    this.logger.log(`Selected world: ${this.PLEMIONA_TARGET_WORLD}`);
+                    await page.getByText(this.credentials.targetWorld).click();
+                    this.logger.log(`Selected world: ${this.credentials.targetWorld}`);
                     await page.waitForLoadState('networkidle', { timeout: 15000 });
                     this.logger.log('World page loaded.');
 
@@ -233,32 +230,6 @@ export class BuildingCrawlerService implements OnModuleInit {
     }
 
     /**
-     * Login to Plemiona using username and password
-     * @param page - The Playwright Page object
-     */
-    private async loginToPlemiona(page: Page): Promise<void> {
-        try {
-            // Fill username and password
-            await page.getByRole('textbox', { name: 'Nazwa gracza:' }).fill(this.PLEMIONA_USERNAME);
-            this.logger.log('Filled username for manual login.');
-
-            await page.getByRole('textbox', { name: 'Hasło:' }).fill(this.PLEMIONA_PASSWORD);
-            this.logger.log('Filled password for manual login.');
-
-            // Click login button
-            await page.getByRole('link', { name: 'Logowanie' }).click();
-            this.logger.log('Clicked login button for manual login.');
-
-            // Wait for login to complete
-            await page.waitForTimeout(3000);
-        } catch (error) {
-            this.logger.error('Error during manual login steps', error);
-            // Rethrow or handle as appropriate
-            throw error;
-        }
-    }
-
-    /**
      * Schedule the next run with a random delay between min and max interval
      * @param fallbackDelaySeconds - Optional fallback delay in seconds
      */
@@ -316,34 +287,6 @@ export class BuildingCrawlerService implements OnModuleInit {
             // Store for next initialization
             this.exampleQueue = [...queue];
             this.logger.log('Stored queue for next initialization');
-        }
-    }
-
-    /**
-     * Add a building to the queue
-     * @param buildingId - ID of the building
-     * @param level - Target level
-     * @param priority - Priority (lower = higher priority)
-     */
-    addToQueue(buildingId: string, level: number, priority: number): void {
-        if (this.queueManager) {
-            this.queueManager.addToQueue(buildingId, level, priority);
-            this.logger.log(`Added building ${buildingId} level ${level} to queue with priority ${priority}`);
-        } else {
-            // Add to example queue
-            const existingIndex = this.exampleQueue.findIndex(
-                item => item.buildingId === buildingId && item.level === level
-            );
-
-            if (existingIndex >= 0) {
-                this.exampleQueue[existingIndex].priority = priority;
-            } else {
-                this.exampleQueue.push({ buildingId, level, priority });
-            }
-
-            // Sort by priority
-            this.exampleQueue.sort((a, b) => a.priority - b.priority);
-            this.logger.log(`Added building ${buildingId} level ${level} to stored queue with priority ${priority}`);
         }
     }
 

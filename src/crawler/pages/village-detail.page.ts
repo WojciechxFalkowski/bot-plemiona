@@ -1116,4 +1116,213 @@ export class VillageDetailPage {
         const academyUrl = `https://pl214.plemiona.pl/game.php?village=${villageId}&screen=tech`;
         await this.page.goto(academyUrl, { waitUntil: 'networkidle' });
     }
+
+    /**
+     * Gets the level of a specific building by its ID
+     * @param buildingId - The building ID to check (e.g., 'main', 'barracks', 'stable')
+     * @returns Promise with building level (0 if not built)
+     */
+    async getBuildingLevel(buildingId: string): Promise<number> {
+        try {
+            // Get current village ID from URL
+            const currentUrl = this.page.url();
+            const villageIdMatch = currentUrl.match(/village=(\d+)/);
+
+            if (!villageIdMatch) {
+                console.warn('Could not extract village ID for building level check');
+                return 0;
+            }
+
+            const villageId = villageIdMatch[1];
+
+            // Ensure we're on the main screen where buildings are visible
+            if (!currentUrl.includes('screen=main')) {
+                console.log('Navigating to main screen to check building level');
+                await this.navigateToVillage(villageId);
+            }
+
+            // Wait for buildings table to be visible
+            await this.page.waitForSelector('#buildings', { timeout: 10000 });
+
+            // Look for the specific building row
+            const buildingRow = this.page.locator(`#main_buildrow_${buildingId}`);
+            const buildingExists = await buildingRow.count() > 0;
+
+            if (!buildingExists) {
+                console.log(`Building ${buildingId} not found in buildings table - might not be built yet`);
+                return 0;
+            }
+
+            // Extract building level from the name cell
+            const nameCell = buildingRow.locator('td:first-child');
+            const nameText = await nameCell.textContent() || '';
+
+            // Look for "Poziom X" pattern in the text
+            const levelMatch = nameText.match(/Poziom (\d+)/);
+            const level = levelMatch ? parseInt(levelMatch[1], 10) : 0;
+
+            console.log(`Building ${buildingId} is at level ${level}`);
+            return level;
+
+        } catch (error) {
+            console.error(`Error getting building level for ${buildingId}:`, error);
+            return 0;
+        }
+    }
+
+    /**
+     * Checks if a specific building is built (level > 0)
+     * @param buildingId - The building ID to check
+     * @returns Promise with boolean indicating if building is built
+     */
+    async isBuildingBuilt(buildingId: string): Promise<boolean> {
+        const level = await this.getBuildingLevel(buildingId);
+        return level > 0;
+    }
+
+    /**
+     * Gets building level with additional building information
+     * @param buildingId - The building ID to check
+     * @returns Promise with detailed building information
+     */
+    async getBuildingInfo(buildingId: string): Promise<{
+        id: string;
+        level: number;
+        isBuilt: boolean;
+        config?: BuildingConfig;
+        canUpgrade?: boolean;
+        maxLevel?: number;
+    }> {
+        try {
+            const level = await this.getBuildingLevel(buildingId);
+            const config = getBuildingConfig(buildingId);
+
+            return {
+                id: buildingId,
+                level: level,
+                isBuilt: level > 0,
+                config: config,
+                canUpgrade: config ? level < config.maxLevel : undefined,
+                maxLevel: config?.maxLevel
+            };
+
+        } catch (error) {
+            console.error(`Error getting building info for ${buildingId}:`, error);
+            return {
+                id: buildingId,
+                level: 0,
+                isBuilt: false
+            };
+        }
+    }
+
+    /**
+     * Checks if building requirements are met for a specific building
+     * @param buildingId - The building ID to check requirements for
+     * @returns Promise with requirements check result
+     */
+    async checkBuildingRequirements(buildingId: string): Promise<{
+        met: boolean;
+        missingRequirements: BuildingRequirement[];
+        currentLevels: BuildingLevels;
+    }> {
+        try {
+            // Get all current building levels
+            const currentLevels = await this.extractBuildingLevels();
+
+            // Check requirements using the helper function
+            const requirementCheck = areBuildingRequirementsMet(buildingId, currentLevels);
+
+            return {
+                met: requirementCheck.met,
+                missingRequirements: requirementCheck.missingRequirements,
+                currentLevels: currentLevels
+            };
+
+        } catch (error) {
+            console.error(`Error checking building requirements for ${buildingId}:`, error);
+            return {
+                met: false,
+                missingRequirements: [],
+                currentLevels: {
+                    headquarters: 0,
+                    barracks: 0,
+                    stable: 0,
+                    workshop: 0,
+                    church: 0,
+                    academy: 0,
+                    smithy: 0,
+                    rally_point: 0,
+                    statue: 0,
+                    market: 0,
+                    timber_camp: 0,
+                    clay_pit: 0,
+                    iron_mine: 0,
+                    farm: 0,
+                    warehouse: 0,
+                    hiding_place: 0,
+                    wall: 0
+                }
+            };
+        }
+    }
+
+    /**
+     * Gets a list of all buildings that can be upgraded
+     * @returns Promise with array of buildings that can be upgraded
+     */
+    async getUpgradeableBuildingsList(): Promise<Array<{
+        id: string;
+        name: string;
+        currentLevel: number;
+        maxLevel: number;
+        canUpgrade: boolean;
+        requirementsMet: boolean;
+    }>> {
+        try {
+            const upgradeableBuildings: Array<{
+                id: string;
+                name: string;
+                currentLevel: number;
+                maxLevel: number;
+                canUpgrade: boolean;
+                requirementsMet: boolean;
+            }> = [];
+
+            const currentLevels = await this.extractBuildingLevels();
+
+            // Check each building from our configuration
+            for (const [_, buildingConfig] of Object.entries(TRIBAL_WARS_BUILDINGS)) {
+                const currentLevel = await this.getBuildingLevel(buildingConfig.id);
+                const requirementCheck = areBuildingRequirementsMet(buildingConfig.id, currentLevels);
+
+                const canUpgrade = currentLevel < buildingConfig.maxLevel;
+
+                if (canUpgrade || currentLevel > 0) { // Include built buildings or those that can be built
+                    upgradeableBuildings.push({
+                        id: buildingConfig.id,
+                        name: buildingConfig.name,
+                        currentLevel: currentLevel,
+                        maxLevel: buildingConfig.maxLevel,
+                        canUpgrade: canUpgrade,
+                        requirementsMet: requirementCheck.met
+                    });
+                }
+            }
+
+            // Sort by current level descending, then by name
+            upgradeableBuildings.sort((a, b) => {
+                if (a.currentLevel !== b.currentLevel) {
+                    return b.currentLevel - a.currentLevel;
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            return upgradeableBuildings;
+
+        } catch (error) {
+            console.error('Error getting upgradeable buildings list:', error);
+            return [];
+        }
+    }
 } 

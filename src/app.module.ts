@@ -7,6 +7,9 @@ import configuration from './database/database-configuration';
 import { CrawlerModule } from './crawler/crawler.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SettingsModule } from './settings/settings.module';
+import { BuildingCrawlerModule } from './building-crawler/building-crawler.module';
+import { VillagesCrawlerModule } from './villages-crawler/villages-crawler.module';
+import { VillagesModule } from './villages/villages.module';
 
 @Module({
   imports: [
@@ -14,7 +17,10 @@ import { SettingsModule } from './settings/settings.module';
     ScheduleModule.forRoot(),
     DatabaseModule,
     CrawlerModule,
-    SettingsModule
+    SettingsModule,
+    BuildingCrawlerModule,
+    VillagesCrawlerModule,
+    VillagesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

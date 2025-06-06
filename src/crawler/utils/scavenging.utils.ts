@@ -303,6 +303,12 @@ export class ScavengingUtils {
 
         // Przejdź po każdej wiosce
         for (const village of scavengingTimeData.villages) {
+            if (!village.levels || village.levels.length === 0) {
+                // Wioska z błędem podczas zbierania danych - ignoruj w obliczeniach
+                this.logger.debug(`Village ${village.villageName} has no level data (error during collection) - ignoring in calculations`);
+                continue;
+            }
+
             const busyLevels = village.levels.filter(level => level.status === 'busy');
             const availableLevels = village.levels.filter(level => level.status === 'available');
             const lockedLevels = village.levels.filter(level => level.status === 'locked');
@@ -314,26 +320,58 @@ export class ScavengingUtils {
                 maxTimesPerVillage.push(maxTimeInVillage);
                 this.logger.debug(`Village ${village.villageName} max busy time: ${maxTimeInVillage}s`);
             } else if (availableLevels.length > 0) {
-                // Wioska ma dostępne poziomy - bot może od razu wysłać wojska (czas = 0)
-                maxTimesPerVillage.push(0);
-                this.logger.debug(`Village ${village.villageName} has available levels - set to 0s (ready to dispatch)`);
+                // Wioska ma dostępne poziomy - ale sprawdź czy można wysłać wojska
+                // Jeśli ta wioska była przetwarzana w tym cyklu, to prawdopodobnie właśnie wysłano z niej wojska
+                // i nie powinna być uznawana za "gotową do dispatch" (czyli 0s)
+
+                // Sprawdź czy to jest świeżo zaktualizowana wioska (ostatnia aktualizacja < 5 minut temu)
+                const timeSinceUpdate = Date.now() - village.lastUpdated.getTime();
+                const fiveMinutesInMs = 5 * 60 * 1000;
+
+                if (timeSinceUpdate < fiveMinutesInMs && busyLevels.length === 0 && availableLevels.length === village.levels.length) {
+                    // Ta wioska może nie mieć jednostek lub wszystkie poziomy są rzeczywiście dostępne
+                    // Ale jeśli wszystkie poziomy są available i nie ma busy, to znaczy że albo:
+                    // 1. Wioska nie ma jednostek do wysłania
+                    // 2. Nie udało się wysłać wojsk z powodu błędu
+                    // W takim przypadku nie używamy czasu 0s, bo bot by się uruchamiał co 30 sekund
+
+                    // Zamiast 0s, użyj czasu 300s (5 minut) jako domyślny dla wiosek które nie wysłały wojsk
+                    maxTimesPerVillage.push(300);
+                    this.logger.debug(`Village ${village.villageName} has available levels but likely no troops or failed dispatch - set to 300s (5 min)`);
+                } else {
+                    // Normalna logika - wioska ma dostępne poziomy i może wysłać wojska
+                    maxTimesPerVillage.push(0);
+                    this.logger.debug(`Village ${village.villageName} has available levels - set to 0s (ready to dispatch)`);
+                }
+            } else if (unlockingLevels.length > 0) {
+                // Wioska ma poziomy w trakcie odblokowywania - znajdź najkrótszy czas unlocking
+                const unlockingTimes = unlockingLevels
+                    .map(level => level.timeRemainingSeconds)
+                    .filter(time => time > 0);
+
+                if (unlockingTimes.length > 0) {
+                    const minUnlockTime = Math.min(...unlockingTimes);
+                    maxTimesPerVillage.push(minUnlockTime);
+                    this.logger.debug(`Village ${village.villageName} has unlocking levels - shortest unlock time: ${minUnlockTime}s`);
+                } else {
+                    // Poziomy unlocking ale brak czasu - ustaw na 10 minut
+                    maxTimesPerVillage.push(600);
+                    this.logger.debug(`Village ${village.villageName} has unlocking levels (no time data) - set to 600s (10 min)`);
+                }
             } else {
-                // Wioska ma wszystkie poziomy zablokowane lub w trakcie odblokowywania - ustaw infinite
-                maxTimesPerVillage.push(Number.MAX_SAFE_INTEGER);
-                this.logger.debug(`Village ${village.villageName} has no busy/available levels (${lockedLevels.length} locked, ${unlockingLevels.length} unlocking) - set to infinite`);
+                // Wioska ma wszystkie poziomy zablokowane - ustaw na długi czas
+                maxTimesPerVillage.push(3600); // 1 godzina zamiast infinite
+                this.logger.debug(`Village ${village.villageName} has no busy/available/unlocking levels (${lockedLevels.length} locked) - set to 3600s (1 hour)`);
             }
         }
 
-        // Znajdź najkrótszy z najdłuższych czasów (ignoruj infinite)
-        const finiteMaxTimes = maxTimesPerVillage.filter(time => time !== Number.MAX_SAFE_INTEGER);
-
-        if (finiteMaxTimes.length === 0) {
-            // Wszystkie wioski mają infinite - brak dostępnych/aktywnych poziomów
-            this.logger.debug('All villages have infinite time (no busy/available levels)');
+        // Znajdź najkrótszy z najdłuższych czasów
+        if (maxTimesPerVillage.length === 0) {
+            this.logger.debug('No village times calculated for scheduling');
             return null;
         }
 
-        const shortestMaxTime = Math.min(...finiteMaxTimes);
+        const shortestMaxTime = Math.min(...maxTimesPerVillage);
         this.logger.debug(`Calculated shortest max time across villages: ${shortestMaxTime}s`);
 
         return shortestMaxTime;

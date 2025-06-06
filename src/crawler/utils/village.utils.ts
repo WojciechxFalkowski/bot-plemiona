@@ -22,24 +22,18 @@ export class VillageUtils {
     private static cache = new Map<string, { data: VillageData[]; timestamp: number }>();
 
     /**
-     * Kompleksowa metoda zbierania informacji o wioskach
+     * Zbiera tylko podstawowe informacje o wioskach (overview)
      * @param page - Obiekt Page z Playwright
      * @param options - Opcje zbierania danych
      */
-    static async collectVillageInformation(
+    static async collectBasicVillageInformation(
         page: Page,
-        options: VillageCollectionOptions = {}
+        options: { timeoutPerPage?: number } = {}
     ): Promise<VillageCollectionResult> {
         const startTime = Date.now();
-        const {
-            includeDetailedData = true,
-            includeOverviewOnly = false,
-            skipBrokenVillages = true,
-            delayBetweenVillages = 1000,
-            timeoutPerVillage = 30000
-        } = options;
+        const { timeoutPerPage = 15000 } = options;
 
-        this.logger.log('Starting comprehensive village information collection using POM approach');
+        this.logger.log('Starting basic village information collection (overview only)');
 
         const result: VillageCollectionResult = {
             success: false,
@@ -52,48 +46,23 @@ export class VillageUtils {
         };
 
         try {
+            // Ustaw timeout dla strony
+            page.setDefaultTimeout(timeoutPerPage);
+
             // Zbierz podstawowe dane wiosek
             const overviewData = await this.collectVillageOverviewData(page);
             result.totalVillages = overviewData.length;
             result.data = overviewData;
+            result.villagesProcessed = overviewData.length;
 
-            this.logger.log(`Collected overview data for ${overviewData.length} villages`);
-
-            // Jeśli tylko przegląd jest wymagany, zakończ tutaj
-            if (includeOverviewOnly || !includeDetailedData) {
-                result.success = true;
-                result.villagesProcessed = overviewData.length;
-                result.processingTime = Date.now() - startTime;
-                return result;
-            }
-
-            // Zbierz szczegółowe dane dla każdej wioski
-            if (overviewData.length > 0) {
-                const detailedResult = await this.collectDetailedVillageData(
-                    page,
-                    overviewData,
-                    {
-                        skipBrokenVillages,
-                        delayBetweenVillages,
-                        timeoutPerVillage
-                    }
-                );
-
-                result.data = detailedResult.data;
-                result.villagesProcessed = detailedResult.villagesProcessed;
-                result.villagesWithErrors = detailedResult.errors.length;
-                result.errors = detailedResult.errors;
-            }
+            this.logger.log(`Collected basic data for ${overviewData.length} villages`);
 
             result.success = true;
             result.processingTime = Date.now() - startTime;
-
-            this.logger.log(`Village information collection completed. Processed: ${result.villagesProcessed}, Errors: ${result.villagesWithErrors}, Time: ${result.processingTime}ms`);
-
             return result;
 
         } catch (error) {
-            this.logger.error('Error during village information collection:', error);
+            this.logger.error('Error during basic village information collection:', error);
             result.processingTime = Date.now() - startTime;
             result.errors.push({
                 villageId: 'unknown',
@@ -102,6 +71,104 @@ export class VillageUtils {
                 stage: 'overview'
             });
             return result;
+        }
+    }
+
+    /**
+     * Zbiera szczegółowe informacje o wioskach (overview + szczegóły)
+     * @param page - Obiekt Page z Playwright
+     * @param options - Opcje zbierania danych
+     */
+    static async collectDetailedVillageInformation(
+        page: Page,
+        options: VillageCollectionOptions = {}
+    ): Promise<VillageCollectionResult> {
+        const startTime = Date.now();
+        const {
+            skipBrokenVillages = true,
+            delayBetweenVillages = 1000,
+            timeoutPerVillage = 30000
+        } = options;
+
+        this.logger.log('Starting detailed village information collection (overview + details)');
+
+        try {
+            // Najpierw zbierz podstawowe dane
+            const basicResult = await this.collectBasicVillageInformation(page, {
+                timeoutPerPage: timeoutPerVillage
+            });
+
+            if (!basicResult.success || basicResult.data.length === 0) {
+                this.logger.warn('Failed to collect basic village data or no villages found');
+                return basicResult;
+            }
+
+            // Teraz zbierz szczegółowe dane dla każdej wioski
+            const detailedResult = await this.collectDetailedVillageData(
+                page,
+                basicResult.data,
+                {
+                    skipBrokenVillages,
+                    delayBetweenVillages,
+                    timeoutPerVillage
+                }
+            );
+
+            // Połącz wyniki
+            const finalResult: VillageCollectionResult = {
+                success: detailedResult.success,
+                villagesProcessed: detailedResult.villagesProcessed,
+                villagesWithErrors: detailedResult.errors.length,
+                totalVillages: basicResult.totalVillages,
+                data: detailedResult.data,
+                errors: [...basicResult.errors, ...detailedResult.errors],
+                processingTime: Date.now() - startTime
+            };
+
+            this.logger.log(`Detailed village information collection completed. Processed: ${finalResult.villagesProcessed}, Errors: ${finalResult.villagesWithErrors}, Time: ${finalResult.processingTime}ms`);
+
+            return finalResult;
+
+        } catch (error) {
+            this.logger.error('Error during detailed village information collection:', error);
+            return {
+                success: false,
+                villagesProcessed: 0,
+                villagesWithErrors: 1,
+                totalVillages: 0,
+                data: [],
+                errors: [{
+                    villageId: 'unknown',
+                    villageName: 'unknown',
+                    error: error.message,
+                    stage: 'detailed'
+                }],
+                processingTime: Date.now() - startTime
+            };
+        }
+    }
+
+    /**
+     * Kompleksowa metoda zbierania informacji o wioskach (dla kompatybilności wstecznej)
+     * @param page - Obiekt Page z Playwright
+     * @param options - Opcje zbierania danych
+     */
+    static async collectVillageInformation(
+        page: Page,
+        options: VillageCollectionOptions = {}
+    ): Promise<VillageCollectionResult> {
+        const {
+            includeDetailedData = true,
+            includeOverviewOnly = false
+        } = options;
+
+        // Decyduj którą metodę wywołać na podstawie opcji
+        if (includeOverviewOnly || !includeDetailedData) {
+            return this.collectBasicVillageInformation(page, {
+                timeoutPerPage: options.timeoutPerVillage
+            });
+        } else {
+            return this.collectDetailedVillageInformation(page, options);
         }
     }
 

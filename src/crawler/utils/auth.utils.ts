@@ -8,6 +8,7 @@ import {
     LoginOptions,
     LoginResult
 } from './auth.interfaces';
+import { ConfigService } from '@nestjs/config';
 
 export class AuthUtils {
     private static logger = new Logger(AuthUtils.name);
@@ -200,6 +201,14 @@ export class AuthUtils {
             result.error = errorMessage;
             return result;
         }
+    }
+
+    static getCredentialsFromEnvironmentVariables(configService: ConfigService): PlemionaCredentials {
+        return {
+            username: configService.get<string>('PLEMIONA_USERNAME') || '',
+            password: configService.get<string>('PLEMIONA_PASSWORD') || '',
+            targetWorld: configService.get<string>('PLEMIONA_TARGET_WORLD') || ''
+        };
     }
 
     /**

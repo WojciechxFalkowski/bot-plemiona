@@ -23,9 +23,10 @@ async function bootstrap() {
     .setVersion('1.0')
     .addTag('Scavenging Bot')
     .addTag('Settings')
-    .build();
+    .build()
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api', app, document); ///api-json -> export to postman json
+
 
   // Optional: Seed initial data if not already present
   const settingsService = app.get(SettingsService);

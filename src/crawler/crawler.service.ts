@@ -51,11 +51,7 @@ export class CrawlerService implements OnModuleInit {
 		private configService: ConfigService
 	) {
 		// Initialize credentials from environment variables with default values if not set
-		this.credentials = {
-			username: this.configService.get<string>('PLEMIONA_USERNAME') || '',
-			password: this.configService.get<string>('PLEMIONA_PASSWORD') || '',
-			targetWorld: this.configService.get<string>('PLEMIONA_TARGET_WORLD') || ''
-		};
+		this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
 
 		// Validate credentials
 		const validation = AuthUtils.validateCredentials(this.credentials);
@@ -72,7 +68,7 @@ export class CrawlerService implements OnModuleInit {
 	async onModuleInit() {
 		// this.collectVillageInformation();
 		//TODO uncomment this 
-		this.startScavengingBot();
+		// this.startScavengingBot();
 
 
 	}
@@ -175,18 +171,19 @@ export class CrawlerService implements OnModuleInit {
 				villages: []
 			};
 
-			// Iteruj po każdej wiosce
-			let totalSuccessfulDispatches = 0;
+			// PRE-FILTERING: Najpierw przejdź przez wszystkie wioski żeby zebrać dane o czasach
+			// bez wysyłania wojsk, to pozwoli na optymalizację i lepsze planowanie
+			this.logger.log('=== PRE-FILTERING PHASE: Collecting scavenging status for all villages ===');
+			const villagesToProcess: VillageData[] = [];
+
 			for (let i = 0; i < villages.length; i++) {
 				const village = villages[i];
-				this.logger.log(`Processing scavenging for village ${i + 1}/${villages.length}: ${village.name} (ID: ${village.id})`);
+				this.logger.log(`Pre-filtering village ${i + 1}/${villages.length}: ${village.name} (ID: ${village.id})`);
 
 				try {
-					// Nawigacja do zakładki Zbieractwo dla konkretnej wioski
+					// Nawigacja do zakładki Zbieractwo dla sprawdzenia statusu
 					const scavengingUrl = `https://pl214.plemiona.pl/game.php?village=${village.id}&screen=place&mode=scavenge`;
-					this.logger.log(`Navigating to scavenging page for village ${village.name}: ${scavengingUrl}`);
 					await page.goto(scavengingUrl, { waitUntil: 'networkidle', timeout: 15000 });
-					this.logger.log(`Scavenging page loaded for village ${village.name}`);
 
 					// Zbierz dane o czasach scavenging dla tej wioski
 					const villageScavengingData = await ScavengingUtils.collectScavengingTimeData(page, village.id, village.name);
@@ -195,18 +192,70 @@ export class CrawlerService implements OnModuleInit {
 					// Wyloguj zebrane dane o czasach
 					ScavengingUtils.logScavengingTimeData(villageScavengingData);
 
-					// 1. Odczytaj dostępne jednostki w tej wiosce
-					const availableUnits = await ScavengingUtils.getAvailableUnits(page);
-					// this.logger.log(`Available units in ${village.name}:`, availableUnits);
+					// Sprawdź czy wioska ma dostępne poziomy zbieractwa
+					const levelStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
+					const freeLevels = levelStatuses.filter(s => s.isAvailable);
+					const busyLevels = levelStatuses.filter(s => s.isBusy);
 
-					// Sprawdź, czy wioska ma jakiekolwiek jednostki do wysłania
-					const totalUnitsAvailable = Object.values(availableUnits).reduce((sum, count) => sum + (count || 0), 0);
-					if (totalUnitsAvailable === 0) {
-						this.logger.log(`No units available in village ${village.name}. Skipping to next village.`);
-						continue;
+					if (freeLevels.length > 0) {
+						// Sprawdź czy wioska ma jednostki do wysłania
+						const availableUnits = await ScavengingUtils.getAvailableUnits(page);
+						const totalUnitsAvailable = Object.values(availableUnits).reduce((sum, count) => sum + (count || 0), 0);
+
+						if (totalUnitsAvailable > 0) {
+							this.logger.log(`✓ Village ${village.name} added to processing queue (${freeLevels.length} free levels, ${totalUnitsAvailable} units available)`);
+							villagesToProcess.push(village);
+						} else {
+							this.logger.log(`✗ Village ${village.name} skipped - no units available`);
+						}
+					} else {
+						this.logger.log(`✗ Village ${village.name} skipped - ${busyLevels.length} busy levels, no free levels`);
 					}
 
-					// 2. Sprawdź status poziomów zbieractwa w tej wiosce
+					// Małe opóźnienie między wioskami
+					if (i < villages.length - 1) {
+						await page.waitForTimeout(1000);
+					}
+
+				} catch (villageError) {
+					this.logger.error(`Error during pre-filtering for village ${village.name}:`, villageError);
+					// Dodaj wioską z błędem do scavengingTimeData z domyślnymi wartościami
+					this.scavengingTimeData.villages.push({
+						villageId: village.id,
+						villageName: village.name,
+						lastUpdated: new Date(),
+						levels: [] // Puste poziomy oznaczają błąd podczas zbierania danych
+					});
+				}
+			}
+
+			this.logger.log(`=== Pre-filtering completed. ${villagesToProcess.length}/${villages.length} villages selected for processing ===`);
+
+			if (villagesToProcess.length === 0) {
+				this.logger.log('No villages require scavenging. All villages are either busy or have no units.');
+				await this.scheduleNextScavengeRun(page, 60); // Sprawdź ponownie za minutę
+				return;
+			}
+
+			// DISPATCH PHASE: Teraz przetwarzaj tylko wioski które mają dostępne poziomy
+			this.logger.log('=== DISPATCH PHASE: Processing selected villages ===');
+			let totalSuccessfulDispatches = 0;
+
+			for (let i = 0; i < villagesToProcess.length; i++) {
+				const village = villagesToProcess[i];
+				this.logger.log(`Processing scavenging for village ${i + 1}/${villagesToProcess.length}: ${village.name} (ID: ${village.id})`);
+
+				try {
+					// Nawigacja do zakładki Zbieractwo dla konkretnej wioski
+					const scavengingUrl = `https://pl214.plemiona.pl/game.php?village=${village.id}&screen=place&mode=scavenge`;
+					this.logger.log(`Navigating to scavenging page for village ${village.name}: ${scavengingUrl}`);
+					await page.goto(scavengingUrl, { waitUntil: 'networkidle', timeout: 15000 });
+					this.logger.log(`Scavenging page loaded for village ${village.name}`);
+
+					// 1. Odczytaj dostępne jednostki w tej wiosce
+					const availableUnits = await ScavengingUtils.getAvailableUnits(page);
+
+					// 2. Sprawdź status poziomów zbieractwa w tej wiosce (ponownie, bo mogło się zmienić)
 					const levelStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
 
 					// Sprawdź, czy którykolwiek poziom zbieractwa jest zajęty
@@ -281,6 +330,7 @@ export class CrawlerService implements OnModuleInit {
 								ScavengingUtils.logDispatchInfo(levelPlan, village.name);
 
 								// Pobierz faktyczny czas trwania z interfejsu gry
+								let actualDurationSeconds = 0;
 								try {
 									// Selektor do czasu trwania zbieractwa w kontenerze tego poziomu
 									const timeSelector = '.duration';
@@ -290,6 +340,7 @@ export class CrawlerService implements OnModuleInit {
 										const durationText = await timeElement.textContent();
 										if (durationText) {
 											this.logger.log(`  * Faktyczny czas zbieractwa: ${durationText.trim()}`);
+											actualDurationSeconds = ScavengingUtils.parseTimeToSeconds(durationText.trim());
 										} else {
 											this.logger.log(`  * Nie udało się odczytać czasu zbieractwa`);
 										}
@@ -305,6 +356,9 @@ export class CrawlerService implements OnModuleInit {
 								this.logger.log(`Clicked Start for level ${levelPlan.level} in village ${village.name}`);
 								villageSuccessfulDispatches++;
 								totalSuccessfulDispatches++;
+
+								// AKTUALIZACJA STANU WIOSKI PO DISPATCH
+								this.updateVillageStateAfterDispatch(village.id, levelPlan.level, actualDurationSeconds);
 
 								// Poczekaj na przeładowanie strony po kliknięciu
 								this.logger.debug(`Waiting for page to reload after starting level ${levelPlan.level} in village ${village.name}...`);
@@ -327,7 +381,7 @@ export class CrawlerService implements OnModuleInit {
 					}
 
 					// Małe opóźnienie między wioskami aby nie przeciążać serwera
-					if (i < villages.length - 1) { // Nie opóźniaj po ostatniej wiosce
+					if (i < villagesToProcess.length - 1) { // Nie opóźniaj po ostatniej wiosce
 						await page.waitForTimeout(2000);
 					}
 
@@ -341,31 +395,61 @@ export class CrawlerService implements OnModuleInit {
 			// Podsumowanie dla wszystkich wiosek
 			if (totalSuccessfulDispatches > 0) {
 				this.logger.log(`=== SCAVENGING SUMMARY ===`);
-				this.logger.log(`Successfully dispatched ${totalSuccessfulDispatches} scavenging missions across ${villages.length} villages.`);
+				this.logger.log(`Successfully dispatched ${totalSuccessfulDispatches} scavenging missions across ${villagesToProcess.length} villages.`);
 				this.logger.log(`========================`);
 			} else {
-				this.logger.warn('No scavenging missions were successfully dispatched from any village.');
+				this.logger.log(`=== SCAVENGING SUMMARY ===`);
+				this.logger.log(`No scavenging missions were dispatched across ${villagesToProcess.length} villages.`);
+				this.logger.log(`========================`);
 			}
 
-			// 6. Zaplanuj następne uruchomienie
-			await this.scheduleNextScavengeRun(page);
+			// Zaplanuj następny cykl zbieractwa na podstawie zebranych danych
+			await this.scheduleNextScavengeRun(page, 300);
 
 		} catch (error) {
-			this.logger.error('Error during scavenging cycle:', error);
-			// Spróbuj zaplanować ponowne uruchomienie nawet po błędzie
-			try {
-				await this.scheduleNextScavengeRun(page, 600); // Spróbuj ponownie za 10 minut
-			} catch (scheduleError) {
-				this.logger.error('Failed to schedule next run after error:', scheduleError);
-			}
-		} finally {
-			// Zamknij przeglądarkę po zakończeniu cyklu (udanym lub nie)
-			const browser = page.context().browser();
-			if (browser) {
-				// await browser.close();
-				this.logger.log('Browser closed after scavenging cycle.');
-			}
+			this.logger.error('Error during scavenging process:', error);
+			// W przypadku błędu spróbuj ponownie za 5 minut
+			await this.scheduleNextScavengeRun(page, 300);
 		}
+	}
+
+	/**
+	 * Aktualizuje stan wioski po wysłaniu wojsk na zbieractwo
+	 * @param villageId ID wioski
+	 * @param level Poziom zbieractwa który został uruchomiony
+	 * @param durationSeconds Czas trwania misji w sekundach
+	 */
+	private updateVillageStateAfterDispatch(villageId: string, level: number, durationSeconds: number): void {
+		const villageData = this.scavengingTimeData.villages.find(v => v.villageId === villageId);
+		if (!villageData) {
+			this.logger.warn(`Cannot update village state - village ${villageId} not found in scavenging data`);
+			return;
+		}
+
+		// Znajdź poziom do aktualizacji
+		const levelData = villageData.levels.find(l => l.level === level);
+		if (!levelData) {
+			this.logger.warn(`Cannot update village state - level ${level} not found in village ${villageId} data`);
+			return;
+		}
+
+		// Aktualizuj stan poziomu na "busy"
+		const now = new Date();
+		levelData.status = 'busy';
+		levelData.timeRemainingSeconds = durationSeconds;
+		levelData.estimatedCompletionTime = new Date(now.getTime() + (durationSeconds * 1000));
+
+		// Sformatuj czas pozostały
+		if (durationSeconds > 0) {
+			const hours = Math.floor(durationSeconds / 3600);
+			const minutes = Math.floor((durationSeconds % 3600) / 60);
+			const seconds = durationSeconds % 60;
+			levelData.timeRemaining = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+		} else {
+			levelData.timeRemaining = '0:00:00';
+		}
+
+		this.logger.debug(`Updated village ${villageData.villageName} level ${level} status to busy (${levelData.timeRemaining} remaining)`);
 	}
 
 	/**
@@ -504,7 +588,7 @@ export class CrawlerService implements OnModuleInit {
 				timeoutPerVillage: 30000
 			};
 
-			const collectionResult = await VillageUtils.collectVillageInformation(page, collectionOptions);
+			const collectionResult = await VillageUtils.collectDetailedVillageInformation(page, collectionOptions);
 
 			if (collectionResult.success) {
 				this.villageData = collectionResult.data;
