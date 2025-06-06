@@ -45,7 +45,7 @@ export class VillagesController {
             throw error;
         }
     }
-
+ 
     /**
      * GET /villages/auto-scavenging-status/:name - Pobiera status auto-scavenging dla konkretnej wioski
      */

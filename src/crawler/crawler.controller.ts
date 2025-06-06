@@ -50,22 +50,6 @@ export class CrawlerController {
   }
 
   /**
-   * Collects information about villages including resources, building levels, etc.
-   * Uses Page Object Model (POM) approach for better maintainability.
-   */
-  @Get('collect-village-info')
-  @ApiOperation({
-    summary: 'Collect village information',
-    description: 'Gathers information about villages such as resource amounts, building levels, etc.'
-  })
-  @ApiResponse({ status: 200, description: 'Village information collected successfully' })
-  public async collectVillageInfo() {
-    this.logger.log('Manually triggered village information collection');
-    await this.crawlerService.collectVillageInformation();
-    return { message: 'Village information collection completed successfully' };
-  }
-
-  /**
    * Adds a building to the construction queue for a specific village
    */
   @Post('add-building-to-queue')

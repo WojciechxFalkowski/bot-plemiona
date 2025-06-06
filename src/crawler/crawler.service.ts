@@ -18,6 +18,8 @@ import { SettingsKey } from '../settings/settings-keys.enum';
 import { ConfigService } from '@nestjs/config';
 import { VillageOverviewPage, VillageData } from './pages/village-overview.page';
 import { VillageDetailPage } from './pages/village-detail.page';
+import { VillagesService } from '../villages/villages.service';
+import { VillageResponseDto } from '../villages/dto';
 import { ScavengingUtils } from './utils/scavenging.utils';
 import {
 	ScavengeLevelStatus,
@@ -38,8 +40,6 @@ export class CrawlerService implements OnModuleInit {
 	// Game credentials from environment variables
 	private readonly credentials: PlemionaCredentials;
 
-	private villageData: VillageData[] = [];
-
 	// Nowa zmienna klasowa do przechowywania danych o czasach scavenging
 	private scavengingTimeData: ScavengingTimeData = {
 		lastCollected: new Date(),
@@ -48,7 +48,8 @@ export class CrawlerService implements OnModuleInit {
 
 	constructor(
 		private settingsService: SettingsService,
-		private configService: ConfigService
+		private configService: ConfigService,
+		private villagesService: VillagesService
 	) {
 		// Initialize credentials from environment variables with default values if not set
 		this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -68,7 +69,7 @@ export class CrawlerService implements OnModuleInit {
 	async onModuleInit() {
 		// this.collectVillageInformation();
 		//TODO uncomment this 
-		// this.startScavengingBot();
+		this.startScavengingBot();
 
 
 	}
@@ -147,20 +148,31 @@ export class CrawlerService implements OnModuleInit {
 	 */
 	private async performScavenging(page: Page): Promise<void> {
 		try {
-			this.logger.log('Starting scavenging process for all villages...');
+			this.logger.log('Starting scavenging process for villages with auto-scavenging enabled...');
 
-			// Najpierw zbierz informacje o wszystkich wioskach
-			let villages: VillageData[] = [];
+			// Pobierz wioski z bazy danych które mają włączone auto-scavenging
+			let villages: VillageResponseDto[] = [];
 			try {
-				villages = await VillageUtils.collectVillageOverviewData(page);
+				const allVillages = await this.villagesService.findAll(false); // false = bez auto-refresh
+
+				// Log all villages with their auto-scavenging status
+				const enabledVillages = allVillages.filter(v => v.isAutoScavengingEnabled);
+				const disabledVillages = allVillages.filter(v => !v.isAutoScavengingEnabled);
+
+				this.logger.log(`Villages auto-scavenging status:`);
+				this.logger.log(`  ✓ ENABLED (${enabledVillages.length}): ${enabledVillages.map(v => v.name).join(', ') || 'none'}`);
+				this.logger.log(`  ✗ DISABLED (${disabledVillages.length}): ${disabledVillages.map(v => v.name).join(', ') || 'none'}`);
+
+				villages = enabledVillages;
+
 				if (!villages || villages.length === 0) {
-					this.logger.warn('No villages found. Cannot perform scavenging.');
+					this.logger.warn('No villages with auto-scavenging enabled found. Cannot perform scavenging.');
 					await this.scheduleNextScavengeRun(page, 300);
 					return;
 				}
-				this.logger.log(`Found ${villages.length} villages to process for scavenging`);
+				this.logger.log(`Found ${villages.length} villages with auto-scavenging enabled to process`);
 			} catch (villageError) {
-				this.logger.error('Error collecting village data:', villageError);
+				this.logger.error('Error fetching villages from database:', villageError);
 				await this.scheduleNextScavengeRun(page, 600); // Spróbuj ponownie za 10 minut
 				return;
 			}
@@ -171,10 +183,9 @@ export class CrawlerService implements OnModuleInit {
 				villages: []
 			};
 
-			// PRE-FILTERING: Najpierw przejdź przez wszystkie wioski żeby zebrać dane o czasach
-			// bez wysyłania wojsk, to pozwoli na optymalizację i lepsze planowanie
-			this.logger.log('=== PRE-FILTERING PHASE: Collecting scavenging status for all villages ===');
-			const villagesToProcess: VillageData[] = [];
+			// PRE-FILTERING: Sprawdź status scavenging dla wiosek z włączonym auto-scavenging
+			this.logger.log('=== PRE-FILTERING PHASE: Collecting scavenging status for auto-scavenging enabled villages ===');
+			const villagesToProcess: VillageResponseDto[] = [];
 
 			for (let i = 0; i < villages.length; i++) {
 				const village = villages[i];
@@ -237,7 +248,7 @@ export class CrawlerService implements OnModuleInit {
 				return;
 			}
 
-			// DISPATCH PHASE: Teraz przetwarzaj tylko wioski które mają dostępne poziomy
+			// DISPATCH PHASE: Teraz przetwarzaj tylko wioski które mają dostępne poziomy i auto-scavenging włączony
 			this.logger.log('=== DISPATCH PHASE: Processing selected villages ===');
 			let totalSuccessfulDispatches = 0;
 
@@ -555,63 +566,6 @@ export class CrawlerService implements OnModuleInit {
 			await this.runScavengingBot({ headless: true });
 		} else {
 			this.logger.log('Auto-scavenging is disabled. Skipping scheduled run.');
-		}
-	}
-
-	/**
-	 * Collects information about villages including resources, building levels, etc.
-	 * Uses Page Object Model (POM) approach for better maintainability.
-	 * This method will be implemented to gather comprehensive village data.
-	 */
-	public async collectVillageInformation(): Promise<void> {
-		this.logger.log('Starting village information collection using POM approach');
-
-		this.logger.log(`Starting Plemiona Scavenging Bot for user: ${this.credentials.username}`);
-		const { browser, context, page } = await createBrowserPage({ headless: true });
-
-		try {
-			const loginResult = await AuthUtils.loginAndSelectWorld(
-				page,
-				this.credentials,
-				this.settingsService
-			);
-
-			if (!loginResult.success) {
-				throw new Error(`Login failed: ${loginResult.error}`);
-			}
-
-			// Use VillageUtils for comprehensive village information collection
-			const collectionOptions: VillageCollectionOptions = {
-				includeDetailedData: true,
-				skipBrokenVillages: true,
-				delayBetweenVillages: 1000,
-				timeoutPerVillage: 30000
-			};
-
-			const collectionResult = await VillageUtils.collectDetailedVillageInformation(page, collectionOptions);
-
-			if (collectionResult.success) {
-				this.villageData = collectionResult.data;
-				this.logger.log(`Successfully collected data for ${collectionResult.villagesProcessed}/${collectionResult.totalVillages} villages`);
-
-				if (collectionResult.villagesWithErrors > 0) {
-					this.logger.warn(`${collectionResult.villagesWithErrors} villages had errors during collection`);
-					collectionResult.errors.forEach(error => {
-						this.logger.warn(`Village ${error.villageName} (${error.villageId}): ${error.error} [${error.stage}]`);
-					});
-				}
-			} else {
-				this.logger.error('Village information collection failed');
-			}
-
-		} catch (error) {
-			this.logger.error('Error during village information collection:', error);
-		} finally {
-			// Close browser after completion
-			if (browser) {
-				await browser.close();
-				this.logger.log('Browser closed after village information collection.');
-			}
 		}
 	}
 
