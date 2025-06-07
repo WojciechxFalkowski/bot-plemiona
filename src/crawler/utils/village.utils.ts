@@ -13,13 +13,13 @@ import {
     VillageStatistics,
     VillageLoggingOptions,
     VillageExportOptions,
-    VillageImportOptions,
     VillageCacheOptions
 } from './village.interfaces';
 
 export class VillageUtils {
     private static logger = new Logger(VillageUtils.name);
     private static cache = new Map<string, { data: VillageData[]; timestamp: number }>();
+
 
     /**
      * Zbiera tylko podstawowe informacje o wioskach (overview)
@@ -349,9 +349,9 @@ export class VillageUtils {
         // Loguj poziomy budynków
         if (includeBuildings && village.buildingLevels) {
             this.logger.log('Building Levels:');
-            this.logger.log(`  Military: Barracks=${village.buildingLevels.barracks}, Stable=${village.buildingLevels.stable}, Workshop=${village.buildingLevels.workshop}`);
-            this.logger.log(`  Resources: Timber=${village.buildingLevels.timber_camp}, Clay=${village.buildingLevels.clay_pit}, Iron=${village.buildingLevels.iron_mine}`);
-            this.logger.log(`  Infrastructure: HQ=${village.buildingLevels.headquarters}, Farm=${village.buildingLevels.farm}, Warehouse=${village.buildingLevels.warehouse}, Wall=${village.buildingLevels.wall}`);
+            this.logger.log(`  Military: Barracks=${village.buildingLevels.barracks}, Stable=${village.buildingLevels.stable}, Workshop=${village.buildingLevels.garage}`);
+            this.logger.log(`  Resources: Wood=${village.buildingLevels.wood}, Stone=${village.buildingLevels.stone}, Iron=${village.buildingLevels.iron}`);
+            this.logger.log(`  Infrastructure: Main=${village.buildingLevels.main}, Farm=${village.buildingLevels.farm}, Storage=${village.buildingLevels.storage}, Wall=${village.buildingLevels.wall}`);
         }
 
         // Loguj jednostki armii

@@ -1,15 +1,38 @@
 import { Page, Locator } from 'playwright';
 import { BuildingLevels, ArmyUnits, BuildQueueItem, ResearchQueueItem } from './village-overview.page';
 
+// Enum dla ID budynków
+export enum BuildingId {
+    MAIN = 'main',
+    WOOD = 'wood',
+    STONE = 'stone',
+    IRON = 'iron',
+    FARM = 'farm',
+    STORAGE = 'storage',
+    HIDE = 'hide',
+    PLACE = 'place',
+    BARRACKS = 'barracks',
+    STABLE = 'stable',
+    GARAGE = 'garage',
+    SMITH = 'smith',
+    WALL = 'wall',
+    MARKET = 'market',
+    SNOB = 'snob',
+    CHURCH = 'church',
+    FIRST_CHURCH = 'first_church',
+    WATCHTOWER = 'watchtower',
+    STATUE = 'statue'
+}
+
 // Building requirements interface
 interface BuildingRequirement {
-    buildingId: string;
+    buildingId: BuildingId;
     level: number;
 }
 
 // Building configuration interface
 interface BuildingConfig {
-    id: string;
+    id: BuildingId;
     name: string;
     screen: string;
     maxLevel: number;
@@ -22,7 +45,7 @@ interface BuildingConfig {
 export const TRIBAL_WARS_BUILDINGS: Record<string, BuildingConfig> = {
     // Core buildings - always available
     MAIN: {
-        id: 'main',
+        id: BuildingId.MAIN,
         name: 'Ratusz',
         screen: 'main',
         maxLevel: 30,
@@ -33,134 +56,134 @@ export const TRIBAL_WARS_BUILDINGS: Record<string, BuildingConfig> = {
 
     // Resource buildings
     WOOD: {
-        id: 'wood',
+        id: BuildingId.WOOD,
         name: 'Tartak',
         screen: 'wood',
         maxLevel: 30,
-        requirements: [{ buildingId: 'main', level: 1 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Produkuje drewno'
     },
     STONE: {
-        id: 'stone',
+        id: BuildingId.STONE,
         name: 'Cegielnia',
         screen: 'stone',
         maxLevel: 30,
-        requirements: [{ buildingId: 'main', level: 1 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Produkuje glinę'
     },
     IRON: {
-        id: 'iron',
+        id: BuildingId.IRON,
         name: 'Huta Żelaza',
         screen: 'iron',
         maxLevel: 30,
-        requirements: [{ buildingId: 'main', level: 1 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Produkuje żelazo'
     },
 
     // Infrastructure buildings
     FARM: {
-        id: 'farm',
+        id: BuildingId.FARM,
         name: 'Zagroda',
         screen: 'farm',
         maxLevel: 30,
-        requirements: [{ buildingId: 'main', level: 1 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Zapewnia żywność dla mieszkańców i wojsk, zwiększając limit populacji'
     },
     STORAGE: {
-        id: 'storage',
+        id: BuildingId.STORAGE,
         name: 'Spichlerz',
         screen: 'storage',
         maxLevel: 30,
-        requirements: [{ buildingId: 'main', level: 1 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Magazynuje surowce'
     },
     HIDE: {
-        id: 'hide',
+        id: BuildingId.HIDE,
         name: 'Schowek',
         screen: 'hide',
         maxLevel: 10,
-        requirements: [{ buildingId: 'main', level: 1 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Pozwala ukryć część surowców przed grabieżą wrogów'
     },
     PLACE: {
-        id: 'place',
+        id: BuildingId.PLACE,
         name: 'Plac',
         screen: 'place',
         maxLevel: 1,
-        requirements: [{ buildingId: 'main', level: 1 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Miejsce zbiórki wojsk, skąd można wysyłać ataki i wsparcie'
     },
 
     // Military buildings
     BARRACKS: {
-        id: 'barracks',
+        id: BuildingId.BARRACKS,
         name: 'Koszary',
         screen: 'barracks',
         maxLevel: 25,
-        requirements: [{ buildingId: 'main', level: 3 }],
+        requirements: [{ buildingId: BuildingId.MAIN, level: 3 }],
         availableOnAllWorlds: true,
         description: 'Umożliwiają rekrutację jednostek piechoty'
     },
     STABLE: {
-        id: 'stable',
+        id: BuildingId.STABLE,
         name: 'Stajnia',
         screen: 'stable',
         maxLevel: 20,
         requirements: [
-            { buildingId: 'main', level: 10 },
-            { buildingId: 'barracks', level: 5 },
-            { buildingId: 'smith', level: 5 }
+            { buildingId: BuildingId.MAIN, level: 10 },
+            { buildingId: BuildingId.BARRACKS, level: 5 },
+            { buildingId: BuildingId.SMITH, level: 5 }
         ],
         availableOnAllWorlds: true,
         description: 'Pozwala na rekrutację jednostek kawalerii'
     },
     GARAGE: {
-        id: 'garage',
+        id: BuildingId.GARAGE,
         name: 'Warsztat',
         screen: 'garage',
         maxLevel: 15,
         requirements: [
-            { buildingId: 'main', level: 10 },
-            { buildingId: 'smith', level: 10 }
+            { buildingId: BuildingId.MAIN, level: 10 },
+            { buildingId: BuildingId.SMITH, level: 10 }
         ],
         availableOnAllWorlds: true,
         description: 'Umożliwia produkcję machin oblężniczych'
     },
     SMITH: {
-        id: 'smith',
+        id: BuildingId.SMITH,
         name: 'Kuźnia',
         screen: 'smith',
         maxLevel: 20,
-        requirements: [{ buildingId: 'main', level: 3 }], // Estimated requirement
+        requirements: [{ buildingId: BuildingId.MAIN, level: 3 }], // Estimated requirement
         availableOnAllWorlds: true,
         description: 'Służy do badania nowych technologii i ulepszania jednostek'
     },
     WALL: {
-        id: 'wall',
+        id: BuildingId.WALL,
         name: 'Mur Obronny',
         screen: 'wall',
         maxLevel: 20,
-        requirements: [{ buildingId: 'barracks', level: 1 }],
+        requirements: [{ buildingId: BuildingId.BARRACKS, level: 1 }],
         availableOnAllWorlds: true,
         description: 'Zwiększa obronę wioski oraz siłę obronną stacjonujących wojsk'
     },
 
     // Economic buildings
     MARKET: {
-        id: 'market',
+        id: BuildingId.MARKET,
         name: 'Rynek',
         screen: 'market',
         maxLevel: 25,
         requirements: [
-            { buildingId: 'main', level: 3 }, // Estimated requirement
-            { buildingId: 'storage', level: 2 } // Estimated requirement
+            { buildingId: BuildingId.MAIN, level: 3 }, // Estimated requirement
+            { buildingId: BuildingId.STORAGE, level: 2 } // Estimated requirement
         ],
         availableOnAllWorlds: true,
         description: 'Umożliwia handel surowcami z innymi graczami oraz przesyłanie surowców'
@@ -168,14 +191,14 @@ export const TRIBAL_WARS_BUILDINGS: Record<string, BuildingConfig> = {
 
     // Advanced buildings
     SNOB: {
-        id: 'snob',
+        id: BuildingId.SNOB,
         name: 'Pałac',
         screen: 'snob',
         maxLevel: 3, // Can be 1 or 3 depending on world settings
         requirements: [
-            { buildingId: 'main', level: 20 },
-            { buildingId: 'smith', level: 20 },
-            { buildingId: 'market', level: 10 }
+            { buildingId: BuildingId.MAIN, level: 20 },
+            { buildingId: BuildingId.SMITH, level: 20 },
+            { buildingId: BuildingId.MARKET, level: 10 }
         ],
         availableOnAllWorlds: true,
         description: 'Umożliwia produkcję szlachciców, którzy są niezbędni do przejmowania wiosek'
@@ -183,51 +206,51 @@ export const TRIBAL_WARS_BUILDINGS: Record<string, BuildingConfig> = {
 
     // World-dependent buildings
     CHURCH: {
-        id: 'church',
+        id: BuildingId.CHURCH,
         name: 'Kościół',
         screen: 'church',
         maxLevel: 3, // Estimated max level
         requirements: [
-            { buildingId: 'main', level: 5 },
-            { buildingId: 'farm', level: 5 }
+            { buildingId: BuildingId.MAIN, level: 5 },
+            { buildingId: BuildingId.FARM, level: 5 }
         ],
         availableOnAllWorlds: false,
         description: 'Wzmacnia morale wojsk w wioskach znajdujących się w jego strefie wpływów'
     },
     FIRST_CHURCH: {
-        id: 'first_church',
+        id: BuildingId.FIRST_CHURCH,
         name: 'Pierwszy Kościół',
         screen: 'church',
         maxLevel: 3, // Estimated max level
         requirements: [
-            { buildingId: 'main', level: 5 },
-            { buildingId: 'farm', level: 5 }
+            { buildingId: BuildingId.MAIN, level: 5 },
+            { buildingId: BuildingId.FARM, level: 5 }
         ],
         availableOnAllWorlds: false,
         description: 'Unikalny kościół, możliwy do zbudowania tylko w jednej wiosce'
     },
     WATCHTOWER: {
-        id: 'watchtower',
+        id: BuildingId.WATCHTOWER,
         name: 'Wieża Strażnicza',
         screen: 'watchtower',
         maxLevel: 20, // Estimated max level
-        requirements: [{ buildingId: 'main', level: 5 }], // Estimated requirement
+        requirements: [{ buildingId: BuildingId.MAIN, level: 5 }], // Estimated requirement
         availableOnAllWorlds: false,
         description: 'Zwiększa zasięg widzenia wojsk'
     },
     STATUE: {
-        id: 'statue',
+        id: BuildingId.STATUE,
         name: 'Piedestał',
         screen: 'statue',
         maxLevel: 1,
-        requirements: [{ buildingId: 'main', level: 1 }], // Estimated requirement
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }], // Estimated requirement
         availableOnAllWorlds: false,
         description: 'Miejsce mianowania nowego rycerza'
     }
 } as const;
 
 // Helper function to get building configuration
-export function getBuildingConfig(buildingId: string): BuildingConfig | undefined {
+export function getBuildingConfig(buildingId: BuildingId | string): BuildingConfig | undefined {
     return Object.values(TRIBAL_WARS_BUILDINGS).find(building => building.id === buildingId);
 }
 
@@ -238,7 +261,7 @@ export function getBuildingByScreen(screen: string): BuildingConfig | undefined 
 
 // Helper function to check if building requirements are met
 export function areBuildingRequirementsMet(
-    buildingId: string,
+    buildingId: BuildingId | string,
     currentBuildingLevels: BuildingLevels
 ): { met: boolean; missingRequirements: BuildingRequirement[] } {
     const building = getBuildingConfig(buildingId);
@@ -250,6 +273,7 @@ export function areBuildingRequirementsMet(
 
     for (const requirement of building.requirements) {
         const currentLevel = currentBuildingLevels[requirement.buildingId as keyof BuildingLevels] || 0;
+
         if (currentLevel < requirement.level) {
             missingRequirements.push(requirement);
         }
@@ -259,6 +283,216 @@ export function areBuildingRequirementsMet(
         met: missingRequirements.length === 0,
         missingRequirements
     };
+}
+
+// Tablica budynków - wersja tablicowa dla łatwiejszego iterowania i wyszukiwania
+export const BUILDINGS_ARRAY: BuildingConfig[] = [
+    {
+        id: BuildingId.MAIN,
+        name: 'Ratusz',
+        screen: 'main',
+        maxLevel: 30,
+        requirements: [],
+        availableOnAllWorlds: true,
+        description: 'Centralny budynek wioski, umożliwiający budowę i rozbudowę innych struktur'
+    },
+    {
+        id: BuildingId.WOOD,
+        name: 'Tartak',
+        screen: 'wood',
+        maxLevel: 30,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Produkuje drewno'
+    },
+    {
+        id: BuildingId.STONE,
+        name: 'Cegielnia',
+        screen: 'stone',
+        maxLevel: 30,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Produkuje glinę'
+    },
+    {
+        id: BuildingId.IRON,
+        name: 'Huta Żelaza',
+        screen: 'iron',
+        maxLevel: 30,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Produkuje żelazo'
+    },
+    {
+        id: BuildingId.FARM,
+        name: 'Zagroda',
+        screen: 'farm',
+        maxLevel: 30,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Zapewnia żywność dla mieszkańców i wojsk, zwiększając limit populacji'
+    },
+    {
+        id: BuildingId.STORAGE,
+        name: 'Spichlerz',
+        screen: 'storage',
+        maxLevel: 30,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Magazynuje surowce'
+    },
+    {
+        id: BuildingId.HIDE,
+        name: 'Schowek',
+        screen: 'hide',
+        maxLevel: 10,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Pozwala ukryć część surowców przed grabieżą wrogów'
+    },
+    {
+        id: BuildingId.PLACE,
+        name: 'Plac',
+        screen: 'place',
+        maxLevel: 1,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Miejsce zbiórki wojsk, skąd można wysyłać ataki i wsparcie'
+    },
+    {
+        id: BuildingId.BARRACKS,
+        name: 'Koszary',
+        screen: 'barracks',
+        maxLevel: 25,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 3 }],
+        availableOnAllWorlds: true,
+        description: 'Umożliwiają rekrutację jednostek piechoty'
+    },
+    {
+        id: BuildingId.STABLE,
+        name: 'Stajnia',
+        screen: 'stable',
+        maxLevel: 20,
+        requirements: [
+            { buildingId: BuildingId.MAIN, level: 10 },
+            { buildingId: BuildingId.BARRACKS, level: 5 },
+            { buildingId: BuildingId.SMITH, level: 5 }
+        ],
+        availableOnAllWorlds: true,
+        description: 'Pozwala na rekrutację jednostek kawalerii'
+    },
+    {
+        id: BuildingId.GARAGE,
+        name: 'Warsztat',
+        screen: 'garage',
+        maxLevel: 15,
+        requirements: [
+            { buildingId: BuildingId.MAIN, level: 10 },
+            { buildingId: BuildingId.SMITH, level: 10 }
+        ],
+        availableOnAllWorlds: true,
+        description: 'Umożliwia produkcję machin oblężniczych'
+    },
+    {
+        id: BuildingId.SMITH,
+        name: 'Kuźnia',
+        screen: 'smith',
+        maxLevel: 20,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 3 }],
+        availableOnAllWorlds: true,
+        description: 'Służy do badania nowych technologii i ulepszania jednostek'
+    },
+    {
+        id: BuildingId.WALL,
+        name: 'Mur Obronny',
+        screen: 'wall',
+        maxLevel: 20,
+        requirements: [{ buildingId: BuildingId.BARRACKS, level: 1 }],
+        availableOnAllWorlds: true,
+        description: 'Zwiększa obronę wioski oraz siłę obronną stacjonujących wojsk'
+    },
+    {
+        id: BuildingId.MARKET,
+        name: 'Rynek',
+        screen: 'market',
+        maxLevel: 25,
+        requirements: [
+            { buildingId: BuildingId.MAIN, level: 3 },
+            { buildingId: BuildingId.STORAGE, level: 2 }
+        ],
+        availableOnAllWorlds: true,
+        description: 'Umożliwia handel surowcami z innymi graczami oraz przesyłanie surowców'
+    },
+    {
+        id: BuildingId.SNOB,
+        name: 'Pałac',
+        screen: 'snob',
+        maxLevel: 3,
+        requirements: [
+            { buildingId: BuildingId.MAIN, level: 20 },
+            { buildingId: BuildingId.SMITH, level: 20 },
+            { buildingId: BuildingId.MARKET, level: 10 }
+        ],
+        availableOnAllWorlds: true,
+        description: 'Umożliwia produkcję szlachciców, którzy są niezbędni do przejmowania wiosek'
+    },
+    {
+        id: BuildingId.CHURCH,
+        name: 'Kościół',
+        screen: 'church',
+        maxLevel: 3,
+        requirements: [
+            { buildingId: BuildingId.MAIN, level: 5 },
+            { buildingId: BuildingId.FARM, level: 5 }
+        ],
+        availableOnAllWorlds: false,
+        description: 'Wzmacnia morale wojsk w wioskach znajdujących się w jego strefie wpływów'
+    },
+    {
+        id: BuildingId.FIRST_CHURCH,
+        name: 'Pierwszy Kościół',
+        screen: 'church',
+        maxLevel: 3,
+        requirements: [
+            { buildingId: BuildingId.MAIN, level: 5 },
+            { buildingId: BuildingId.FARM, level: 5 }
+        ],
+        availableOnAllWorlds: false,
+        description: 'Unikalny kościół, możliwy do zbudowania tylko w jednej wiosce'
+    },
+    {
+        id: BuildingId.WATCHTOWER,
+        name: 'Wieża Strażnicza',
+        screen: 'watchtower',
+        maxLevel: 20,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 5 }],
+        availableOnAllWorlds: false,
+        description: 'Zwiększa zasięg widzenia wojsk'
+    },
+    {
+        id: BuildingId.STATUE,
+        name: 'Piedestał',
+        screen: 'statue',
+        maxLevel: 1,
+        requirements: [{ buildingId: BuildingId.MAIN, level: 1 }],
+        availableOnAllWorlds: false,
+        description: 'Miejsce mianowania nowego rycerza'
+    }
+];
+
+// Helper function to convert TRIBAL_WARS_BUILDINGS object to array format
+export function convertBuildingsToArray(): BuildingConfig[] {
+    return Object.values(TRIBAL_WARS_BUILDINGS);
+}
+
+// Helper function to get buildings available on all worlds (filters out world-dependent buildings)
+export function getAvailableBuildingsOnAllWorlds(): BuildingConfig[] {
+    return BUILDINGS_ARRAY.filter(building => building.availableOnAllWorlds);
+}
+
+// Helper function to get buildings by availability
+export function getBuildingsByAvailability(availableOnAllWorlds: boolean): BuildingConfig[] {
+    return BUILDINGS_ARRAY.filter(building => building.availableOnAllWorlds === availableOnAllWorlds);
 }
 
 // Page Object Model for individual village detail pages
@@ -280,8 +514,7 @@ export class VillageDetailPage {
     }
 
     /**
-     * Extracts building levels from the village main page
-     * Uses logic similar to BuildingPage.getAllBuildings() but focused only on levels
+     * Extracts building levels from the village main screen
      * @returns BuildingLevels object with all building levels
      */
     async extractBuildingLevels(): Promise<BuildingLevels> {
@@ -290,58 +523,21 @@ export class VillageDetailPage {
             await this.page.waitForSelector('#buildings', { timeout: 10000 });
 
             // Initialize building levels with default values
-            const buildingLevels: BuildingLevels = {
-                headquarters: 0,
-                barracks: 0,
-                stable: 0,
-                workshop: 0,
-                church: 0,
-                academy: 0,
-                smithy: 0,
-                rally_point: 0,
-                statue: 0,
-                market: 0,
-                timber_camp: 0,
-                clay_pit: 0,
-                iron_mine: 0,
-                farm: 0,
-                warehouse: 0,
-                hiding_place: 0,
-                wall: 0
-            };
+            const buildingLevels: BuildingLevels = this.getDefaultBuildingLevels();
 
-            // Map building IDs from the game to our interface keys
-            const buildingMapping: Record<string, keyof BuildingLevels> = {
-                'main': 'headquarters',
-                'barracks': 'barracks',
-                'stable': 'stable',
-                'garage': 'workshop', // Workshop is called 'garage' in the game
-                'church': 'church',
-                'snob': 'academy', // Academy is called 'snob' in the game
-                'smith': 'smithy',
-                'place': 'rally_point',
-                'statue': 'statue',
-                'market': 'market',
-                'wood': 'timber_camp',
-                'stone': 'clay_pit',
-                'iron': 'iron_mine',
-                'farm': 'farm',
-                'storage': 'warehouse',
-                'hide': 'hiding_place',
-                'wall': 'wall'
-            };
-
-            // Process available buildings (same logic as getAllBuildings but focused on levels)
+            // Process available buildings
             const buildingRows = this.page.locator('#buildings tbody tr[id^="main_buildrow_"]');
             const rowCount = await buildingRows.count();
 
             for (let i = 0; i < rowCount; i++) {
                 const row = buildingRows.nth(i);
                 const rowId = await row.getAttribute('id') || '';
-                const buildingId = rowId.replace('main_buildrow_', '');
+                const buildingId = rowId.replace('main_buildrow_', '') as BuildingId;
 
-                // Skip if no valid ID
-                if (!buildingId) continue;
+                // Skip if no valid ID or not in our enum
+                if (!buildingId || !Object.values(BuildingId).includes(buildingId)) {
+                    continue;
+                }
 
                 // Extract building level from the name cell
                 const nameCell = row.locator('td:first-child');
@@ -351,10 +547,9 @@ export class VillageDetailPage {
                 const levelMatch = nameText.match(/Poziom (\d+)/);
                 const level = levelMatch ? parseInt(levelMatch[1], 10) : 0;
 
-                // Map the building ID to our interface and set the level
-                const mappedKey = buildingMapping[buildingId];
-                if (mappedKey) {
-                    buildingLevels[mappedKey] = level;
+                // Use buildingId directly as key since BuildingLevels now uses same keys as BuildingId enum
+                if (buildingId in buildingLevels) {
+                    (buildingLevels as any)[buildingId] = level;
                 }
             }
 
@@ -363,26 +558,34 @@ export class VillageDetailPage {
         } catch (error) {
             console.error('Error extracting building levels:', error);
             // Return default levels on error
-            return {
-                headquarters: 0,
-                barracks: 0,
-                stable: 0,
-                workshop: 0,
-                church: 0,
-                academy: 0,
-                smithy: 0,
-                rally_point: 0,
-                statue: 0,
-                market: 0,
-                timber_camp: 0,
-                clay_pit: 0,
-                iron_mine: 0,
-                farm: 0,
-                warehouse: 0,
-                hiding_place: 0,
-                wall: 0
-            };
+            return this.getDefaultBuildingLevels();
         }
+    }
+
+    /**
+     * Returns default building levels (all set to 0) using enum values
+     * @returns BuildingLevels with all levels set to 0
+     */
+    private getDefaultBuildingLevels(): BuildingLevels {
+        return {
+            main: 0,
+            barracks: 0,
+            stable: 0,
+            garage: 0,    // Changed from workshop
+            church: 0,
+            snob: 0,      // Changed from academy
+            smith: 0,
+            place: 0,     // Changed from rally_point
+            statue: 0,
+            market: 0,
+            wood: 0,      // Changed from timber_camp
+            stone: 0,     // Changed from clay_pit
+            iron: 0,      // Changed from iron_mine
+            farm: 0,
+            storage: 0,   // Changed from warehouse
+            hide: 0,      // Changed from hiding_place
+            wall: 0
+        };
     }
 
     /**
@@ -432,7 +635,7 @@ export class VillageDetailPage {
             const buildQueueExists = await this.page.waitForSelector('#buildqueue_wrap', { timeout: 5000 }).catch(() => null);
 
             if (!buildQueueExists) {
-                console.warn('Build queue wrapper not found - village might not have build queue functionality');
+                console.warn('Build queue wrapper not found - village might have empty build queue.');
                 return [];
             }
 
@@ -1122,7 +1325,7 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check (e.g., 'main', 'barracks', 'stable')
      * @returns Promise with building level (0 if not built)
      */
-    async getBuildingLevel(buildingId: string): Promise<number> {
+    async getBuildingLevel(buildingId: BuildingId | string): Promise<number> {
         try {
             // Get current village ID from URL
             const currentUrl = this.page.url();
@@ -1175,7 +1378,7 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check
      * @returns Promise with boolean indicating if building is built
      */
-    async isBuildingBuilt(buildingId: string): Promise<boolean> {
+    async isBuildingBuilt(buildingId: BuildingId | string): Promise<boolean> {
         const level = await this.getBuildingLevel(buildingId);
         return level > 0;
     }
@@ -1185,7 +1388,7 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check
      * @returns Promise with detailed building information
      */
-    async getBuildingInfo(buildingId: string): Promise<{
+    async getBuildingInfo(buildingId: BuildingId | string): Promise<{
         id: string;
         level: number;
         isBuilt: boolean;
@@ -1221,7 +1424,7 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check requirements for
      * @returns Promise with requirements check result
      */
-    async checkBuildingRequirements(buildingId: string): Promise<{
+    async checkBuildingRequirements(buildingId: BuildingId | string): Promise<{
         met: boolean;
         missingRequirements: BuildingRequirement[];
         currentLevels: BuildingLevels;
@@ -1244,25 +1447,7 @@ export class VillageDetailPage {
             return {
                 met: false,
                 missingRequirements: [],
-                currentLevels: {
-                    headquarters: 0,
-                    barracks: 0,
-                    stable: 0,
-                    workshop: 0,
-                    church: 0,
-                    academy: 0,
-                    smithy: 0,
-                    rally_point: 0,
-                    statue: 0,
-                    market: 0,
-                    timber_camp: 0,
-                    clay_pit: 0,
-                    iron_mine: 0,
-                    farm: 0,
-                    warehouse: 0,
-                    hiding_place: 0,
-                    wall: 0
-                }
+                currentLevels: this.getDefaultBuildingLevels()
             };
         }
     }

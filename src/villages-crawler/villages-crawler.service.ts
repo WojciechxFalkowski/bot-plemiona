@@ -21,8 +21,15 @@ export class VillagesCrawlerService {
   ) {
     // Initialize credentials from environment variables with default values if not set
     this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
-
     // Validate credentials
+    this.validateCredentials();
+  }
+
+  /**
+   * Validates the credentials
+   * @returns void
+   */
+  public async validateCredentials() {
     const validation = AuthUtils.validateCredentials(this.credentials);
     if (!validation.isValid) {
       this.logger.warn(`Invalid credentials: missing fields: ${validation.missingFields.join(', ')}, errors: ${validation.errors.join(', ')}. Fallback to cookies will be attempted.`);

@@ -4,9 +4,10 @@ import { VillageConstructionQueueService } from './village-construction-queue.se
 import { villageConstructionQueueProviders } from './village-construction-queue.service.providers';
 import { DatabaseModule } from '@/database/database.module';
 import { ConfigModule } from '@nestjs/config';
+import { SettingsModule } from '@/settings/settings.module';
 
 @Module({
-    imports: [DatabaseModule, ConfigModule],
+    imports: [DatabaseModule, ConfigModule, SettingsModule],
     controllers: [VillageConstructionQueueController],
     providers: [...villageConstructionQueueProviders, VillageConstructionQueueService],
     exports: [VillageConstructionQueueService]
