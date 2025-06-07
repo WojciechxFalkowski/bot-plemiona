@@ -261,7 +261,7 @@ export class VillagesService {
 		return timeSinceUpdate > this.AUTO_REFRESH_THRESHOLD_MS;
 	}
 
-	private mapToResponseDto(village: VillageEntity): VillageResponseDto {
+	public mapToResponseDto(village: VillageEntity): VillageResponseDto {
 		return {
 			id: village.id,
 			name: village.name,

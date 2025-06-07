@@ -12,17 +12,31 @@ import { AuthUtils } from '@/crawler/utils/auth.utils';
 import { ConfigService } from '@nestjs/config';
 import { createBrowserPage } from '@/utils/browser.utils';
 import { SettingsService } from '@/settings/settings.service';
+import { BuildingLevels, BuildQueueItem } from '@/crawler/pages/village-overview.page';
+import { VillageResponseDto } from '@/villages/dto';
+import { VillagesService } from '@/villages/villages.service';
 
 @Injectable()
 export class VillageConstructionQueueService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(VillageConstructionQueueService.name);
     private readonly credentials: PlemionaCredentials;
-    private readonly INTERVAL_TIME = 1000 * 60 * 10;
+    private readonly INTERVAL_TIME = 1000 * 60 * 5;
     private queueProcessorIntervalId: NodeJS.Timeout | null = null;
+
+    // Configuration for browser operations and timeouts
+    private readonly CONFIG = {
+        CLICK_TIMEOUT: 5000,
+        VERIFY_DELAY: 3000, // Wait 3 seconds after clicking before verification
+        MAX_RETRIES: 3,
+        BROWSER_TIMEOUT: 30000,
+        NAVIGATION_TIMEOUT: 5000,
+        EXTRACTION_TIMEOUT: 5000
+    };
 
     constructor(
         @Inject(VILLAGE_CONSTRUCTION_QUEUE_ENTITY_REPOSITORY)
         private readonly queueRepository: Repository<VillageConstructionQueueEntity>,
+        private readonly villagesService: VillagesService,
         @Inject(VILLAGES_ENTITY_REPOSITORY)
         private readonly villageRepository: Repository<VillageEntity>,
         private settingsService: SettingsService,
@@ -59,6 +73,13 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     private startConstructionQueueProcessor(): void {
         this.logger.log(`Starting construction queue processor with interval: ${this.INTERVAL_TIME / 1000 / 60} minutes`);
 
+        // Uruchom od razu przy starcie (nie czekaj pierwszych 5 minut)
+        this.logger.log('🚀 Running initial queue processing...');
+        this.processAndCheckConstructionQueue().catch(error => {
+            this.logger.error('Error during initial queue processing:', error);
+        });
+
+        // Następnie ustaw regularny interwał
         this.queueProcessorIntervalId = setInterval(async () => {
             try {
                 await this.processAndCheckConstructionQueue();
@@ -77,6 +98,58 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      */
     private async processAndCheckConstructionQueue(): Promise<void> {
         this.logger.log('🔄 Processing construction queue from database...');
+
+        try {
+            // 1. Pobierz najstarsze budynki per wioska (FIFO)
+            const buildingsToProcess = await this.getOldestBuildingPerVillage();
+
+            if (buildingsToProcess.length === 0) {
+                this.logger.log('✅ No buildings in queue - sleeping for 5 minutes');
+                return;
+            }
+
+            this.logger.log(`📋 Found ${buildingsToProcess.length} buildings to process across ${new Set(buildingsToProcess.map(b => b.villageId)).size} villages`);
+
+            // 2. Zaloguj się do gry (jedna sesja dla całego batch'a)
+            this.logger.log('🔐 Creating browser session and logging in...');
+            const { browser, context, page } = await this.createBrowserSession();
+
+            try {
+                // 3. Przetworz każdy budynek sekwencyjnie
+                let processedCount = 0;
+                let successCount = 0;
+                let errorCount = 0;
+
+                for (const building of buildingsToProcess) {
+                    processedCount++;
+                    this.logger.log(`🏘️  Processing village ${building.village?.name || building.villageId} (${processedCount}/${buildingsToProcess.length}): ${building.buildingName} Level ${building.targetLevel}`);
+
+                    try {
+                        const result = await this.processSingleBuilding(building, page);
+                        if (result.success) {
+                            successCount++;
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        this.logger.error(`❌ Error processing building ${building.buildingName} L${building.targetLevel} in village ${building.villageId}:`, error);
+                        // Continue with next building - don't stop the whole process
+                    }
+                }
+
+                this.logger.log(`📊 Processing complete: ${successCount} successful, ${errorCount} errors, ${processedCount} total`);
+
+            } finally {
+                // 4. Zawsze zamykaj przeglądarkę
+                await browser.close();
+                this.logger.log('🔒 Browser session closed');
+            }
+
+        } catch (error) {
+            this.logger.error('❌ Critical error during construction queue processing:', error);
+            this.logger.log('⏰ Will retry in 5 minutes with default interval');
+        }
+
+        this.logger.log('✅ Construction queue processing finished. Next check in 5 minutes.');
     }
 
     /**
@@ -296,7 +369,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     ): Promise<void> {
         try {
             // 1. Pobierz wszystkie potrzebne dane
-            const gameData = await this.scrapeGameData(villageId, page);
+            const gameData = await this.scrapeVillageBuildingData(villageId, page);
             const databaseQueue = await this.getDatabaseQueue(villageId, buildingId);
 
             // 2. Oblicz następny dozwolony poziom
@@ -328,6 +401,40 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     }
 
     // ==============================
+    // METODY SCRAPOWANIA DANYCH Z GŁY
+    // ==============================
+
+    public async scrapeAllVillagesQueue(): Promise<{
+        villageInfo: VillageResponseDto;
+        buildingLevels: BuildingLevels;
+        buildQueue: BuildQueueItem[];
+    }[]> {
+        const { browser, context, page } = await this.createBrowserSession();
+        const loginResult = await AuthUtils.loginAndSelectWorld(
+            page,
+            this.credentials,
+            this.settingsService
+        );
+        if (!loginResult.success || !loginResult.worldSelected) {
+            await browser.close();
+            throw new BadRequestException(`Login failed: ${loginResult.error || 'Unknown error'}`);
+        }
+
+        const villages = await this.villageRepository.find();
+        const data: {
+            villageInfo: VillageResponseDto;
+            buildingLevels: BuildingLevels;
+            buildQueue: BuildQueueItem[];
+        }[] = [];
+        for (const village of villages) {
+            const villageResponseDto = this.villagesService.mapToResponseDto(village);
+            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(village.id, page);
+            data.push({ villageInfo: villageResponseDto, buildingLevels, buildQueue });
+        }
+        return data;
+    }
+
+    // ==============================
     // METODY POMOCNICZE DLA WALIDACJI CIĄGŁOŚCI
     // ==============================
 
@@ -337,7 +444,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * @param page Strona przeglądarki
      * @returns Dane z gry (poziomy budynków i kolejka budowy)
      */
-    private async scrapeGameData(villageId: string, page: Page) {
+    private async scrapeVillageBuildingData(villageId: string, page: Page) {
         const villageDetailPage = new VillageDetailPage(page);
         await villageDetailPage.navigateToVillage(villageId);
 
@@ -572,5 +679,268 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
     async onModuleDestroy() {
         this.stopConstructionQueueProcessor();
+    }
+
+    // ==============================
+    // METODY PRZETWARZANIA KOLEJKI
+    // ==============================
+
+    /**
+     * Pobiera najstarszy budynek dla każdej wioski z kolejki budowy
+     * @returns Lista budynków do przetworzenia (jeden na wioskę)
+     */
+    private async getOldestBuildingPerVillage(): Promise<VillageConstructionQueueEntity[]> {
+        try {
+            // Pobierz wszystkie budynki posortowane według daty utworzenia (FIFO)
+            const allQueueItems = await this.queueRepository.find({
+                relations: ['village'],
+                order: { createdAt: 'ASC' }
+            });
+
+            if (allQueueItems.length === 0) {
+                return [];
+            }
+
+            // Grupuj według ID wioski i weź tylko pierwszy (najstarszy) dla każdej wioski
+            const buildingsPerVillage = new Map<string, VillageConstructionQueueEntity>();
+
+            for (const item of allQueueItems) {
+                if (!buildingsPerVillage.has(item.villageId)) {
+                    buildingsPerVillage.set(item.villageId, item);
+                }
+            }
+
+            const result = Array.from(buildingsPerVillage.values());
+
+            this.logger.log(`📦 Selected ${result.length} oldest buildings from ${allQueueItems.length} total queue items`);
+
+            // Log details for each selected building
+            result.forEach((building, index) => {
+                this.logger.log(`  ${index + 1}. Village ${building.village?.name || building.villageId}: ${building.buildingName} L${building.targetLevel} (created: ${building.createdAt})`);
+            });
+
+            return result;
+
+        } catch (error) {
+            this.logger.error('Error fetching oldest buildings per village:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Przetwarza pojedynczy budynek w konkretnej wiosce
+     * @param building Budynek do przetworzenia
+     * @param page Strona przeglądarki
+     * @returns Rezultat przetwarzania
+     */
+    private async processSingleBuilding(
+        building: VillageConstructionQueueEntity,
+        page: Page
+    ): Promise<{ success: boolean; reason: string; shouldDelete: boolean }> {
+
+        const buildingInfo = `${building.buildingName} L${building.targetLevel} in village ${building.villageId}`;
+
+        try {
+            // 1. Nawiguj do wioski z retry mechanism
+            this.logger.debug(`🧭 Navigating to village ${building.villageId}`);
+            await this.navigateToVillageWithRetry(building.villageId, page);
+
+            // 2. Sprawdź aktualny poziom budynku vs target level
+            this.logger.debug(`🔍 Checking current building level for ${building.buildingId}`);
+            const currentLevel = await this.getCurrentBuildingLevel(building.buildingId, page);
+
+            if (building.targetLevel <= currentLevel) {
+                this.logger.log(`✅ ${buildingInfo} - Already built (current: ${currentLevel})`);
+                await this.removeFromDatabaseWithReason(building.id, 'Already built');
+                return { success: true, reason: 'Already built', shouldDelete: true };
+            }
+
+            // 3. Sprawdź kolejkę budowy w grze (czy ma miejsce)
+            this.logger.debug(`📋 Checking game build queue capacity`);
+            const gameQueue = await this.extractGameBuildQueue(page);
+
+            if (gameQueue.length >= 2) {
+                this.logger.log(`⏳ ${buildingInfo} - Game queue full (${gameQueue.length}/2 slots)`);
+                return { success: false, reason: 'Game queue full', shouldDelete: false };
+            }
+
+            // 4. Sprawdź czy można budować (przycisk vs czas)
+            this.logger.debug(`🔍 Checking if building can be constructed`);
+            const buildingStatus = await this.checkBuildingAvailability(building.buildingId, building.targetLevel, page);
+
+            if (buildingStatus.canBuild) {
+                // 5. Kliknij przycisk budowania
+                this.logger.log(`🔨 Attempting to build ${buildingInfo}`);
+                const buildResult = await this.attemptToBuildWithRetry(buildingStatus.buildButton!, page);
+
+                if (buildResult.success) {
+                    this.logger.log(`✅ Successfully added ${buildingInfo} to game queue`);
+                    await this.removeFromDatabaseWithReason(building.id, 'Successfully added');
+                    return { success: true, reason: 'Successfully added', shouldDelete: true };
+                } else {
+                    this.logger.warn(`⚠️  Failed to add ${buildingInfo} to queue: ${buildResult.reason}`);
+                    return { success: false, reason: buildResult.reason, shouldDelete: false };
+                }
+            } else {
+                // 6. Loguj informację o czasie dostępności
+                if (buildingStatus.availableAt) {
+                    this.logger.log(`⏰ ${buildingInfo} - Resources available at ${buildingStatus.availableAt}`);
+                } else {
+                    this.logger.log(`❌ ${buildingInfo} - Cannot build (reason: ${buildingStatus.reason})`);
+                }
+                return { success: false, reason: buildingStatus.reason || 'Cannot build', shouldDelete: false };
+            }
+
+        } catch (error) {
+            this.logger.error(`❌ Error processing ${buildingInfo}:`, error);
+            return { success: false, reason: `Error: ${error.message}`, shouldDelete: false };
+        }
+    }
+
+    // ==============================
+    // METODY POMOCNICZE - NAWIGACJA I RETRY
+    // ==============================
+
+    /**
+     * Nawiguje do wioski z mechanizmem retry
+     */
+    private async navigateToVillageWithRetry(villageId: string, page: Page): Promise<void> {
+        for (let attempt = 1; attempt <= this.CONFIG.MAX_RETRIES; attempt++) {
+            try {
+                const villageDetailPage = new VillageDetailPage(page);
+                await villageDetailPage.navigateToVillage(villageId);
+                return; // Success
+            } catch (error) {
+                this.logger.warn(`Navigation attempt ${attempt}/${this.CONFIG.MAX_RETRIES} failed for village ${villageId}:`, error);
+                if (attempt === this.CONFIG.MAX_RETRIES) {
+                    throw error;
+                }
+                await page.waitForTimeout(1000); // Wait 1 second before retry
+            }
+        }
+    }
+
+    /**
+     * Pobiera aktualny poziom budynku z gry
+     */
+    private async getCurrentBuildingLevel(buildingId: string, page: Page): Promise<number> {
+        try {
+            const villageDetailPage = new VillageDetailPage(page);
+            return await villageDetailPage.getBuildingLevel(buildingId);
+        } catch (error) {
+            this.logger.warn(`Error getting building level for ${buildingId}:`, error);
+            return 0;
+        }
+    }
+
+    /**
+     * Pobiera kolejkę budowy z gry
+     */
+    private async extractGameBuildQueue(page: Page): Promise<BuildQueueItem[]> {
+        try {
+            const villageDetailPage = new VillageDetailPage(page);
+            return await villageDetailPage.extractBuildQueue();
+        } catch (error) {
+            this.logger.warn('Error extracting game build queue:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Usuwa budynek z bazy danych z podaniem powodu
+     */
+    private async removeFromDatabaseWithReason(buildingId: number, reason: string): Promise<void> {
+        try {
+            await this.removeFromQueue(buildingId);
+            this.logger.log(`🗑️  Removed from database: ${reason}`);
+        } catch (error) {
+            this.logger.error(`Error removing building ${buildingId} from database:`, error);
+            throw error;
+        }
+    }
+
+    // ==============================
+    // METODY POMOCNICZE - SPRAWDZANIE I BUDOWANIE
+    // ==============================
+
+    /**
+     * Sprawdza czy można budować dany budynek (przycisk vs czas)
+     */
+    private async checkBuildingAvailability(buildingId: string, targetLevel: number, page: Page): Promise<{
+        canBuild: boolean;
+        buildButton?: string; // selector przycisku
+        availableAt?: string; // czas dostępności
+        reason?: string;
+    }> {
+        try {
+            // TODO: Implement building availability check by scraping HTML
+            // This should look for:
+            // 1. <a class="btn btn-build"> button for the specific building
+            // 2. Or <span class="inactive center"> with time text
+            // For now, returning mock implementation with logging
+
+            this.logger.debug(`TODO: Implement checkBuildingAvailability for ${buildingId} level ${targetLevel}`);
+            this.logger.debug(`Need to scrape HTML for build button or availability time`);
+            this.logger.debug(`Expected button selector: #main_buildlink_${buildingId}_${targetLevel}`);
+            this.logger.debug(`Expected time span in: td.build_options span.inactive.center`);
+
+            // Mock implementation - return false for now
+            return {
+                canBuild: false,
+                reason: 'Not implemented yet - need to add HTML scraping'
+            };
+
+        } catch (error) {
+            this.logger.error(`Error checking building availability for ${buildingId}:`, error);
+            return {
+                canBuild: false,
+                reason: `Error: ${error.message}`
+            };
+        }
+    }
+
+    /**
+     * Próbuje zbudować budynek z mechanizmem retry
+     */
+    private async attemptToBuildWithRetry(buttonSelector: string, page: Page): Promise<{
+        success: boolean;
+        reason: string;
+    }> {
+        for (let attempt = 1; attempt <= this.CONFIG.MAX_RETRIES; attempt++) {
+            try {
+                this.logger.debug(`Build attempt ${attempt}/${this.CONFIG.MAX_RETRIES}: clicking button ${buttonSelector}`);
+
+                // TODO: Implement button clicking and verification
+                // This should:
+                // 1. Click the build button
+                // 2. Wait for response (CONFIG.VERIFY_DELAY = 3 seconds)
+                // 3. Verify by calling extractGameBuildQueue() again
+                // 4. Check if queue length increased
+
+                this.logger.debug(`TODO: Implement button clicking for ${buttonSelector}`);
+                this.logger.debug(`TODO: Wait ${this.CONFIG.VERIFY_DELAY}ms and verify queue changed`);
+
+                // Mock implementation for now
+                return {
+                    success: false,
+                    reason: 'Not implemented yet - need to add button clicking and verification'
+                };
+
+            } catch (error) {
+                this.logger.warn(`Build attempt ${attempt}/${this.CONFIG.MAX_RETRIES} failed:`, error);
+                if (attempt === this.CONFIG.MAX_RETRIES) {
+                    return {
+                        success: false,
+                        reason: `All ${this.CONFIG.MAX_RETRIES} attempts failed: ${error.message}`
+                    };
+                }
+                await page.waitForTimeout(1000); // Wait before retry
+            }
+        }
+
+        return {
+            success: false,
+            reason: 'Unexpected error in retry loop'
+        };
     }
 } 

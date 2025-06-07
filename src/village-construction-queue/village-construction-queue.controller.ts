@@ -5,6 +5,8 @@ import { CreateConstructionQueueDto } from './dto/create-construction-queue.dto'
 import { VillageConstructionQueueEntity } from './entities/village-construction-queue.entity';
 import { ApiResponsesAddToQueue } from './api-responses';
 import { ApiExamplesAddToQueue } from './api-examples';
+import { BuildingLevels, BuildQueueItem } from '@/crawler/pages/village-overview.page';
+import { VillageResponseDto } from '@/villages/dto';
 
 @ApiTags('Village Construction Queue')
 @Controller('village-construction-queue')
@@ -111,4 +113,19 @@ export class VillageConstructionQueueController {
             throw error;
         }
     }
-} 
+
+    //Scrape all villages game queue
+    @Get('scrape-all-villages-queue')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Scrape all villages game queue',
+        description: 'Scrapes all villages game queue'
+    })
+    async scrapeAllVillagesQueue(): Promise<{
+        villageInfo: VillageResponseDto;
+        buildingLevels: BuildingLevels;
+        buildQueue: BuildQueueItem[];
+    }[]> {
+        return await this.constructionQueueService.scrapeAllVillagesQueue();
+    }
+}
