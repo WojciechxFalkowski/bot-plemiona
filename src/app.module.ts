@@ -10,6 +10,7 @@ import { SettingsModule } from './settings/settings.module';
 import { BuildingCrawlerModule } from './building-crawler/building-crawler.module';
 import { VillagesCrawlerModule } from './villages-crawler/villages-crawler.module';
 import { VillagesModule } from './villages/villages.module';
+import { VillageConstructionQueueModule } from './village-construction-queue/village-construction-queue.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { VillagesModule } from './villages/villages.module';
     BuildingCrawlerModule,
     VillagesCrawlerModule,
     VillagesModule,
+    VillageConstructionQueueModule,
   ],
   controllers: [AppController],
   providers: [AppService],
