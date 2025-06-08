@@ -1,6 +1,14 @@
 import { Page, Locator } from 'playwright';
 import { BuildingLevels, ArmyUnits, BuildQueueItem, ResearchQueueItem } from './village-overview.page';
 
+// Interface for building availability check
+export interface BuildingAvailability {
+    canBuild: boolean;
+    buttonSelector?: string;
+    availableAt?: string;
+    reason?: string;
+}
+
 // Enum dla ID budynków
 export enum BuildingId {
     MAIN = 'main',
@@ -586,6 +594,188 @@ export class VillageDetailPage {
             hide: 0,      // Changed from hiding_place
             wall: 0
         };
+    }
+
+    /**
+     * Checks if a building can be built/upgraded by examining the build options cell
+     * @param buildingRow - The building row element from the buildings table
+     * @param buildingId - The building ID to check
+     * @param currentLevel - Current building level
+     * @returns BuildingAvailability object with build status and details
+     */
+    private async checkBuildingAvailability(buildingRow: Locator, buildingId: string, currentLevel: number): Promise<BuildingAvailability> {
+        try {
+            // Get building configuration to check max level
+            const buildingConfig = getBuildingConfig(buildingId);
+            // Check if building is at max level
+            if (buildingConfig && currentLevel >= buildingConfig.maxLevel) {
+                return {
+                    canBuild: false,
+                    reason: 'Max level'
+                };
+            }
+            // Find the build options cell (usually the last cell in the row)
+            const buildOptionsCell = buildingRow.locator('td.build_options');
+            const hasBuildOptions = await buildOptionsCell.count() > 0;
+            if (!hasBuildOptions) {
+                console.warn(`No build options cell found for building ${buildingId}`);
+                return {
+                    canBuild: false,
+                    reason: 'No build options cell'
+                };
+            }
+
+            // Check for build button (can build)
+            const buildButton = buildOptionsCell.locator(`a.btn.btn-build[id^="main_buildlink_${buildingId}"]`);
+            const hasBuildButton = await buildButton.count() > 0;
+            if (hasBuildButton) {
+                const buttonId = await buildButton.getAttribute('id');
+                return {
+                    canBuild: true,
+                    buttonSelector: buttonId ? `#${buttonId}` : undefined
+                };
+            }
+            // Check for "resources available at" message (cannot build yet)
+            const inactiveSpan = buildOptionsCell.locator('span.inactive.center');
+            const hasInactiveSpan = await inactiveSpan.count() > 0;
+            if (hasInactiveSpan) {
+                const inactiveText = await inactiveSpan.textContent() || '';
+                // Look for time pattern "Surowce dostępne dzisiaj o 23:22" or "Surowce dostępne jutro o 13:19"
+                const timeMatch = inactiveText.match(/Surowce dostępne (dzisiaj|jutro) o (\d{1,2}:\d{2})/);
+                if (timeMatch) {
+                    const [, dayType, time] = timeMatch;
+                    const availableAt = `${dayType} o ${time}`;
+                    console.log('v10');
+                    return {
+                        canBuild: false,
+                        availableAt: availableAt
+                    };
+                }
+                return {
+                    canBuild: false,
+                    reason: inactiveText.trim() || 'Resources not available'
+                };
+            }
+
+            // If no clear indication found, assume cannot build
+            return {
+                canBuild: false,
+                reason: 'Unknown build status'
+            };
+
+        } catch (error) {
+            console.error(`Error checking building availability for ${buildingId}:`, error);
+            return {
+                canBuild: false,
+                reason: 'Error checking availability'
+            };
+        }
+    }
+
+    /**
+     * Parses Polish time format to Date object
+     * Handles "dzisiaj o HH:MM" and "jutro o HH:MM" formats
+     * @param timeString - Time string in Polish format
+     * @returns Date object or null if parsing fails
+     */
+    private parsePolishTimeToDate(timeString: string): Date | null {
+        try {
+            const timeMatch = timeString.match(/(dzisiaj|jutro) o (\d{1,2}):(\d{2})/);
+
+            if (!timeMatch) {
+                console.warn(`Could not parse Polish time format: "${timeString}"`);
+                return null;
+            }
+
+            const [, dayType, hoursStr, minutesStr] = timeMatch;
+            const hours = parseInt(hoursStr, 10);
+            const minutes = parseInt(minutesStr, 10);
+
+            if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                console.warn(`Invalid time values in: "${timeString}"`);
+                return null;
+            }
+
+            const now = new Date();
+            const targetDate = new Date(now);
+
+            // Set the target time
+            targetDate.setHours(hours, minutes, 0, 0);
+
+            // If it's "jutro" (tomorrow), add one day
+            if (dayType === 'jutro') {
+                targetDate.setDate(targetDate.getDate() + 1);
+            } else if (dayType === 'dzisiaj') {
+                // If the time has already passed today, assume it's tomorrow
+                if (targetDate.getTime() <= now.getTime()) {
+                    targetDate.setDate(targetDate.getDate() + 1);
+                }
+            }
+
+            return targetDate;
+
+        } catch (error) {
+            console.error(`Error parsing Polish time "${timeString}":`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Checks if a specific building can be built/upgraded
+     * @param buildingId - The building ID to check
+     * @returns BuildingAvailability object with build status and details
+     */
+    async checkBuildingBuildAvailability(buildingId: BuildingId | string): Promise<BuildingAvailability> {
+        try {
+            console.log('v0');
+
+            // Ensure we're on the main screen where buildings are visible
+            const currentUrl = this.page.url();
+            const villageIdMatch = currentUrl.match(/village=(\d+)/);
+
+            if (!villageIdMatch) {
+                console.warn('Could not extract village ID for building availability check');
+                return {
+                    canBuild: false,
+                    reason: 'No village ID found'
+                };
+            }
+            const villageId = villageIdMatch[1];
+            if (!currentUrl.includes('screen=main')) {
+                console.log('Navigating to main screen to check building availability');
+                await this.navigateToVillage(villageId);
+            }
+            // Wait for buildings table to be visible
+            await this.page.waitForSelector('#buildings', { timeout: 10000 });
+            // Find the specific building row
+            const buildingRow = this.page.locator(`#main_buildrow_${buildingId}`);
+            const rowExists = await buildingRow.count() > 0;
+            if (!rowExists) {
+                console.warn(`Building row not found for ${buildingId}`);
+                return {
+                    canBuild: false,
+                    reason: 'Building row not found'
+                };
+            }
+            // Get current building level
+            const currentLevel = await this.getBuildingLevel(buildingId);
+            // Check building availability using our helper method
+            const availability = await this.checkBuildingAvailability(buildingRow, buildingId, currentLevel);
+            // If we have an availableAt time, try to parse it to a Date object
+            if (availability.availableAt && !availability.canBuild) {
+                const parsedDate = this.parsePolishTimeToDate(availability.availableAt);
+                if (parsedDate) {
+                    console.log(`Building ${buildingId} will be available at: ${parsedDate.toISOString()}`);
+                }
+            }
+            return availability;
+        } catch (error) {
+            console.error(`Error checking building build availability for ${buildingId}:`, error);
+            return {
+                canBuild: false,
+                reason: 'Error during availability check'
+            };
+        }
     }
 
     /**

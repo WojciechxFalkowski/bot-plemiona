@@ -3,7 +3,7 @@ import { Repository } from 'typeorm';
 import { VillageConstructionQueueEntity } from './entities/village-construction-queue.entity';
 import { VillageEntity } from '../villages/villages.entity';
 import { CreateConstructionQueueDto } from './dto/create-construction-queue.dto';
-import { VillageDetailPage, getBuildingConfig, areBuildingRequirementsMet, TRIBAL_WARS_BUILDINGS } from '../crawler/pages/village-detail.page';
+import { VillageDetailPage, getBuildingConfig, areBuildingRequirementsMet, TRIBAL_WARS_BUILDINGS, BuildingAvailability } from '../crawler/pages/village-detail.page';
 import { Page } from 'playwright';
 import { VILLAGE_CONSTRUCTION_QUEUE_ENTITY_REPOSITORY } from './village-construction-queue.service.contracts';
 import { VILLAGES_ENTITY_REPOSITORY } from '../villages/villages.service.contracts';
@@ -20,7 +20,8 @@ import { VillagesService } from '@/villages/villages.service';
 export class VillageConstructionQueueService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(VillageConstructionQueueService.name);
     private readonly credentials: PlemionaCredentials;
-    private readonly INTERVAL_TIME = 1000 * 60 * 5;
+    private readonly MIN_INTERVAL = 1000 * 60 * 3; // 3 minuty
+    private readonly MAX_INTERVAL = 1000 * 60 * 7; // 7 minut
     private queueProcessorIntervalId: NodeJS.Timeout | null = null;
 
     // Configuration for browser operations and timeouts
@@ -67,26 +68,45 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     }
 
     /**
-     * Uruchamia procesor kolejki budowy który co INTERVAL_TIME sprawdza bazę danych
+     * Generuje losowy interwał między MIN_INTERVAL a MAX_INTERVAL
+     */
+    private getRandomInterval(): number {
+        return Math.floor(Math.random() * (this.MAX_INTERVAL - this.MIN_INTERVAL + 1)) + this.MIN_INTERVAL;
+    }
+
+    /**
+     * Uruchamia procesor kolejki budowy który w losowych odstępach sprawdza bazę danych
      * i próbuje zrealizować najstarsze budynki z kolejki
      */
     private startConstructionQueueProcessor(): void {
-        this.logger.log(`Starting construction queue processor with interval: ${this.INTERVAL_TIME / 1000 / 60} minutes`);
+        this.logger.log(`Starting construction queue processor with random interval: ${this.MIN_INTERVAL / 1000 / 60}-${this.MAX_INTERVAL / 1000 / 60} minutes`);
 
-        // Uruchom od razu przy starcie (nie czekaj pierwszych 5 minut)
+        // Uruchom od razu przy starcie (nie czekaj pierwszego interwału)
         this.logger.log('🚀 Running initial queue processing...');
         this.processAndCheckConstructionQueue().catch(error => {
             this.logger.error('Error during initial queue processing:', error);
         });
 
-        // Następnie ustaw regularny interwał
-        this.queueProcessorIntervalId = setInterval(async () => {
+        // Następnie ustaw losowy interwał
+        this.scheduleNextExecution();
+    }
+
+    /**
+     * Planuje następne wykonanie procesora w losowym czasie
+     */
+    private scheduleNextExecution(): void {
+        const nextInterval = this.getRandomInterval();
+        const nextMinutes = Math.round(nextInterval / 1000 / 60 * 10) / 10;
+        this.logger.log(`⏰ Next execution scheduled in ${nextMinutes} minutes`);
+
+        this.queueProcessorIntervalId = setTimeout(async () => {
             try {
                 await this.processAndCheckConstructionQueue();
             } catch (error) {
                 this.logger.error('Error during construction queue processing:', error);
             }
-        }, this.INTERVAL_TIME);
+            this.scheduleNextExecution(); // Rekursywnie zaplanuj następne
+        }, nextInterval);
     }
 
     /**
@@ -104,7 +124,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
             const buildingsToProcess = await this.getOldestBuildingPerVillage();
 
             if (buildingsToProcess.length === 0) {
-                this.logger.log('✅ No buildings in queue - sleeping for 5 minutes');
+                this.logger.log('✅ No buildings in queue - waiting for next interval');
                 return;
             }
 
@@ -146,10 +166,10 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
         } catch (error) {
             this.logger.error('❌ Critical error during construction queue processing:', error);
-            this.logger.log('⏰ Will retry in 5 minutes with default interval');
+            this.logger.log('⏰ Will retry at next scheduled interval');
         }
 
-        this.logger.log('✅ Construction queue processing finished. Next check in 5 minutes.');
+        this.logger.log('✅ Construction queue processing finished. Next execution scheduled.');
     }
 
     /**
@@ -532,7 +552,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
         for (const queueItem of gameQueue) {
             // Porównujemy nazwy budynków (kolejka z gry zawiera nazwy, nie ID)
-            if (queueItem.building === buildingConfig.name) {
+            if (queueItem.building.toLowerCase() === buildingConfig.name.toLowerCase()) {
                 highestLevel = Math.max(highestLevel, queueItem.level || 0);
             }
         }
@@ -671,7 +691,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      */
     private stopConstructionQueueProcessor(): void {
         if (this.queueProcessorIntervalId) {
-            clearInterval(this.queueProcessorIntervalId);
+            clearTimeout(this.queueProcessorIntervalId);
             this.queueProcessorIntervalId = null;
             this.logger.log('Construction queue processor stopped');
         }
@@ -766,12 +786,13 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
             // 4. Sprawdź czy można budować (przycisk vs czas)
             this.logger.debug(`🔍 Checking if building can be constructed`);
-            const buildingStatus = await this.checkBuildingAvailability(building.buildingId, building.targetLevel, page);
+            const villageDetailPage = new VillageDetailPage(page);
+            const buildingStatus = await villageDetailPage.checkBuildingBuildAvailability(building.buildingId);
 
             if (buildingStatus.canBuild) {
                 // 5. Kliknij przycisk budowania
                 this.logger.log(`🔨 Attempting to build ${buildingInfo}`);
-                const buildResult = await this.attemptToBuildWithRetry(buildingStatus.buildButton!, page);
+                const buildResult = await this.attemptToBuildWithRetry(buildingStatus.buttonSelector!, page);
 
                 if (buildResult.success) {
                     this.logger.log(`✅ Successfully added ${buildingInfo} to game queue`);
@@ -863,41 +884,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     // METODY POMOCNICZE - SPRAWDZANIE I BUDOWANIE
     // ==============================
 
-    /**
-     * Sprawdza czy można budować dany budynek (przycisk vs czas)
-     */
-    private async checkBuildingAvailability(buildingId: string, targetLevel: number, page: Page): Promise<{
-        canBuild: boolean;
-        buildButton?: string; // selector przycisku
-        availableAt?: string; // czas dostępności
-        reason?: string;
-    }> {
-        try {
-            // TODO: Implement building availability check by scraping HTML
-            // This should look for:
-            // 1. <a class="btn btn-build"> button for the specific building
-            // 2. Or <span class="inactive center"> with time text
-            // For now, returning mock implementation with logging
 
-            this.logger.debug(`TODO: Implement checkBuildingAvailability for ${buildingId} level ${targetLevel}`);
-            this.logger.debug(`Need to scrape HTML for build button or availability time`);
-            this.logger.debug(`Expected button selector: #main_buildlink_${buildingId}_${targetLevel}`);
-            this.logger.debug(`Expected time span in: td.build_options span.inactive.center`);
-
-            // Mock implementation - return false for now
-            return {
-                canBuild: false,
-                reason: 'Not implemented yet - need to add HTML scraping'
-            };
-
-        } catch (error) {
-            this.logger.error(`Error checking building availability for ${buildingId}:`, error);
-            return {
-                canBuild: false,
-                reason: `Error: ${error.message}`
-            };
-        }
-    }
 
     /**
      * Próbuje zbudować budynek z mechanizmem retry
@@ -906,35 +893,99 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         success: boolean;
         reason: string;
     }> {
+        // Get initial queue length for verification
+        const initialQueue = await this.extractGameBuildQueue(page);
+        const initialQueueLength = initialQueue.length;
+
+        this.logger.debug(`Initial game queue length: ${initialQueueLength}`);
+
         for (let attempt = 1; attempt <= this.CONFIG.MAX_RETRIES; attempt++) {
             try {
-                this.logger.debug(`Build attempt ${attempt}/${this.CONFIG.MAX_RETRIES}: clicking button ${buttonSelector}`);
+                this.logger.debug(`🔨 Build attempt ${attempt}/${this.CONFIG.MAX_RETRIES}: clicking button ${buttonSelector}`);
 
-                // TODO: Implement button clicking and verification
-                // This should:
-                // 1. Click the build button
-                // 2. Wait for response (CONFIG.VERIFY_DELAY = 3 seconds)
-                // 3. Verify by calling extractGameBuildQueue() again
-                // 4. Check if queue length increased
+                // 1. Check if button exists and is clickable
+                const buildButton = page.locator(buttonSelector);
+                const buttonExists = await buildButton.count() > 0;
 
-                this.logger.debug(`TODO: Implement button clicking for ${buttonSelector}`);
-                this.logger.debug(`TODO: Wait ${this.CONFIG.VERIFY_DELAY}ms and verify queue changed`);
+                if (!buttonExists) {
+                    this.logger.warn(`Build button not found: ${buttonSelector}`);
+                    return {
+                        success: false,
+                        reason: `Build button not found: ${buttonSelector}`
+                    };
+                }
 
-                // Mock implementation for now
-                return {
-                    success: false,
-                    reason: 'Not implemented yet - need to add button clicking and verification'
-                };
+                // Check if button is visible and enabled
+                const isVisible = await buildButton.isVisible();
+                const isEnabled = await buildButton.isEnabled();
+
+                if (!isVisible) {
+                    this.logger.warn(`Build button not visible: ${buttonSelector}`);
+                    return {
+                        success: false,
+                        reason: `Build button not visible: ${buttonSelector}`
+                    };
+                }
+
+                if (!isEnabled) {
+                    this.logger.warn(`Build button not enabled: ${buttonSelector}`);
+                    return {
+                        success: false,
+                        reason: `Build button not enabled: ${buttonSelector}`
+                    };
+                }
+
+                // 2. Click the build button
+                this.logger.debug(`Clicking build button: ${buttonSelector}`);
+                await buildButton.click({ timeout: this.CONFIG.CLICK_TIMEOUT });
+
+                // 3. Wait for the game to process the request
+                this.logger.debug(`Waiting ${this.CONFIG.VERIFY_DELAY}ms for game to process building request...`);
+                await page.waitForTimeout(this.CONFIG.VERIFY_DELAY);
+
+                // 4. Verify by checking if queue length increased
+                this.logger.debug('Verifying if building was added to queue...');
+                const newQueue = await this.extractGameBuildQueue(page);
+                const newQueueLength = newQueue.length;
+
+                this.logger.debug(`Queue length after click: ${newQueueLength} (was: ${initialQueueLength})`);
+
+                if (newQueueLength > initialQueueLength) {
+                    // Success - queue length increased
+                    const addedBuilding = newQueue[newQueue.length - 1]; // Get last item (newest)
+                    this.logger.log(`✅ Successfully added building to queue: ${addedBuilding.building} Level ${addedBuilding.level}`);
+                    return {
+                        success: true,
+                        reason: `Building added to queue successfully`
+                    };
+                } else {
+                    // Failed - queue length didn't change
+                    this.logger.warn(`⚠️  Queue length didn't increase after clicking button (attempt ${attempt}/${this.CONFIG.MAX_RETRIES})`);
+
+                    if (attempt === this.CONFIG.MAX_RETRIES) {
+                        return {
+                            success: false,
+                            reason: `Queue length didn't increase after ${this.CONFIG.MAX_RETRIES} attempts`
+                        };
+                    }
+
+                    // Wait before retry
+                    await page.waitForTimeout(1000);
+                    continue;
+                }
 
             } catch (error) {
                 this.logger.warn(`Build attempt ${attempt}/${this.CONFIG.MAX_RETRIES} failed:`, error);
+
                 if (attempt === this.CONFIG.MAX_RETRIES) {
                     return {
                         success: false,
                         reason: `All ${this.CONFIG.MAX_RETRIES} attempts failed: ${error.message}`
                     };
                 }
-                await page.waitForTimeout(1000); // Wait before retry
+
+                // Wait before retry
+                await page.waitForTimeout(1000);
             }
         }
 

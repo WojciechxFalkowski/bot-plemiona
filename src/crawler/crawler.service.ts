@@ -69,9 +69,7 @@ export class CrawlerService implements OnModuleInit {
 	async onModuleInit() {
 		// this.collectVillageInformation();
 		//TODO uncomment this 
-		// this.startScavengingBot();
-
-
+		this.startScavengingBot();
 	}
 
 	public async startScavengingBot() {

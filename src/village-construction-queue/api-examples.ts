@@ -1,50 +1,154 @@
 export const ApiExamplesAddToQueue = {
-    'headquarters-level-5': {
-        summary: 'Add Headquarters Level 5',
+    'main-level-1': {
+        summary: 'Ratusz - main',
         value: {
-            villageId: '12142',
+            villageName: '0001',
             buildingId: 'main',
-            targetLevel: 5
+            targetLevel: 1
         }
     },
-    'farm-level-10': {
-        summary: 'Add Farm Level 10',
+    'wood-level-1': {
+        summary: 'Tartak - wood',
         value: {
-            villageId: '12142',
+            villageName: '0001',
+            buildingId: 'wood',
+            targetLevel: 1
+        }
+    },
+    'stone-level-1': {
+        summary: 'Cegielnia - stone',
+        value: {
+            villageName: '0001',
+            buildingId: 'stone',
+            targetLevel: 1
+        }
+    },
+    'iron-level-1': {
+        summary: 'Huta Żelaza - iron',
+        value: {
+            villageName: '0001',
+            buildingId: 'iron',
+            targetLevel: 1
+        }
+    },
+    'farm-level-1': {
+        summary: 'Zagroda - farm',
+        value: {
+            villageName: '0002',
             buildingId: 'farm',
-            targetLevel: 10
+            targetLevel: 1
         }
     },
-    'barracks-level-3': {
-        summary: 'Add Barracks Level 3',
+    'storage-level-1': {
+        summary: 'Spichlerz - storage',
         value: {
-            villageId: '12142',
+            villageName: '0002',
+            buildingId: 'storage',
+            targetLevel: 1
+        }
+    },
+    'hide-level-1': {
+        summary: 'Schowek - hide',
+        value: {
+            villageName: '0002',
+            buildingId: 'hide',
+            targetLevel: 1
+        }
+    },
+    'place-level-1': {
+        summary: 'Plac - place',
+        value: {
+            villageName: '0002',
+            buildingId: 'place',
+            targetLevel: 1
+        }
+    },
+    'barracks-level-1': {
+        summary: 'Koszary - barracks',
+        value: {
+            villageName: '0003',
             buildingId: 'barracks',
-            targetLevel: 3
+            targetLevel: 1
         }
     },
-    'workshop-level-11': {
-        summary: 'Add Workshop Level 11',
+    'stable-level-1': {
+        summary: 'Stajnia - stable',
         value: {
-            villageId: '12142',
-            buildingId: 'garage',
-            targetLevel: 11
-        }
-    },
-    'smithy-level-8': {
-        summary: 'Add Smithy Level 8',
-        value: {
-            villageId: '12142',
-            buildingId: 'smith',
-            targetLevel: 8
-        }
-    },
-    'stable-level-15': {
-        summary: 'Add Stable Level 15',
-        value: {
-            villageId: '12142',
+            villageName: '0003',
             buildingId: 'stable',
-            targetLevel: 15
+            targetLevel: 1
+        }
+    },
+    'garage-level-1': {
+        summary: 'Warsztat - garage',
+        value: {
+            villageName: '0003',
+            buildingId: 'garage',
+            targetLevel: 1
+        }
+    },
+    'smith-level-1': {
+        summary: 'Kuźnia - smith',
+        value: {
+            villageName: '0003',
+            buildingId: 'smith',
+            targetLevel: 1
+        }
+    },
+    'wall-level-1': {
+        summary: 'Mur Obronny - wall',
+        value: {
+            villageName: '0004',
+            buildingId: 'wall',
+            targetLevel: 1
+        }
+    },
+    'market-level-1': {
+        summary: 'Rynek - market',
+        value: {
+            villageName: '0004',
+            buildingId: 'market',
+            targetLevel: 1
+        }
+    },
+    'snob-level-1': {
+        summary: 'Pałac - snob',
+        value: {
+            villageName: '0004',
+            buildingId: 'snob',
+            targetLevel: 1
+        }
+    },
+    'church-level-1': {
+        summary: 'Kościół - church',
+        value: {
+            villageName: '0005',
+            buildingId: 'church',
+            targetLevel: 1
+        }
+    },
+    'first_church-level-1': {
+        summary: 'Pierwszy Kościół - first_church',
+        value: {
+            villageName: '0005',
+            buildingId: 'first_church',
+            targetLevel: 1
+        }
+    },
+    'watchtower-level-1': {
+        summary: 'Wieża Strażnicza - watchtower',
+        value: {
+            villageName: '0005',
+            buildingId: 'watchtower',
+            targetLevel: 1
+        }
+    },
+    'statue-level-1': {
+        summary: 'Piedestał - statue',
+        value: {
+            villageName: '0005',
+            buildingId: 'statue',
+            targetLevel: 1
         }
     }
 }; 
