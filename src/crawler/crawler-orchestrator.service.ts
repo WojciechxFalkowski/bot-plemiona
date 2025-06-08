@@ -85,7 +85,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         this.crawlerPlan = {
             constructionQueue: {
-                nextExecutionTime: new Date(now.getTime() + constructionDelay),
+                nextExecutionTime: new Date(now.getTime() + 31000),//constructionDelay
                 enabled: false,
                 lastExecuted: null,
                 name: 'Construction Queue'
@@ -100,7 +100,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         };
 
         this.logger.log('Crawler plan initialized');
-        this.logCrawlerPlan(); 
+        this.logCrawlerPlan();
     }
 
     /**
@@ -148,6 +148,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.crawlerPlan.scavenging.enabled = await this.isScavengingEnabled();
 
         this.logger.warn(`Task states updated: Construction=${this.crawlerPlan.constructionQueue.enabled}, Scavenging=${this.crawlerPlan.scavenging.enabled}`);
+
+        // Log updated plan state
+        this.logCrawlerPlan();
     }
 
     /**
@@ -160,9 +163,17 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         }
 
         const now = new Date();
+
+        // Debug: Check all tasks before filtering
+        this.logger.debug(`🔍 Pre-filter task states:`);
+        this.logger.debug(`  Construction: enabled=${this.crawlerPlan.constructionQueue.enabled}, next=${this.crawlerPlan.constructionQueue.nextExecutionTime.toLocaleString()}`);
+        this.logger.debug(`  Scavenging: enabled=${this.crawlerPlan.scavenging.enabled}, next=${this.crawlerPlan.scavenging.nextExecutionTime.toLocaleString()}`);
+
         const tasks = [this.crawlerPlan.constructionQueue, this.crawlerPlan.scavenging]
             .filter(task => task.enabled)
             .sort((a, b) => a.nextExecutionTime.getTime() - b.nextExecutionTime.getTime());
+
+        this.logger.debug(`🎯 Post-filter enabled tasks: ${tasks.map(t => t.name).join(', ')} (${tasks.length} total)`);
 
         if (tasks.length === 0) {
             this.logger.log('⚪ No enabled tasks - checking again in 1 minute...');
@@ -234,29 +245,29 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         for (let i = 0; i < sortedTasks.length; i++) {
             const task = sortedTasks[i];
+            this.logger.debug(`🔄 Batch task ${i + 1}/${sortedTasks.length}: ${task.name}`);
 
             if (i > 0) {
                 this.logger.log(`⏳ Waiting ${this.BATCH_EXECUTION_DELAY / 1000}s before next task...`);
                 await new Promise(resolve => setTimeout(resolve, this.BATCH_EXECUTION_DELAY));
             }
 
-            await this.executeSingleTask(task);
+            await this.executeSingleTask(task, true);
+            this.logger.debug(`✅ Completed batch task ${i + 1}/${sortedTasks.length}: ${task.name}`);
         }
 
         this.logger.log('📦 Batch execution completed');
+        this.logger.debug('🔄 Scheduling next execution after batch...');
         this.scheduleNextExecution();
     }
 
     /**
      * Executes a single task
      */
-    private async executeSingleTask(task: CrawlerTask): Promise<void> {
+    private async executeSingleTask(task: CrawlerTask, inBatchMode: boolean = false): Promise<void> {
         this.logger.log(`🚀 Executing task: ${task.name}`);
 
         try {
-            console.log(`task.name.includes('Construction')`);
-            console.log(task.name.includes('Construction'));
-            
             if (task.name.includes('Construction')) {
                 await this.executeConstructionQueueTask();
                 this.updateNextConstructionTime();
@@ -273,7 +284,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             // Continue with scheduling even if task fails
         }
 
-        if (!this.mainTimer) { // Only schedule if not in batch mode
+        if (!inBatchMode) {
             this.scheduleNextExecution();
         }
     }

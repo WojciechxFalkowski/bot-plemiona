@@ -727,8 +727,6 @@ export class VillageDetailPage {
      */
     async checkBuildingBuildAvailability(buildingId: BuildingId | string): Promise<BuildingAvailability> {
         try {
-            console.log('v0');
-
             // Ensure we're on the main screen where buildings are visible
             const currentUrl = this.page.url();
             const villageIdMatch = currentUrl.match(/village=(\d+)/);

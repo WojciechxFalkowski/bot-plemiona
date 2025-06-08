@@ -784,6 +784,15 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
                 return { success: false, reason: 'Game queue full', shouldDelete: false };
             }
 
+            // SPRAWDŹ CZY TARGET LEVEL JUŻ JEST W KOLEJCE GRY
+            const targetLevelInQueue = this.isTargetLevelInGameQueue(building.buildingId, building.targetLevel, gameQueue);
+
+            if (targetLevelInQueue) {
+                this.logger.log(`✅ ${buildingInfo} - Already in game queue`);
+                await this.removeFromDatabaseWithReason(building.id, 'Already in game queue');
+                return { success: true, reason: 'Already in game queue', shouldDelete: true };
+            }
+
             // 4. Sprawdź czy można budować (przycisk vs czas)
             this.logger.debug(`🔍 Checking if building can be constructed`);
             const villageDetailPage = new VillageDetailPage(page);
@@ -883,8 +892,6 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     // ==============================
     // METODY POMOCNICZE - SPRAWDZANIE I BUDOWANIE
     // ==============================
-
-
 
     /**
      * Próbuje zbudować budynek z mechanizmem retry
@@ -993,5 +1000,26 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
             success: false,
             reason: 'Unexpected error in retry loop'
         };
+    }
+
+    /**
+     * Sprawdza czy target level jest już w kolejce gry
+     * @param buildingId ID budynku
+     * @param targetLevel Docelowy poziom
+     * @param gameQueue Kolejka budowy z gry
+     * @returns True jeśli target level jest w kolejce gry, false w przeciwnym przypadku
+     */
+    private isTargetLevelInGameQueue(buildingId: string, targetLevel: number, gameQueue: BuildQueueItem[]): boolean {
+        const buildingConfig = getBuildingConfig(buildingId);
+        if (!buildingConfig) {
+            return false;
+        }
+
+        for (const queueItem of gameQueue) {
+            if (queueItem.building === buildingConfig.name && queueItem.level === targetLevel) {
+                return true;
+            }
+        }
+        return false;
     }
 } 
