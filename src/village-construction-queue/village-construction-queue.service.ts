@@ -63,8 +63,8 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     }
 
     async onModuleInit() {
-        this.logger.log('VillageConstructionQueueService initialized');
-        this.startConstructionQueueProcessor();
+        this.logger.log('VillageConstructionQueueService initialized (auto-start disabled - managed by orchestrator)');
+        // this.startConstructionQueueProcessor(); // DISABLED: Now managed by CrawlerOrchestratorService
     }
 
     /**
@@ -116,7 +116,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * 3. Dla każdej wioski używa scrappera do sprawdzenia czy można budować
      * 4. Loguje informacje o możliwych budowach
      */
-    private async processAndCheckConstructionQueue(): Promise<void> {
+    public async processAndCheckConstructionQueue(): Promise<void> {
         this.logger.log('🔄 Processing construction queue from database...');
 
         try {

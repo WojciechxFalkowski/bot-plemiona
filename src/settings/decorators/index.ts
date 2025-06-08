@@ -1,0 +1,11 @@
+export { GetSettingDecorators } from './get-setting.decorator';
+export { CreateSettingDecorators } from './create-setting.decorator';
+export { UpdateSettingDecorators } from './update-setting.decorator';
+export { DeleteSettingDecorators } from './delete-setting.decorator';
+export { GetAllKeysDecorators } from './get-all-keys.decorator';
+export { GetPlemionaCookiesDecorators } from './get-plemiona-cookies.decorator';
+export { SetPlemionaCookiesDecorators } from './set-plemiona-cookies.decorator';
+export { UpdatePlemionaCookiesDecorators } from './update-plemiona-cookies.decorator';
+export { DeletePlemionaCookiesDecorators } from './delete-plemiona-cookies.decorator';
+export { GetAutoScavengingDecorators } from './get-auto-scavenging.decorator';
+export { UpdateAutoScavengingDecorators } from './update-auto-scavenging.decorator'; 

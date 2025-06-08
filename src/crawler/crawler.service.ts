@@ -65,11 +65,13 @@ export class CrawlerService implements OnModuleInit {
 
 	/**
 	 * Automatically starts the scavenging bot when the application initializes
+	 * DISABLED: Now managed by CrawlerOrchestratorService
 	 */
 	async onModuleInit() {
 		// this.collectVillageInformation();
 		//TODO uncomment this 
-		this.startScavengingBot();
+		// this.startScavengingBot(); // DISABLED: Now managed by CrawlerOrchestratorService
+		this.logger.log('CrawlerService initialized (auto-start disabled - managed by orchestrator)');
 	}
 
 	public async startScavengingBot() {
@@ -144,7 +146,7 @@ export class CrawlerService implements OnModuleInit {
 	 * Iteruje po wszystkich wioskach i wysyła wojsko na odprawy.
 	 * @param page Instancja strony Playwright.
 	 */
-	private async performScavenging(page: Page): Promise<void> {
+	public async performScavenging(page: Page): Promise<void> {
 		try {
 			this.logger.log('Starting scavenging process for villages with auto-scavenging enabled...');
 
@@ -165,14 +167,12 @@ export class CrawlerService implements OnModuleInit {
 
 				if (!villages || villages.length === 0) {
 					this.logger.warn('No villages with auto-scavenging enabled found. Cannot perform scavenging.');
-					await this.scheduleNextScavengeRun(page, 300);
 					return;
 				}
 				this.logger.log(`Found ${villages.length} villages with auto-scavenging enabled to process`);
 			} catch (villageError) {
 				this.logger.error('Error fetching villages from database:', villageError);
-				await this.scheduleNextScavengeRun(page, 600); // Spróbuj ponownie za 10 minut
-				return;
+				throw villageError; // Let orchestrator handle the error
 			}
 
 			// Zresetuj dane o czasach scavenging przed rozpoczęciem nowego cyklu
@@ -242,7 +242,6 @@ export class CrawlerService implements OnModuleInit {
 
 			if (villagesToProcess.length === 0) {
 				this.logger.log('No villages require scavenging. All villages are either busy or have no units.');
-				await this.scheduleNextScavengeRun(page, 60); // Sprawdź ponownie za minutę
 				return;
 			}
 
@@ -412,13 +411,11 @@ export class CrawlerService implements OnModuleInit {
 				this.logger.log(`========================`);
 			}
 
-			// Zaplanuj następny cykl zbieractwa na podstawie zebranych danych
-			await this.scheduleNextScavengeRun(page, 300);
+			// Scavenging completed - orchestrator will handle scheduling
 
 		} catch (error) {
 			this.logger.error('Error during scavenging process:', error);
-			// W przypadku błędu spróbuj ponownie za 5 minut
-			await this.scheduleNextScavengeRun(page, 300);
+			throw error; // Let orchestrator handle the error
 		}
 	}
 
