@@ -163,9 +163,9 @@ export class VillageOverviewPage {
 
 			// Extract resources (wood, clay, iron)
 			const resourcesCell = row.locator('td').nth(2);
-			const woodElement = resourcesCell.locator('.res.wood');
-			const clayElement = resourcesCell.locator('.res.stone'); // Note: stone = clay in Plemiona
-			const ironElement = resourcesCell.locator('.res.iron');
+			const woodElement = resourcesCell.locator('.wood');
+			const clayElement = resourcesCell.locator('.stone'); // Note: stone = clay in Plemiona
+			const ironElement = resourcesCell.locator('.iron');
 
 			const woodText = await woodElement.textContent();
 			const clayText = await clayElement.textContent();
