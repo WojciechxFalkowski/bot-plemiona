@@ -35,7 +35,7 @@ export class VillagesService {
 		}
 	}
 
-	async findAll(autoRefresh = true): Promise<VillageResponseDto[]> {
+	async findAll(autoRefresh = true): Promise<VillageEntity[]> {
 		if (autoRefresh && await this.shouldAutoRefresh()) {
 			this.logger.log('Villages data is older than 1 hour, triggering background refresh');
 			// Don't await - let it run in background
@@ -261,7 +261,7 @@ export class VillagesService {
 		return timeSinceUpdate > this.AUTO_REFRESH_THRESHOLD_MS;
 	}
 
-	public mapToResponseDto(village: VillageEntity): VillageResponseDto {
+	public mapToResponseDto(village: VillageEntity): VillageEntity {
 		return {
 			id: village.id,
 			name: village.name,

@@ -162,10 +162,10 @@ export class VillageOverviewPage {
 			const points = pointsText ? parseInt(pointsText.replace(/\./g, '').replace(/\s/g, ''), 10) : 0;
 
 			// Extract resources (wood, clay, iron)
-			const resourcesCell = row.locator('td').nth(2);
-			const woodElement = resourcesCell.locator('.wood');
-			const clayElement = resourcesCell.locator('.stone'); // Note: stone = clay in Plemiona
-			const ironElement = resourcesCell.locator('.iron');
+			// const resourcesCell = row.locator('td').nth(2);
+			const woodElement = row.locator('.wood');
+			const clayElement = row.locator('.stone'); // Note: stone = clay in Plemiona
+			const ironElement = row.locator('.iron');
 
 			const woodText = await woodElement.textContent();
 			const clayText = await clayElement.textContent();

@@ -1,6 +1,7 @@
 import { Controller, Get, Put, Post, Param, Logger } from '@nestjs/common';
 import { VillagesService } from './villages.service';
 import { VillageResponseDto, VillageToggleResponseDto } from './dto';
+import { VillageEntity } from './villages.entity';
 
 @Controller('villages')
 export class VillagesController {
@@ -14,7 +15,7 @@ export class VillagesController {
      * GET /villages - Pobiera wszystkie wioski z auto-refresh jeśli dane > 1h
      */
     @Get()
-    async getAllVillages(): Promise<VillageResponseDto[]> {
+    async getAllVillages(): Promise<VillageEntity[]> {
         this.logger.log('GET /villages - Fetching all villages with auto-refresh check');
         return this.villagesService.findAll(true);
     }
@@ -45,7 +46,7 @@ export class VillagesController {
             throw error;
         }
     }
- 
+
     /**
      * GET /villages/auto-scavenging-status/:name - Pobiera status auto-scavenging dla konkretnej wioski
      */

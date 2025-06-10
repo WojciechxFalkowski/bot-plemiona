@@ -11,6 +11,7 @@ import { BuildingCrawlerModule } from './building-crawler/building-crawler.modul
 import { VillagesCrawlerModule } from './villages-crawler/villages-crawler.module';
 import { VillagesModule } from './villages/villages.module';
 import { VillageConstructionQueueModule } from './village-construction-queue/village-construction-queue.module';
+import { ClerkAuthModule } from './clerk-auth/clerk-auth.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { VillageConstructionQueueModule } from './village-construction-queue/vil
     VillagesCrawlerModule,
     VillagesModule,
     VillageConstructionQueueModule,
+    ClerkAuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
