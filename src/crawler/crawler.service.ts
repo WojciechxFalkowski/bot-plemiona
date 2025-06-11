@@ -33,6 +33,16 @@ import { PlemionaCredentials } from './utils/auth.interfaces';
 import { VillageUtils } from './utils/village.utils';
 import { VillageCollectionOptions } from './utils/village.interfaces';
 
+/**
+ * Configuration for a scheduled attack
+ */
+interface AttackConfig {
+	id: string;           // Village identifier (e.g., "0005")
+	link: string;         // Attack URL
+	scheduleTime: number; // Time in minutes (e.g., 180 for 3 hours, 370 for 6 hours 10 minutes)
+	marchTime: number;    // March time in minutes (how long troops take to reach target)
+}
+
 @Injectable()
 export class CrawlerService implements OnModuleInit {
 	private readonly logger = new Logger(CrawlerService.name);
@@ -45,6 +55,40 @@ export class CrawlerService implements OnModuleInit {
 		lastCollected: new Date(),
 		villages: []
 	};
+
+	// Attack configurations
+	private readonly attackConfigs: AttackConfig[] = [
+		{
+			id: "0005",
+			link: "https://pl214.plemiona.pl/game.php?village=11103&screen=place&target=12910",
+			scheduleTime: 170, // 2 hours 50 minutes
+			marchTime: 242 // 4:01:52 -> 4*60 + 2 minutes
+		},
+		{
+			id: "0004",
+			link: "https://pl214.plemiona.pl/game.php?village=12626&screen=place&target=12910",
+			scheduleTime: 278, // 4 hours 37 minutes
+			marchTime: 135 // 2:14:10 -> 2*60 + 15 minutes
+		},
+		{
+			id: "0007",
+			link: "https://pl214.plemiona.pl/game.php?village=11716&screen=place&target=12910",
+			scheduleTime: 330, // 5 hours 30 minutes
+			marchTime: 92 // 1:31:47 -> 1*60 + 32 minutes
+		},
+		{
+			id: "0008",
+			link: "https://pl214.plemiona.pl/game.php?village=12741&screen=place&target=12910",
+			scheduleTime: 355, // 5 hours 55 minutes
+			marchTime: 60 // 1:00:00 -> 1*60 + 0 minutes
+		},
+		{ 
+			id: "0003",
+			link: "https://pl214.plemiona.pl/game.php?village=13309&screen=place&target=12910",
+			scheduleTime: 310, // 5 hours 10 minutes
+			marchTime: 109 // 1:48:10 -> 1*60 + 49 minutes
+		}
+	];
 
 	constructor(
 		private settingsService: SettingsService,
@@ -72,6 +116,56 @@ export class CrawlerService implements OnModuleInit {
 		//TODO uncomment this 
 		// this.startScavengingBot(); // DISABLED: Now managed by CrawlerOrchestratorService
 		this.logger.log('CrawlerService initialized (auto-start disabled - managed by orchestrator)');
+
+		// Schedule all configured attacks
+		this.scheduleAllAttacks();
+	}
+
+	/**
+	 * Schedules all attacks based on the attack configurations
+	 */
+	private scheduleAllAttacks(): void {
+		this.logger.log(`Scheduling ${this.attackConfigs.length} attacks...`);
+
+		this.attackConfigs.forEach((config, index) => {
+			const delayMs = this.minutesToMilliseconds(config.scheduleTime);
+			const executeTime = new Date(Date.now() + delayMs);
+			const arrivalTime = new Date(Date.now() + delayMs + this.minutesToMilliseconds(config.marchTime));
+
+			// Format time for display
+			const hours = Math.floor(config.scheduleTime / 60);
+			const minutes = config.scheduleTime % 60;
+			const timeDisplay = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+
+			// Format march time for display
+			const marchHours = Math.floor(config.marchTime / 60);
+			const marchMinutes = config.marchTime % 60;
+			const marchDisplay = marchMinutes > 0 ? `${marchHours}h ${marchMinutes}m` : `${marchHours}h`;
+
+			this.logger.log(`Attack ${index + 1}/${this.attackConfigs.length}:`);
+			this.logger.log(`  Village ID: ${config.id}`);
+			this.logger.log(`  Schedule: ${timeDisplay} (${executeTime.toLocaleString()})`);
+			this.logger.log(`  March: ${marchDisplay} → Arrival: ${arrivalTime.toLocaleString()}`);
+			this.logger.log(`  Target URL: ${config.link}`);
+
+			global.setTimeout(() => {
+				this.logger.log(`⚔️ Executing scheduled attack for village ${config.id}...`);
+				this.performAttack(config).catch(err => {
+					this.logger.error(`Error during scheduled attack for village ${config.id}:`, err);
+				});
+			}, delayMs);
+		});
+
+		this.logger.log('All attacks scheduled successfully!');
+	}
+
+	/**
+	 * Converts minutes to milliseconds
+	 * @param minutes Time in minutes
+	 * @returns Time in milliseconds
+	 */
+	private minutesToMilliseconds(minutes: number): number {
+		return minutes * 60 * 1000;
 	}
 
 	public async startScavengingBot() {
@@ -619,5 +713,112 @@ export class CrawlerService implements OnModuleInit {
 	 */
 	public getVillageScavengingData(villageId: string): VillageScavengingData | null {
 		return this.scavengingTimeData.villages.find(v => v.villageId === villageId) || null;
+	}
+
+	/**
+	 * Performs an attack by logging in, navigating to attack page, selecting units and attacking
+	 */
+	public async performAttack(config: AttackConfig): Promise<void> {
+		this.logger.log(`Starting attack sequence for village ${config.id}...`);
+		const { browser, context, page } = await createBrowserPage({ headless: true });
+
+		try {
+			// Use AuthUtils for login and world selection
+			const loginResult = await AuthUtils.loginAndSelectWorld(
+				page,
+				this.credentials,
+				this.settingsService
+			);
+
+			if (loginResult.success && loginResult.worldSelected) {
+				this.logger.log(`Login successful using method: ${loginResult.method}`);
+
+				// Navigate to the specific attack page
+				const attackUrl = config.link;
+				this.logger.log(`Navigating to attack page for village ${config.id}: ${attackUrl}`);
+				await page.goto(attackUrl, { waitUntil: 'networkidle', timeout: 15000 });
+
+				// Wait for page to load completely
+				await page.waitForTimeout(2000);
+
+				// Click on units_entry_all_axe to add all axe units
+				this.logger.log('Adding all axe units...');
+				const axeLink = page.locator('#units_entry_all_axe');
+				if (await axeLink.isVisible({ timeout: 5000 })) {
+					await axeLink.click();
+					await page.waitForTimeout(500);
+					this.logger.log('✓ All axe units added');
+				} else {
+					this.logger.warn('Axe units link not found or not visible');
+				}
+
+				// Click on units_entry_all_light to add all light cavalry units
+				this.logger.log('Adding all light cavalry units...');
+				const lightLink = page.locator('#units_entry_all_light');
+				if (await lightLink.isVisible({ timeout: 5000 })) {
+					await lightLink.click();
+					await page.waitForTimeout(500);
+					this.logger.log('✓ All light cavalry units added');
+				} else {
+					this.logger.warn('Light cavalry units link not found or not visible');
+				}
+
+				// Click on units_entry_all_ram to add all ram units
+				this.logger.log('Adding all ram units...');
+				const ramLink = page.locator('#units_entry_all_ram');
+				if (await ramLink.isVisible({ timeout: 5000 })) {
+					await ramLink.click();
+					await page.waitForTimeout(500);
+					this.logger.log('✓ All ram units added');
+				} else {
+					this.logger.warn('Ram units link not found or not visible');
+				}
+
+				// Click the attack button
+				this.logger.log('Clicking attack button...');
+				const attackButton = page.locator('#target_attack');
+				if (await attackButton.isVisible({ timeout: 5000 })) {
+					await attackButton.click();
+					this.logger.log('✓ Attack button clicked successfully');
+
+					// Wait for the confirmation page to load
+					await page.waitForLoadState('networkidle', { timeout: 10000 });
+					await page.waitForTimeout(2000);
+					this.logger.log('Confirmation page loaded');
+
+					// Click the confirmation button
+					this.logger.log('Clicking confirmation button...');
+					const confirmButton = page.locator('#troop_confirm_submit');
+					if (await confirmButton.isVisible({ timeout: 5000 })) {
+						await confirmButton.click();
+						this.logger.log('✓ Confirmation button clicked successfully');
+
+						// Wait a bit to see the final result
+						await page.waitForTimeout(3000);
+						this.logger.log(`Attack sequence completed successfully for village ${config.id}`);
+					} else {
+						this.logger.warn('Confirmation button not found or not visible');
+					}
+				} else {
+					this.logger.warn('Attack button not found or not visible');
+				}
+
+			} else {
+				this.logger.error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+				throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+			}
+
+		} catch (error) {
+			this.logger.error(`Error during attack sequence for village ${config.id}:`, error);
+			await page.screenshot({
+				path: `attack_error_screenshot_${Date.now()}.png`,
+				fullPage: true
+			}).catch(e => this.logger.error('Failed to take error screenshot', e));
+			throw error;
+		} finally {
+			// Close browser
+			await browser.close();
+			this.logger.log(`Attack sequence finished for village ${config.id} - browser closed`);
+		}
 	}
 }
