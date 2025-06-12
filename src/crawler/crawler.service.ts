@@ -118,7 +118,7 @@ export class CrawlerService implements OnModuleInit {
 		this.logger.log('CrawlerService initialized (auto-start disabled - managed by orchestrator)');
 
 		// Schedule all configured attacks
-		this.scheduleAllAttacks();
+		// this.scheduleAllAttacks();
 	}
 
 	/**

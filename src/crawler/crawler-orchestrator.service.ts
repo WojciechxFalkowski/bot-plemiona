@@ -52,12 +52,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.validateCredentials();
 
         // Initialize crawler plan
-        // this.initializeCrawlerPlan();
+        this.initializeCrawlerPlan();
     }
 
     async onModuleInit() {
         this.logger.log('CrawlerOrchestratorService initialized');
-        // this.startMonitoring();
+        this.startMonitoring();
     }
 
     async onModuleDestroy() {
