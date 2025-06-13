@@ -206,8 +206,6 @@ Required environment variables:
 
 - `DATABASE_HOST`: Database hostname
 - `DATABASE_PORT`: Database port
-- `DATABASE_USER`: Database username
-- `DATABASE_PASSWORD`: Database password
 - `DATABASE_NAME`: Database name
 - `BACKEND_PORT`: Port for API server (default: 3000)
 

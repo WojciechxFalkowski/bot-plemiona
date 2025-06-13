@@ -44,8 +44,6 @@ An automated bot for the browser-based game "Plemiona" (Tribal Wars) that manage
    ```
    DATABASE_HOST=localhost
    DATABASE_PORT=3306
-   DATABASE_USER=your_username
-   DATABASE_PASSWORD=your_password
    DATABASE_NAME=plemiona_bot
    BACKEND_PORT=3000
 

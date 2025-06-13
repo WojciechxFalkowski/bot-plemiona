@@ -1,0 +1,31 @@
+name: Deploy Plemiona Bot Backend to Raspberry Pi
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Generate .env file
+        run: |
+          echo "DATABASE_HOST=${{ vars.DATABASE_HOST }}" >> .env
+          echo "DATABASE_PORT=${{ vars.DATABASE_PORT }}" >> .env
+          echo "DATABASE_NAME=${{ vars.DATABASE_NAME }}" >> .env
+          echo "BACKEND_PORT=${{ vars.BACKEND_PORT }}" >> .env
+          echo "PLEMIONA_USERNAME=${{ secrets.PLEMIONA_USERNAME }}" >> .env
+          echo "PLEMIONA_PASSWORD=${{ secrets.PLEMIONA_PASSWORD }}" >> .env
+          echo "PLEMIONA_TARGET_WORLD=${{ vars.PLEMIONA_TARGET_WORLD }}" >> .env
+
+      - name: Docker Compose
+        run: |
+          docker compose down
+          docker compose pull
+          docker compose up -d --build 
