@@ -34,13 +34,14 @@ import { VillageUtils } from './utils/village.utils';
 import { VillageCollectionOptions } from './utils/village.interfaces';
 
 /**
- * Configuration for a scheduled attack
+ * Configuration for a scheduled attack or support
  */
 interface AttackConfig {
 	id: string;           // Village identifier (e.g., "0005")
-	link: string;         // Attack URL
+	link: string;         // Attack/Support URL
 	scheduleTime: number; // Time in minutes (e.g., 180 for 3 hours, 370 for 6 hours 10 minutes)
 	marchTime: number;    // March time in minutes (how long troops take to reach target)
+	type: 'attack' | 'support'; // Type of action: 'attack' or 'support'
 }
 
 @Injectable()
@@ -59,35 +60,34 @@ export class CrawlerService implements OnModuleInit {
 	// Attack configurations
 	private readonly attackConfigs: AttackConfig[] = [
 		{
-			id: "0005",
-			link: "https://pl214.plemiona.pl/game.php?village=11103&screen=place&target=12910",
-			scheduleTime: 170, // 2 hours 50 minutes
-			marchTime: 242 // 4:01:52 -> 4*60 + 2 minutes
+			id: "0006",
+			link: "https://pl214.plemiona.pl/game.php?village=12729&screen=place&target=13728",
+			scheduleTime: 140 + 244 - 140, //157 08:00:00 a 06:02:29 wynosi 1 godzinę, 57 minut i 31 sekund.
+			marchTime: 363, // 4:01:52 -> 6 godzin, 2 minuty i 29 sekund 
+			type: 'attack',
+		},
+		// Przykład wsparcia (możesz dodać więcej):
+		// {
+		// 	id: "0002",
+		// 	link: "https://pl214.plemiona.pl/game.php?village=12346&screen=place&target=13728",
+		// 	scheduleTime: 349+ 260- 140, //349  5 godzin, 48 minut i 48 sekund.
+		// 	marchTime: 159, // Czas 2 godziny, 38 minut i 39 sekund
+		// 	type: 'support',
+		// },
+		{
+			id: "0001",
+			link: "https://pl214.plemiona.pl/game.php?village=12142&screen=place&target=13728",
+			scheduleTime: 249 + 244 - 140, //249 4 godziny, 8 minut i 44 sekundy
+			marchTime: 257, // Czas 4 godziny, 16 minut i 34 sekundy
+			type: 'support',
 		},
 		{
-			id: "0004",
-			link: "https://pl214.plemiona.pl/game.php?village=12626&screen=place&target=12910",
-			scheduleTime: 278, // 4 hours 37 minutes
-			marchTime: 135 // 2:14:10 -> 2*60 + 15 minutes
+			id: "0009",
+			link: "https://pl214.plemiona.pl/game.php?village=13041&screen=place&target=13728",
+			scheduleTime: 299 + 244 - 140, //299 4 godziny, 58 minut i 15 sekund
+			marchTime: 206, // Czas 3 godziny, 25 minut i 14 sekund
+			type: 'support',
 		},
-		{
-			id: "0007",
-			link: "https://pl214.plemiona.pl/game.php?village=11716&screen=place&target=12910",
-			scheduleTime: 330, // 5 hours 30 minutes
-			marchTime: 92 // 1:31:47 -> 1*60 + 32 minutes
-		},
-		{
-			id: "0008",
-			link: "https://pl214.plemiona.pl/game.php?village=12741&screen=place&target=12910",
-			scheduleTime: 355, // 5 hours 55 minutes
-			marchTime: 60 // 1:00:00 -> 1*60 + 0 minutes
-		},
-		{ 
-			id: "0003",
-			link: "https://pl214.plemiona.pl/game.php?village=13309&screen=place&target=12910",
-			scheduleTime: 310, // 5 hours 10 minutes
-			marchTime: 109 // 1:48:10 -> 1*60 + 49 minutes
-		}
 	];
 
 	constructor(
@@ -118,7 +118,7 @@ export class CrawlerService implements OnModuleInit {
 		this.logger.log('CrawlerService initialized (auto-start disabled - managed by orchestrator)');
 
 		// Schedule all configured attacks
-		// this.scheduleAllAttacks();
+		this.scheduleAllAttacks();
 	}
 
 	/**
@@ -147,12 +147,19 @@ export class CrawlerService implements OnModuleInit {
 			this.logger.log(`  Schedule: ${timeDisplay} (${executeTime.toLocaleString()})`);
 			this.logger.log(`  March: ${marchDisplay} → Arrival: ${arrivalTime.toLocaleString()}`);
 			this.logger.log(`  Target URL: ${config.link}`);
+			this.logger.log(`  Type: ${config.type}`);
 
 			global.setTimeout(() => {
-				this.logger.log(`⚔️ Executing scheduled attack for village ${config.id}...`);
-				this.performAttack(config).catch(err => {
-					this.logger.error(`Error during scheduled attack for village ${config.id}:`, err);
-				});
+				this.logger.log(`⚔️ Executing scheduled ${config.type} for village ${config.id}...`);
+				if (config.type === 'attack') {
+					this.performAttack(config).catch(err => {
+						this.logger.error(`Error during scheduled attack for village ${config.id}:`, err);
+					});
+				} else if (config.type === 'support') {
+					this.performSupport(config).catch(err => {
+						this.logger.error(`Error during scheduled support for village ${config.id}:`, err);
+					});
+				}
 			}, delayMs);
 		});
 
@@ -774,6 +781,17 @@ export class CrawlerService implements OnModuleInit {
 					this.logger.warn('Ram units link not found or not visible');
 				}
 
+				// Click on units_entry_all_snob to add all snob units
+				this.logger.log('Adding all snob units...');
+				const snobLink = page.locator('#units_entry_all_snob');
+				if (await snobLink.isVisible({ timeout: 5000 })) {
+					await snobLink.click();
+					await page.waitForTimeout(500);
+					this.logger.log('✓ All snob units added');
+				} else {
+					this.logger.warn('Snob units link not found or not visible');
+				}
+
 				// Click the attack button
 				this.logger.log('Clicking attack button...');
 				const attackButton = page.locator('#target_attack');
@@ -819,6 +837,113 @@ export class CrawlerService implements OnModuleInit {
 			// Close browser
 			await browser.close();
 			this.logger.log(`Attack sequence finished for village ${config.id} - browser closed`);
+		}
+	}
+
+	/**
+	 * Performs a support action by logging in, navigating to support page, selecting units and sending support
+	 */
+	public async performSupport(config: AttackConfig): Promise<void> {
+		this.logger.log(`Starting support sequence for village ${config.id}...`);
+		const { browser, context, page } = await createBrowserPage({ headless: true });
+
+		try {
+			// Use AuthUtils for login and world selection
+			const loginResult = await AuthUtils.loginAndSelectWorld(
+				page,
+				this.credentials,
+				this.settingsService
+			);
+
+			if (loginResult.success && loginResult.worldSelected) {
+				this.logger.log(`Login successful using method: ${loginResult.method}`);
+
+				// Navigate to the specific support page (same as attack page)
+				const supportUrl = config.link;
+				this.logger.log(`Navigating to support page for village ${config.id}: ${supportUrl}`);
+				await page.goto(supportUrl, { waitUntil: 'networkidle', timeout: 15000 });
+
+				// Wait for page to load completely
+				await page.waitForTimeout(2000);
+
+				// Click on units_entry_all_spear to add all spear units
+				this.logger.log('Adding all spear units...');
+				const spearLink = page.locator('#units_entry_all_spear');
+				if (await spearLink.isVisible({ timeout: 5000 })) {
+					await spearLink.click();
+					await page.waitForTimeout(500);
+					this.logger.log('✓ All spear units added');
+				} else {
+					this.logger.warn('Spear units link not found or not visible');
+				}
+
+				// Click on units_entry_all_sword to add all sword units
+				this.logger.log('Adding all sword units...');
+				const swordLink = page.locator('#units_entry_all_sword');
+				if (await swordLink.isVisible({ timeout: 5000 })) {
+					await swordLink.click();
+					await page.waitForTimeout(500);
+					this.logger.log('✓ All sword units added');
+				} else {
+					this.logger.warn('Sword units link not found or not visible');
+				}
+
+				// Click on units_entry_all_archer to add all archer units
+				this.logger.log('Adding all archer units...');
+				const archerLink = page.locator('#units_entry_all_archer');
+				if (await archerLink.isVisible({ timeout: 5000 })) {
+					await archerLink.click();
+					await page.waitForTimeout(500);
+					this.logger.log('✓ All archer units added');
+				} else {
+					this.logger.warn('Archer units link not found or not visible');
+				}
+
+				// Click the support button
+				this.logger.log('Clicking support button...');
+				const supportButton = page.locator('#target_support');
+				if (await supportButton.isVisible({ timeout: 5000 })) {
+					await supportButton.click();
+					this.logger.log('✓ Support button clicked successfully');
+
+					// Wait for the confirmation page to load
+					await page.waitForLoadState('networkidle', { timeout: 10000 });
+					await page.waitForTimeout(2000);
+					this.logger.log('Confirmation page loaded');
+
+					// Click the confirmation button
+					this.logger.log('Clicking confirmation button...');
+					const confirmButton = page.locator('#troop_confirm_submit');
+					if (await confirmButton.isVisible({ timeout: 5000 })) {
+						await confirmButton.click();
+						this.logger.log('✓ Confirmation button clicked successfully');
+
+						// Wait a bit to see the final result
+						await page.waitForTimeout(3000);
+						this.logger.log(`Support sequence completed successfully for village ${config.id}`);
+					} else {
+						this.logger.warn('Confirmation button not found or not visible');
+					}
+				} else {
+					this.logger.warn('Support button not found or not visible');
+				}
+
+			} else {
+				this.logger.error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+				throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+			}
+
+		} catch (error) {
+			this.logger.error(`Error during support sequence for village ${config.id}:`, error);
+			await page.screenshot({
+				path: `support_error_screenshot_${Date.now()}.png`,
+				fullPage: true
+			}).catch(e => this.logger.error('Failed to take error screenshot', e));
+			throw error;
+		} finally {
+			// Close browser
+			await browser.close();
+			this.logger.log(`Support sequence finished for village ${config.id} - browser closed`);
 		}
 	}
 }
