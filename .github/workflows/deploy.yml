@@ -24,8 +24,17 @@ jobs:
           echo "PLEMIONA_PASSWORD=${{ secrets.PLEMIONA_PASSWORD }}" >> .env
           echo "PLEMIONA_TARGET_WORLD=${{ vars.PLEMIONA_TARGET_WORLD }}" >> .env
 
+      - name: Debug working directory
+        run: pwd && ls -la
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
       - name: Docker Compose
         run: |
           docker compose down
           docker compose pull
-          docker compose up -d --build 
+          docker compose up -d --build

@@ -36,13 +36,14 @@ export class VillagesService {
 	}
 
 	async findAll(autoRefresh = true): Promise<VillageEntity[]> {
-		if (autoRefresh && await this.shouldAutoRefresh()) {
-			this.logger.log('Villages data is older than 1 hour, triggering background refresh');
-			// Don't await - let it run in background
-			this.refreshVillageData().catch(error => {
-				this.logger.error('Background village refresh failed:', error);
-			});
-		}
+
+		// if (autoRefresh && await this.shouldAutoRefresh()) {
+		// 	this.logger.log('Villages data is older than 1 hour, triggering background refresh');
+		// 	// Don't await - let it run in background
+		// 	this.refreshVillageData().catch(error => {
+		// 		this.logger.error('Background village refresh failed:', error);
+		// 	});
+		// }
 
 		const villages = await this.villageRepository.find({
 			order: { name: 'ASC' }
@@ -203,7 +204,8 @@ export class VillagesService {
 		// Remove villages that no longer exist
 		for (const existingVillage of existingVillages) {
 			if (!incomingVillageIds.has(existingVillage.id)) {
-				await this.villageRepository.remove(existingVillage);
+				this.logger.log(`Skipping deletion of village ${existingVillage.name} (${existingVillage.id}) because it still exists in the database`);
+				// await this.villageRepository.remove(existingVillage);
 				deleted++;
 				this.logger.log(`Deleted village ${existingVillage.name} (${existingVillage.id})`);
 			}
@@ -221,6 +223,8 @@ export class VillagesService {
 	}
 
 	async refreshVillageData(): Promise<VillagesSyncResult> {
+		console.log('refreshVillageData');
+
 		const villages = await this.getOverviewVillageInformation({
 			headless: true,
 			timeoutPerPage: 15000,
