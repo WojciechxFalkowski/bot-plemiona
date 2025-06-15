@@ -1,6 +1,6 @@
-import { Controller, Get, Put, Post, Param, Logger } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Logger, Body, Delete } from '@nestjs/common';
 import { VillagesService } from './villages.service';
-import { VillageResponseDto, VillageToggleResponseDto } from './dto';
+import { VillageResponseDto, VillageToggleResponseDto, CreateVillageDto, UpdateVillageDto } from './dto';
 import { VillageEntity } from './villages.entity';
 
 @Controller('villages')
@@ -83,5 +83,32 @@ export class VillagesController {
     async toggleAutoBuilding(@Param('name') name: string): Promise<VillageToggleResponseDto> {
         this.logger.log(`PUT /villages/${name}/building - Toggling auto-building for village ${name}`);
         return this.villagesService.toggleAutoBuildingByName(name);
+    }
+
+    /**
+     * POST /villages - Tworzy nową wioskę
+     */
+    @Post()
+    async createVillage(@Body() dto: CreateVillageDto) {
+        this.logger.log('POST /villages - Creating new village');
+        return this.villagesService.createVillage(dto);
+    }
+
+    /**
+     * PUT /villages/:id - Aktualizuje istniejącą wioskę
+     */
+    @Put(':id')
+    async updateVillage(@Param('id') id: string, @Body() dto: UpdateVillageDto) {
+        this.logger.log(`PUT /villages/${id} - Updating village`);
+        return this.villagesService.updateVillage(id, dto);
+    }
+
+    /**
+     * DELETE /villages/:id - Usuwa wioskę po id
+     */
+    @Delete(':id')
+    async deleteVillage(@Param('id') id: string) {
+        this.logger.log(`DELETE /villages/${id} - Deleting village`);
+        return this.villagesService.deleteVillage(id);
     }
 } 

@@ -20,22 +20,25 @@ export class ClerkAuthController {
   @ClerkAuth()
   @GetProfileDecorators()
   async getProfile(@CurrentUser() user: UserEntity): Promise<UserProfileDto> {
+    console.log('GET -> getProfile');
     return this.clerkAuthService.getUserProfile(user.clerkUserId);
   }
 
-  @Put('profile')
+  @Put('profile') 
   @ClerkAuth()
   @UpdateProfileDecorators()
   async updateProfile(
     @CurrentUser() user: UserEntity,
     @Body() updateData: UpdateProfileDto,
   ): Promise<UserProfileDto> {
+    console.log('updateData', updateData);
     return this.clerkAuthService.updateUserProfile(user.clerkUserId, updateData);
   }
 
   @Post('verify')
   @VerifyTokenDecorators()
   async verifyToken(@Headers('authorization') authHeader: string): Promise<TokenVerificationDto> {
+    console.log('POST -> verifyToken');
     if (!authHeader) {
       throw new UnauthorizedException('No authorization header provided');
     }

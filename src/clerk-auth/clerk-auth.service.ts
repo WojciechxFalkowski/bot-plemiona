@@ -6,6 +6,8 @@ import * as bcrypt from 'bcrypt';
 import { UserEntity } from './user.entity';
 import { USER_ENTITY_REPOSITORY } from './clerk-auth.service.contracts';
 import { UpdateProfileDto, UserProfileDto, TokenVerificationDto } from './dto';
+import { SettingsService } from '@/settings/settings.service';
+import { SettingsKey } from '@/settings/settings-keys.enum';
 
 @Injectable()
 export class ClerkAuthService {
@@ -13,11 +15,16 @@ export class ClerkAuthService {
         private readonly configService: ConfigService,
         @Inject(USER_ENTITY_REPOSITORY)
         private readonly userRepository: Repository<UserEntity>,
+        private readonly settingsService: SettingsService,
     ) { }
 
     async verifyToken(token: string): Promise<TokenVerificationDto> {
         try {
-            const clerkSecretKey = this.configService.get<{ value: string }>('CLERK_SECRET_KEY');
+            const clerkSecretKey = await this.settingsService.getSetting<{ value: string }>(SettingsKey.CLERK_SECRET_KEY);
+            if (!clerkSecretKey || !clerkSecretKey.value) {
+                throw new Error('CLERK_SECRET_KEY is not set');
+            }
+
             const payload = await verifyToken(token, {
                 secretKey: clerkSecretKey?.value,
             });
@@ -28,6 +35,7 @@ export class ClerkAuthService {
                 email: payload.email as string,
             };
         } catch (error) {
+            console.log('error', error);
             return {
                 valid: false,
             };

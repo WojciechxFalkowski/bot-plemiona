@@ -3,7 +3,7 @@ import { Repository } from 'typeorm';
 import { VillageEntity } from './villages.entity';
 import { VILLAGES_ENTITY_REPOSITORY } from './villages.service.contracts';
 import { VillageData, VillagesSyncResult } from './contracts/villages.contract';
-import { VillageResponseDto, VillageToggleResponseDto } from './dto';
+import { VillageResponseDto, VillageToggleResponseDto, CreateVillageDto, UpdateVillageDto } from './dto';
 import { PlemionaCredentials } from '@/crawler/utils/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
 import { ConfigService } from '@nestjs/config';
@@ -333,5 +333,45 @@ export class VillagesService {
 				this.logger.log('Browser closed after basic village information collection.');
 			}
 		}
+	}
+
+	async createVillage(dto: CreateVillageDto): Promise<VillageResponseDto> {
+		const exists = await this.villageRepository.findOne({ where: { id: dto.id } });
+		if (exists) {
+			throw new Error(`Village with ID ${dto.id} already exists`);
+		}
+		const village = this.villageRepository.create({
+			id: dto.id,
+			name: dto.name,
+			coordinates: dto.coordinates,
+			isAutoBuildEnabled: dto.isAutoBuildEnabled ?? false,
+			isAutoScavengingEnabled: dto.isAutoScavengingEnabled ?? false
+		});
+		await this.villageRepository.save(village);
+		return this.mapToResponseDto(village);
+	}
+
+	async updateVillage(id: string, dto: UpdateVillageDto): Promise<VillageResponseDto> {
+		const village = await this.villageRepository.findOne({ where: { id } });
+		if (!village) {
+			throw new NotFoundException(`Village with ID ${id} not found`);
+		}
+		if (dto.isAutoBuildEnabled !== undefined) {
+			village.isAutoBuildEnabled = dto.isAutoBuildEnabled;
+		}
+		if (dto.isAutoScavengingEnabled !== undefined) {
+			village.isAutoScavengingEnabled = dto.isAutoScavengingEnabled;
+		}
+		await this.villageRepository.save(village);
+		return this.mapToResponseDto(village);
+	}
+
+	async deleteVillage(id: string): Promise<{ message: string }> {
+		const village = await this.villageRepository.findOne({ where: { id } });
+		if (!village) {
+			throw new NotFoundException(`Village with ID ${id} not found`);
+		}
+		await this.villageRepository.remove(village);
+		return { message: `Village with ID ${id} deleted` };
 	}
 } 
