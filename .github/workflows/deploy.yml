@@ -27,8 +27,11 @@ jobs:
       - name: Debug working directory
         run: pwd && ls -la
 
-      - name: Run tests
-        run: npm test
+      - name: Build Docker image (test stage)
+        run: docker build -t plemiona-bot-backend:test --target test .
+
+      - name: Run tests in Docker
+        run: docker run --rm plemiona-bot-backend:test
 
       - name: Docker Compose
         run: |
