@@ -106,7 +106,7 @@ The API is available at `https://bot-plemiona-api.wojciechfalkowski.pl/` with Sw
       {
         "name": "sid",
         "value": "your-session-id",
-        "domain": "pl214.plemiona.pl",
+        "domain": "pl216.plemiona.pl",
         "path": "/",
         "expires": -1
       }

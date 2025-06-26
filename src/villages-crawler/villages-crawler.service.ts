@@ -108,7 +108,7 @@ export class VillagesCrawlerService {
           id: village.id,
           name: village.name,
           coordinates: village.coordinates,
-          url: `https://pl214.plemiona.pl/game.php?village=${village.id}&screen=overview`,
+          url: `https://pl216.plemiona.pl/game.php?village=${village.id}&screen=overview`,
         }));
 
         this.logger.log(`Successfully retrieved ${villagesWithUrls.length} villages`);

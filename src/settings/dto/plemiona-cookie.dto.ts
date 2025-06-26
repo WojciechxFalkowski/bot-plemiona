@@ -21,7 +21,7 @@ export class PlemionaCookieDto {
 
     @ApiProperty({
         example: '.plemiona.pl',
-        description: 'The domain for which the cookie is valid, usually .plemiona.pl or pl214.plemiona.pl',
+        description: 'The domain for which the cookie is valid, usually .plemiona.pl or pl216.plemiona.pl',
         required: true
     })
     domain: string;

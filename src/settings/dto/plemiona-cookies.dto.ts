@@ -27,14 +27,14 @@ export class PlemionaCookiesDto {
             {
                 name: 'sid',
                 value: '0%3Abba1c87a4d77b774238cfdde1ddf8c8b426c1a4416e0f0f375d2c7edaa23202126cb0af5fbe1e0fc7143bfd36637a86e614391359155067522dcfdcd80bbaf7f',
-                domain: 'pl214.plemiona.pl',
+                domain: 'pl216.plemiona.pl',
                 path: '/',
                 expires: -1
             },
             {
                 name: 'global_village_id',
                 value: '12142',
-                domain: 'pl214.plemiona.pl',
+                domain: 'pl216.plemiona.pl',
                 path: '/',
                 expires: -1
             }

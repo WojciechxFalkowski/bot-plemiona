@@ -29,7 +29,7 @@ export function UpdateSettingDecorators() {
                         {
                             name: 'sid',
                             value: 'updated_session_id_value',
-                            domain: 'pl214.plemiona.pl',
+                            domain: 'pl216.plemiona.pl',
                             path: '/',
                             expires: -1
                         }

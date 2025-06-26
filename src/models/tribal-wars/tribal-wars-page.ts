@@ -7,7 +7,7 @@ export class TribalWarsPage {
   readonly page: Page;
   readonly baseUrl: string;
 
-  constructor(page: Page, world: string = '214') {
+  constructor(page: Page, world: string = '216') {
     this.page = page;
     this.baseUrl = `https://pl${world}.plemiona.pl`;
   }

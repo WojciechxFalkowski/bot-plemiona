@@ -31,7 +31,7 @@ const cookiesFromDB = [
   },
   {
     name: 'world',
-    value: 'pl214',
+    value: 'pl216',
     domain: '.plemiona.pl', 
     path: '/',
     expires: 1705123456
@@ -260,7 +260,7 @@ const status1 = await AuthUtils.isLoggedIn(page);
 {
   isLoggedIn: true,
   isOnCorrectWorld: true,  // true bo nie sprawdzamy konkretnego świata
-  currentUrl: 'https://pl214.plemiona.pl/game.php?village=12345&screen=overview'
+  currentUrl: 'https://pl216.plemiona.pl/game.php?village=12345&screen=overview'
 }
 
 // Sprawdzenie z konkretnym światem:
@@ -269,14 +269,14 @@ const status2 = await AuthUtils.isLoggedIn(page, 'Świat 214');
 {
   isLoggedIn: true,
   isOnCorrectWorld: true,
-  currentUrl: 'https://pl214.plemiona.pl/game.php?village=12345&screen=overview'
+  currentUrl: 'https://pl216.plemiona.pl/game.php?village=12345&screen=overview'
 }
 
 // Wynik dla niepoprawnego świata:
 {
   isLoggedIn: true,
-  isOnCorrectWorld: false,  // jesteśmy na pl215 zamiast pl214
-  currentUrl: 'https://pl215.plemiona.pl/game.php?village=67890&screen=overview'
+  isOnCorrectWorld: false,  // jesteśmy na pl216 zamiast pl216
+  currentUrl: 'https://pl216.plemiona.pl/game.php?village=67890&screen=overview'
 }
 
 // Wynik gdy nie zalogowani:
@@ -294,7 +294,7 @@ const status2 = await AuthUtils.isLoggedIn(page, 'Świat 214');
 
 **Rozpoznawanie świata z URL:**
 ```typescript
-// URL: https://pl214.plemiona.pl/game.php
+// URL: https://pl216.plemiona.pl/game.php
 // Regex: /https:\/\/pl(\d+)\.plemiona\.pl/
 // Wyciąga: "214"
 // Porównuje z: "Świat 214" → "214"
@@ -328,11 +328,11 @@ try {
 
 **Przykładowe URLe wylogowania:**
 ```typescript
-// Aktualne URL: https://pl214.plemiona.pl/game.php?village=12345&screen=overview
-// Logout URL:   https://pl214.plemiona.pl/?action=logout
+// Aktualne URL: https://pl216.plemiona.pl/game.php?village=12345&screen=overview
+// Logout URL:   https://pl216.plemiona.pl/?action=logout
 
-// Aktualne URL: https://pl214.plemiona.pl/game.php?screen=place&mode=scavenge
-// Logout URL:   https://pl214.plemiona.pl/?action=logout
+// Aktualne URL: https://pl216.plemiona.pl/game.php?screen=place&mode=scavenge
+// Logout URL:   https://pl216.plemiona.pl/?action=logout
 ```
 
 ---
@@ -452,7 +452,7 @@ private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=$
 
 4. **Test sprawdzania statusu logowania:**
    ```typescript
-   // Given: Strona game.php z pl214 w URL
+   // Given: Strona game.php z pl216 w URL
    // When: isLoggedIn(page, 'Świat 214')
    // Then: isLoggedIn = true, isOnCorrectWorld = true
    ```

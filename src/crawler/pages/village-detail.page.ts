@@ -516,7 +516,7 @@ export class VillageDetailPage {
      * @param villageId - The village ID to navigate to
      */
     async navigateToVillage(villageId: string): Promise<void> {
-        const villageUrl = `https://pl214.plemiona.pl/game.php?village=${villageId}&screen=main`;
+        const villageUrl = `https://pl216.plemiona.pl/game.php?village=${villageId}&screen=main`;
         await this.page.goto(villageUrl, { waitUntil: 'networkidle' });
         await this.page.waitForTimeout(2000); // Wait for page to fully load
     }
@@ -1472,7 +1472,7 @@ export class VillageDetailPage {
      * Navigates to barracks page
      */
     private async navigateToBarracks(villageId: string): Promise<void> {
-        const barracksUrl = `https://pl214.plemiona.pl/game.php?village=${villageId}&screen=barracks`;
+        const barracksUrl = `https://pl216.plemiona.pl/game.php?village=${villageId}&screen=barracks`;
         await this.page.goto(barracksUrl, { waitUntil: 'networkidle' });
     }
 
@@ -1480,7 +1480,7 @@ export class VillageDetailPage {
      * Navigates to stable page
      */
     private async navigateToStable(villageId: string): Promise<void> {
-        const stableUrl = `https://pl214.plemiona.pl/game.php?village=${villageId}&screen=stable`;
+        const stableUrl = `https://pl216.plemiona.pl/game.php?village=${villageId}&screen=stable`;
         await this.page.goto(stableUrl, { waitUntil: 'networkidle' });
     }
 
@@ -1488,7 +1488,7 @@ export class VillageDetailPage {
      * Navigates to workshop page
      */
     private async navigateToWorkshop(villageId: string): Promise<void> {
-        const workshopUrl = `https://pl214.plemiona.pl/game.php?village=${villageId}&screen=garage`;
+        const workshopUrl = `https://pl216.plemiona.pl/game.php?village=${villageId}&screen=garage`;
         await this.page.goto(workshopUrl, { waitUntil: 'networkidle' });
     }
 
@@ -1496,7 +1496,7 @@ export class VillageDetailPage {
      * Navigates to church page
      */
     private async navigateToChurch(villageId: string): Promise<void> {
-        const churchUrl = `https://pl214.plemiona.pl/game.php?village=${villageId}&screen=church`;
+        const churchUrl = `https://pl216.plemiona.pl/game.php?village=${villageId}&screen=church`;
         await this.page.goto(churchUrl, { waitUntil: 'networkidle' });
     }
 
@@ -1504,7 +1504,7 @@ export class VillageDetailPage {
      * Navigates to academy page
      */
     private async navigateToAcademy(villageId: string): Promise<void> {
-        const academyUrl = `https://pl214.plemiona.pl/game.php?village=${villageId}&screen=tech`;
+        const academyUrl = `https://pl216.plemiona.pl/game.php?village=${villageId}&screen=tech`;
         await this.page.goto(academyUrl, { waitUntil: 'networkidle' });
     }
 

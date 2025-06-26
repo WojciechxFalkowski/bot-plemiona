@@ -35,8 +35,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private monitoringTimer: NodeJS.Timeout | null = null;
 
     // Configuration constants
-    private readonly MIN_CONSTRUCTION_INTERVAL = 1000 * 60 * 3; // 3 minutes
-    private readonly MAX_CONSTRUCTION_INTERVAL = 1000 * 60 * 7; // 7 minutes
+    private readonly MIN_CONSTRUCTION_INTERVAL = 1000 * 60 * 5; // 5 minutes
+    private readonly MAX_CONSTRUCTION_INTERVAL = 1000 * 60 * 8; // 8 minutes
     private readonly BATCH_EXECUTION_DELAY = 10000; // 10 seconds between tasks in batch
     private readonly PROXIMITY_THRESHOLD = 2 * 60 * 1000; // 2 minutes in milliseconds
     private readonly MONITORING_INTERVAL = 3 * 60 * 1000; // 3 minutes in milliseconds
@@ -52,12 +52,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.validateCredentials();
 
         // Initialize crawler plan
-        // this.initializeCrawlerPlan();
+        this.initializeCrawlerPlan();
     }
 
     async onModuleInit() {
         this.logger.log('CrawlerOrchestratorService initialized');
-        // this.startMonitoring();
+        this.startMonitoring();
     }
 
     async onModuleDestroy() {

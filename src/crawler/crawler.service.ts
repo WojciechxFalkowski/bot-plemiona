@@ -59,35 +59,35 @@ export class CrawlerService implements OnModuleInit {
 
 	// Attack configurations
 	private readonly attackConfigs: AttackConfig[] = [
-		{
-			id: "0006",
-			link: "https://pl214.plemiona.pl/game.php?village=12729&screen=place&target=13728",
-			scheduleTime: 140 + 244 - 140, //157 08:00:00 a 06:02:29 wynosi 1 godzinę, 57 minut i 31 sekund.
-			marchTime: 363, // 4:01:52 -> 6 godzin, 2 minuty i 29 sekund 
-			type: 'attack',
-		},
+		// {
+		// 	id: "0006",
+		// 	link: "https://pl216.plemiona.pl/game.php?village=12729&screen=place&target=13728",
+		// 	scheduleTime: 140 + 244 - 140, //157 08:00:00 a 06:02:29 wynosi 1 godzinę, 57 minut i 31 sekund.
+		// 	marchTime: 363, // 4:01:52 -> 6 godzin, 2 minuty i 29 sekund 
+		// 	type: 'attack',
+		// },
 		// Przykład wsparcia (możesz dodać więcej):
 		// {
 		// 	id: "0002",
-		// 	link: "https://pl214.plemiona.pl/game.php?village=12346&screen=place&target=13728",
+		// 	link: "https://pl216.plemiona.pl/game.php?village=12346&screen=place&target=13728",
 		// 	scheduleTime: 349+ 260- 140, //349  5 godzin, 48 minut i 48 sekund.
 		// 	marchTime: 159, // Czas 2 godziny, 38 minut i 39 sekund
 		// 	type: 'support',
 		// },
-		{
-			id: "0001",
-			link: "https://pl214.plemiona.pl/game.php?village=12142&screen=place&target=13728",
-			scheduleTime: 249 + 244 - 140, //249 4 godziny, 8 minut i 44 sekundy
-			marchTime: 257, // Czas 4 godziny, 16 minut i 34 sekundy
-			type: 'support',
-		},
-		{
-			id: "0009",
-			link: "https://pl214.plemiona.pl/game.php?village=13041&screen=place&target=13728",
-			scheduleTime: 299 + 244 - 140, //299 4 godziny, 58 minut i 15 sekund
-			marchTime: 206, // Czas 3 godziny, 25 minut i 14 sekund
-			type: 'support',
-		},
+		// {
+		// 	id: "0001",
+		// 	link: "https://pl216.plemiona.pl/game.php?village=12142&screen=place&target=13728",
+		// 	scheduleTime: 249 + 244 - 140, //249 4 godziny, 8 minut i 44 sekundy
+		// 	marchTime: 257, // Czas 4 godziny, 16 minut i 34 sekundy
+		// 	type: 'support',
+		// },
+		// {
+		// 	id: "0009",
+		// 	link: "https://pl216.plemiona.pl/game.php?village=13041&screen=place&target=13728",
+		// 	scheduleTime: 299 + 244 - 140, //299 4 godziny, 58 minut i 15 sekund
+		// 	marchTime: 206, // Czas 3 godziny, 25 minut i 14 sekund
+		// 	type: 'support',
+		// },
 	];
 
 	constructor(
@@ -118,7 +118,7 @@ export class CrawlerService implements OnModuleInit {
 		this.logger.log('CrawlerService initialized (auto-start disabled - managed by orchestrator)');
 
 		// Schedule all configured attacks
-		this.scheduleAllAttacks();
+		// this.scheduleAllAttacks();
 	}
 
 	/**
@@ -292,7 +292,7 @@ export class CrawlerService implements OnModuleInit {
 
 				try {
 					// Nawigacja do zakładki Zbieractwo dla sprawdzenia statusu
-					const scavengingUrl = `https://pl214.plemiona.pl/game.php?village=${village.id}&screen=place&mode=scavenge`;
+					const scavengingUrl = `https://pl216.plemiona.pl/game.php?village=${village.id}&screen=place&mode=scavenge`;
 					await page.goto(scavengingUrl, { waitUntil: 'networkidle', timeout: 15000 });
 
 					// Zbierz dane o czasach scavenging dla tej wioski
@@ -356,7 +356,7 @@ export class CrawlerService implements OnModuleInit {
 
 				try {
 					// Nawigacja do zakładki Zbieractwo dla konkretnej wioski
-					const scavengingUrl = `https://pl214.plemiona.pl/game.php?village=${village.id}&screen=place&mode=scavenge`;
+					const scavengingUrl = `https://pl216.plemiona.pl/game.php?village=${village.id}&screen=place&mode=scavenge`;
 					this.logger.log(`Navigating to scavenging page for village ${village.name}: ${scavengingUrl}`);
 					await page.goto(scavengingUrl, { waitUntil: 'networkidle', timeout: 15000 });
 					this.logger.log(`Scavenging page loaded for village ${village.name}`);
