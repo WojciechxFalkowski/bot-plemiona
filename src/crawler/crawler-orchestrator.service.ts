@@ -9,6 +9,9 @@ import { PlemionaCredentials } from './utils/auth.interfaces';
 import { createBrowserPage } from '@/utils/browser.utils';
 import { ScavengingTimeData } from './utils/scavenging.interfaces';
 import { ScavengingUtils } from './utils/scavenging.utils';
+import { VillageUtils } from '@/crawler/utils/village.utils';
+import { ArmyUtils } from './utils/army.utils';
+import { AttackUtils, AttackResult } from './utils/attack.utils';
 
 interface CrawlerTask {
     nextExecutionTime: Date;
@@ -21,6 +24,10 @@ interface CrawlerPlan {
     constructionQueue: CrawlerTask;
     scavenging: CrawlerTask & {
         optimalDelay: number | null;
+    };
+    miniAttacks: CrawlerTask & {
+        nextTargetIndex: number;
+        lastAttackTime: Date | null;
     };
 }
 
@@ -41,6 +48,14 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private readonly PROXIMITY_THRESHOLD = 2 * 60 * 1000; // 2 minutes in milliseconds
     private readonly MONITORING_INTERVAL = 3 * 60 * 1000; // 3 minutes in milliseconds
 
+    // Mini attacks configuration
+    private readonly MIN_MINI_ATTACK_INTERVAL = 1000 * 60 * 15; // 15 minutes
+    private readonly MAX_MINI_ATTACK_INTERVAL = 1000 * 60 * 20; // 20 minutes
+
+    // Configuration constants for village information
+    private readonly WORLD_NUMBER = '216';
+    private readonly VILLAGE_ID = '2197';
+
     constructor(
         private readonly settingsService: SettingsService,
         private readonly configService: ConfigService,
@@ -53,15 +68,44 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         // Initialize crawler plan
         this.initializeCrawlerPlan();
+
+        //collectVillageInformation
     }
 
     async onModuleInit() {
         this.logger.log('CrawlerOrchestratorService initialized');
+        // this.initializeBarbarianAttacks();
+
         this.startMonitoring();
     }
 
     async onModuleDestroy() {
         this.stopOrchestrator();
+    }
+
+    private async initializeBarbarianAttacks() {
+        const { browser, context, page } = await createBrowserPage({ headless: true });
+
+        try {
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                this.credentials,
+                this.settingsService
+            );
+
+            if (!loginResult.success || !loginResult.worldSelected) {
+                throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+            }
+
+            // Get army data using ArmyUtils
+            await ArmyUtils.getArmyData(page, this.VILLAGE_ID, this.WORLD_NUMBER);
+
+        } catch (error) {
+            this.logger.error('Error during barbarian attacks initialization:', error);
+            throw error;
+        } finally {
+            await browser.close();
+        }
     }
 
     /**
@@ -82,6 +126,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private initializeCrawlerPlan(): void {
         const now = new Date();
         const constructionDelay = this.getRandomConstructionInterval();
+        const miniAttackDelay = 5000; // Start scavenging in 10 seconds
 
         this.crawlerPlan = {
             constructionQueue: {
@@ -96,6 +141,14 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 lastExecuted: null,
                 name: 'Scavenging',
                 optimalDelay: null
+            },
+            miniAttacks: {
+                nextExecutionTime: new Date(now.getTime() + miniAttackDelay),
+                enabled: false,
+                lastExecuted: null,
+                name: 'Mini Attacks',
+                nextTargetIndex: 0,
+                lastAttackTime: null
             }
         };
 
@@ -146,8 +199,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private async updateTaskStates(): Promise<void> {
         this.crawlerPlan.constructionQueue.enabled = await this.isConstructionQueueEnabled();
         this.crawlerPlan.scavenging.enabled = await this.isScavengingEnabled();
+        this.crawlerPlan.miniAttacks.enabled = await this.isMiniAttacksEnabled();
 
-        this.logger.warn(`Task states updated: Construction=${this.crawlerPlan.constructionQueue.enabled}, Scavenging=${this.crawlerPlan.scavenging.enabled}`);
+        this.logger.warn(`Task states updated: Construction=${this.crawlerPlan.constructionQueue.enabled}, Scavenging=${this.crawlerPlan.scavenging.enabled}, MiniAttacks=${this.crawlerPlan.miniAttacks.enabled}`);
 
         // Log updated plan state
         this.logCrawlerPlan();
@@ -168,8 +222,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.debug(`🔍 Pre-filter task states:`);
         this.logger.debug(`  Construction: enabled=${this.crawlerPlan.constructionQueue.enabled}, next=${this.crawlerPlan.constructionQueue.nextExecutionTime.toLocaleString()}`);
         this.logger.debug(`  Scavenging: enabled=${this.crawlerPlan.scavenging.enabled}, next=${this.crawlerPlan.scavenging.nextExecutionTime.toLocaleString()}`);
+        this.logger.debug(`  MiniAttacks: enabled=${this.crawlerPlan.miniAttacks.enabled}, next=${this.crawlerPlan.miniAttacks.nextExecutionTime.toLocaleString()}`);
 
-        const tasks = [this.crawlerPlan.constructionQueue, this.crawlerPlan.scavenging]
+        const tasks = [this.crawlerPlan.constructionQueue, this.crawlerPlan.scavenging, this.crawlerPlan.miniAttacks]
             .filter(task => task.enabled)
             .sort((a, b) => a.nextExecutionTime.getTime() - b.nextExecutionTime.getTime());
 
@@ -236,10 +291,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private async executeBatchTasks(tasks: CrawlerTask[]): Promise<void> {
         this.logger.log(`📦 Starting batch execution: ${tasks.map(t => t.name).join(', ')}`);
 
-        // Sort tasks - scavenging first as specified
+        // Sort tasks - scavenging first, then construction, then mini attacks
         const sortedTasks = [...tasks].sort((a, b) => {
             if (a.name.includes('Scavenging')) return -1;
             if (b.name.includes('Scavenging')) return 1;
+            if (a.name.includes('Construction')) return -1;
+            if (b.name.includes('Construction')) return 1;
             return 0;
         });
 
@@ -274,6 +331,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             } else if (task.name.includes('Scavenging')) {
                 await this.executeScavengingTask();
                 await this.updateNextScavengingTime();
+            } else if (task.name.includes('Mini Attacks')) {
+                await this.executeMiniAttacksTask();
+                this.updateNextMiniAttackTime();
             }
 
             task.lastExecuted = new Date();
@@ -321,6 +381,123 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Executes mini attacks on barbarian villages
+     */
+    private async executeMiniAttacksTask(): Promise<void> {
+        this.logger.log('🗡️ Starting mini attacks task...');
+
+        const { browser, context, page } = await createBrowserPage({ headless: true });
+
+        try {
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                this.credentials,
+                this.settingsService
+            );
+
+            if (!loginResult.success || !loginResult.worldSelected) {
+                throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+            }
+
+            // 1. Loading barbarian villages from JSON
+            this.logger.log('📋 Loading barbarian villages...');
+            const barbarianVillages = await AttackUtils.loadBarbarianVillages();
+            
+            if (barbarianVillages.length === 0) {
+                this.logger.warn('No barbarian villages found in JSON file');
+                return;
+            }
+
+            // 2. Get current target index from settings (persistent storage)
+            let currentTargetIndex = await this.getNextTargetIndex();
+            this.logger.log(`📍 Current target index: ${currentTargetIndex} (village: ${barbarianVillages[currentTargetIndex % barbarianVillages.length]?.name || 'unknown'})`);
+
+            // 3. Checking army availability using ArmyUtils
+            this.logger.log('⚔️ Checking army availability...');
+            const armyData = await ArmyUtils.getArmyData(page, this.VILLAGE_ID, this.WORLD_NUMBER);
+            
+            // Check if we have enough troops for any attacks
+            if (!AttackUtils.hasEnoughTroopsForAttack(armyData)) {
+                this.logger.warn('❌ Insufficient troops for mini attacks. Need at least 2 spear + 2 sword units.');
+                this.logger.log('🗡️ Mini attacks task completed - no attacks possible');
+                return;
+            }
+
+            // Calculate how many attacks we can perform
+            const attackCalculation = AttackUtils.calculateAvailableAttacks(armyData);
+            this.logger.log(`📊 Can perform ${attackCalculation.maxAttacks} attacks with available troops`);
+
+            // 4. Performing attacks
+            const attackResults: AttackResult[] = [];
+            const startingIndex = currentTargetIndex;
+            let attacksPerformed = 0;
+
+            this.logger.log(`🎯 Starting attack sequence from target index ${currentTargetIndex}...`);
+
+            for (let i = 0; i < attackCalculation.maxAttacks && i < barbarianVillages.length; i++) {
+                // 2. Selecting target based on nextTargetIndex
+                const { village: targetVillage, nextIndex } = AttackUtils.getNextTarget(barbarianVillages, currentTargetIndex);
+                
+                this.logger.log(`🎯 Attack ${i + 1}/${attackCalculation.maxAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinatesString})`);
+
+                try {
+                    // 4. Performing attack
+                    const attackResult = await AttackUtils.performMiniAttack(page, targetVillage, this.VILLAGE_ID);
+                    attackResults.push(attackResult);
+
+                    if (attackResult.success) {
+                        attacksPerformed++;
+                        this.logger.log(`✅ Attack ${i + 1} successful: ${targetVillage.name} (${targetVillage.coordinatesString})`);
+                    } else {
+                        this.logger.warn(`❌ Attack ${i + 1} failed: ${targetVillage.name} (${targetVillage.coordinatesString}) - ${attackResult.error}`);
+                    }
+
+                    // 5. Updating nextTargetIndex
+                    currentTargetIndex = nextIndex;
+                    await this.saveNextTargetIndex(currentTargetIndex);
+
+                    // Small delay between attacks to avoid overwhelming the server
+                    if (i < attackCalculation.maxAttacks - 1) {
+                        this.logger.debug('⏳ Waiting 2 seconds before next attack...');
+                        await page.waitForTimeout(2000);
+                    }
+
+                } catch (attackError) {
+                    this.logger.error(`💥 Error during attack ${i + 1} on ${targetVillage.name}:`, attackError);
+                    
+                    // Still update the target index to move to next village
+                    currentTargetIndex = nextIndex;
+                    await this.saveNextTargetIndex(currentTargetIndex);
+
+                    // Add failed result
+                    attackResults.push({
+                        success: false,
+                        targetVillage,
+                        error: attackError.message
+                    });
+
+                    // Continue with next village instead of stopping
+                    continue;
+                }
+            }
+
+            // Log summary of all attacks
+            AttackUtils.logAttackSummary(attackResults, attackCalculation.maxAttacks, startingIndex, currentTargetIndex);
+
+            // Update last attack time
+            this.crawlerPlan.miniAttacks.lastAttackTime = new Date();
+
+            this.logger.log(`🗡️ Mini attacks task completed: ${attacksPerformed}/${attackCalculation.maxAttacks} successful attacks`);
+
+        } catch (error) {
+            this.logger.error('Error during mini attacks execution:', error);
+            throw error;
+        } finally {
+            await browser.close();
+        }
+    }
+
+    /**
      * Updates next construction queue execution time
      */
     private updateNextConstructionTime(): void {
@@ -361,15 +538,25 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Updates next mini attacks execution time with dynamic interval
+     */
+    private updateNextMiniAttackTime(): void {
+        const delay = this.getRandomMiniAttackInterval();
+        this.crawlerPlan.miniAttacks.nextExecutionTime = new Date(Date.now() + delay);
+
+        const delayMinutes = Math.round(delay / 1000 / 60);
+        this.logger.log(`📅 Next mini attack: ${this.crawlerPlan.miniAttacks.nextExecutionTime.toLocaleString()} (in ${delayMinutes} minutes)`);
+    }
+
+    /**
      * Logs current crawler plan state
      */
     private logCrawlerPlan(): void {
         this.logger.log('📋 Current crawler plan:');
         this.logger.log(`  🏗️  Construction Queue: ${this.crawlerPlan.constructionQueue.enabled ? '✅' : '❌'} - Next: ${this.crawlerPlan.constructionQueue.nextExecutionTime.toLocaleString()}`);
         this.logger.log(`  🗡️  Scavenging: ${this.crawlerPlan.scavenging.enabled ? '✅' : '❌'} - Next: ${this.crawlerPlan.scavenging.nextExecutionTime.toLocaleString()}`);
+        this.logger.log(`  ⚔️  Mini Attacks: ${this.crawlerPlan.miniAttacks.enabled ? '✅' : '❌'} - Next: ${this.crawlerPlan.miniAttacks.nextExecutionTime.toLocaleString()}`);
     }
-
-
 
     /**
      * Runs the scavenging process using CrawlerService
@@ -383,6 +570,13 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      */
     private getRandomConstructionInterval(): number {
         return Math.floor(Math.random() * (this.MAX_CONSTRUCTION_INTERVAL - this.MIN_CONSTRUCTION_INTERVAL + 1)) + this.MIN_CONSTRUCTION_INTERVAL;
+    }
+
+    /**
+     * Generates random interval for mini attacks (15-20 minutes)
+     */
+    private getRandomMiniAttackInterval(): number {
+        return Math.floor(Math.random() * (this.MAX_MINI_ATTACK_INTERVAL - this.MIN_MINI_ATTACK_INTERVAL + 1)) + this.MIN_MINI_ATTACK_INTERVAL;
     }
 
     /**
@@ -420,6 +614,19 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             return setting?.value === true;
         } catch (error) {
             this.logger.error('Failed to check construction queue setting:', error);
+            return false; // Default to disabled on error
+        }
+    }
+
+    /**
+     * Checks if mini attacks are enabled
+     */
+    private async isMiniAttacksEnabled(): Promise<boolean> {
+        try {
+            const setting = await this.settingsService.getSetting<{ value: boolean }>(SettingsKey.MINI_ATTACKS_ENABLED);
+            return setting?.value === true;
+        } catch (error) {
+            this.logger.error('Failed to check mini attacks setting:', error);
             return false; // Default to disabled on error
         }
     }
@@ -469,6 +676,52 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         } catch (error) {
             this.logger.error('❌ Error during manual construction queue processing:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Public method to manually trigger mini attacks
+     */
+    public async triggerMiniAttacks(): Promise<void> {
+        this.logger.log('Manually triggering mini attacks...');
+
+        try {
+            await this.executeMiniAttacksTask();
+            this.logger.log('✅ Manual mini attacks completed successfully');
+        } catch (error) {
+            this.logger.error('❌ Error during manual mini attacks:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Gets the next target index for mini attacks from persistent storage (settings)
+     * @returns Current target index (defaults to 0 if not set)
+     */
+    private async getNextTargetIndex(): Promise<number> {
+        try {
+            const setting = await this.settingsService.getSetting<{ value: number }>(SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX);
+            const index = setting?.value ?? 0;
+            this.logger.debug(`Retrieved next target index from settings: ${index}`);
+            return index;
+        } catch (error) {
+            this.logger.error('Failed to get next target index from settings:', error);
+            this.logger.debug('Using default target index: 0');
+            return 0; // Default to first target
+        }
+    }
+
+    /**
+     * Saves the next target index for mini attacks to persistent storage (settings)
+     * @param index Index to save
+     */
+    private async saveNextTargetIndex(index: number): Promise<void> {
+        try {
+            await this.settingsService.setSetting(SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: index });
+            this.logger.debug(`Saved next target index to settings: ${index}`);
+        } catch (error) {
+            this.logger.error(`Failed to save next target index (${index}) to settings:`, error);
+            // Don't throw error here, just log it - we don't want to stop the attack process
         }
     }
 } 
