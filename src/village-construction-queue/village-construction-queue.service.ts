@@ -454,6 +454,51 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         return data;
     }
 
+    /**
+     * Scrapuje kolejkę budowy dla konkretnej wioski na podstawie nazwy
+     * @param villageName Nazwa wioski (np. "0001") 
+     * @returns Dane o kolejce budowy dla danej wioski
+     */
+    public async scrapeVillageQueue(villageName: string): Promise<{
+        villageInfo: VillageResponseDto;
+        buildingLevels: BuildingLevels;
+        buildQueue: BuildQueueItem[];
+    }> {
+        this.logger.log(`Scraping queue for village: ${villageName}`);
+
+        // Znajdź wioskę po nazwie
+        const village = await this.villagesService.findByName(villageName);
+        if (!village) {
+            throw new NotFoundException(`Village with name "${villageName}" not found`);
+        }
+
+        const { browser, context, page } = await this.createBrowserSession();
+        try {
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                this.credentials,
+                this.settingsService
+            );
+            if (!loginResult.success || !loginResult.worldSelected) {
+                await browser.close();
+                throw new BadRequestException(`Login failed: ${loginResult.error || 'Unknown error'}`);
+            }
+
+            const villageResponseDto = this.villagesService.mapToResponseDto(village);
+            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(village.id, page);
+            
+            this.logger.log(`Successfully scraped queue for village "${villageName}" (ID: ${village.id})`);
+            
+            return {
+                villageInfo: villageResponseDto,
+                buildingLevels,
+                buildQueue
+            };
+        } finally {
+            await browser.close();
+        }
+    }
+
     // ==============================
     // METODY POMOCNICZE DLA WALIDACJI CIĄGŁOŚCI
     // ==============================
@@ -656,6 +701,20 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         });
 
         this.logger.log(`Retrieved ${queueItems.length} queue items for village ${villageId}`);
+        return queueItems;
+    }
+
+    /**
+     * Pobiera całą kolejkę budowy dla wszystkich wiosek
+     * @returns Lista wszystkich budynków w kolejce dla wszystkich wiosek
+     */
+    async getAllQueues(): Promise<VillageConstructionQueueEntity[]> {
+        const queueItems = await this.queueRepository.find({
+            order: { createdAt: 'ASC' }, // FIFO - First In, First Out
+            relations: ['village']
+        });
+
+        this.logger.log(`Retrieved ${queueItems.length} total queue items for all villages`);
         return queueItems;
     }
 

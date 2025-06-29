@@ -76,7 +76,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log('CrawlerOrchestratorService initialized');
         // this.initializeBarbarianAttacks();
 
-        this.startMonitoring();
+        // this.startMonitoring();
     }
 
     async onModuleDestroy() {

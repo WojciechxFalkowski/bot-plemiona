@@ -112,7 +112,7 @@ export class BuildingCrawlerController {
                         "buildingId": "barracks",
                         "level": 5,
                         "priority": 2,
-                        "village": "12345"
+                        "village": "0001"
                     }
                 ]
             }
