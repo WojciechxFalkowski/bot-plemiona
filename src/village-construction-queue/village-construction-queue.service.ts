@@ -7,14 +7,14 @@ import { VillageDetailPage, getBuildingConfig, areBuildingRequirementsMet, TRIBA
 import { Page } from 'playwright';
 import { VILLAGE_CONSTRUCTION_QUEUE_ENTITY_REPOSITORY } from './village-construction-queue.service.contracts';
 import { VILLAGES_ENTITY_REPOSITORY } from '../villages/villages.service.contracts';
-import { PlemionaCredentials } from '@/crawler/utils/auth.interfaces';
-import { AuthUtils } from '@/crawler/utils/auth.utils';
 import { ConfigService } from '@nestjs/config';
 import { createBrowserPage } from '@/utils/browser.utils';
 import { SettingsService } from '@/settings/settings.service';
 import { BuildingLevels, BuildQueueItem } from '@/crawler/pages/village-overview.page';
 import { VillageResponseDto } from '@/villages/dto';
 import { VillagesService } from '@/villages/villages.service';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
+import { AuthUtils } from '@/utils/auth/auth.utils';
 
 @Injectable()
 export class VillageConstructionQueueService implements OnModuleInit, OnModuleDestroy {
@@ -486,9 +486,9 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
             const villageResponseDto = this.villagesService.mapToResponseDto(village);
             const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(village.id, page);
-            
+
             this.logger.log(`Successfully scraped queue for village "${villageName}" (ID: ${village.id})`);
-            
+
             return {
                 villageInfo: villageResponseDto,
                 buildingLevels,

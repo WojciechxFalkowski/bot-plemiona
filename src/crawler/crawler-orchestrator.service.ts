@@ -4,14 +4,13 @@ import { SettingsService } from '@/settings/settings.service';
 import { SettingsKey } from '@/settings/settings-keys.enum';
 import { CrawlerService } from './crawler.service';
 import { VillageConstructionQueueService } from '@/village-construction-queue/village-construction-queue.service';
-import { AuthUtils } from './utils/auth.utils';
-import { PlemionaCredentials } from './utils/auth.interfaces';
+import { AuthUtils } from '@/utils/auth/auth.utils';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { createBrowserPage } from '@/utils/browser.utils';
-import { ScavengingTimeData } from './utils/scavenging.interfaces';
-import { ScavengingUtils } from './utils/scavenging.utils';
-import { VillageUtils } from '@/crawler/utils/village.utils';
-import { ArmyUtils } from './utils/army.utils';
-import { AttackUtils, AttackResult } from './utils/attack.utils';
+import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
+import { VillageUtils } from '@/utils/village/village.utils';
+
+import { BarbarianVillagesService } from '@/barbarian-villages/barbarian-villages.service';
 
 interface CrawlerTask {
     nextExecutionTime: Date;
@@ -49,8 +48,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private readonly MONITORING_INTERVAL = 3 * 60 * 1000; // 3 minutes in milliseconds
 
     // Mini attacks configuration
-    private readonly MIN_MINI_ATTACK_INTERVAL = 1000 * 60 * 15; // 15 minutes
-    private readonly MAX_MINI_ATTACK_INTERVAL = 1000 * 60 * 20; // 20 minutes
+    private readonly MIN_MINI_ATTACK_INTERVAL = 1000 * 60 * 10; // 10 minutes
+    private readonly MAX_MINI_ATTACK_INTERVAL = 1000 * 60 * 15; // 15 minutes
 
     // Configuration constants for village information
     private readonly WORLD_NUMBER = '216';
@@ -60,7 +59,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly settingsService: SettingsService,
         private readonly configService: ConfigService,
         private readonly crawlerService: CrawlerService,
-        private readonly constructionQueueService: VillageConstructionQueueService
+        private readonly constructionQueueService: VillageConstructionQueueService,
+        private readonly barbarianVillagesService: BarbarianVillagesService
     ) {
         // Initialize credentials from environment variables
         this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -76,37 +76,14 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log('CrawlerOrchestratorService initialized');
         // this.initializeBarbarianAttacks();
 
-        // this.startMonitoring();
+        this.startMonitoring();
     }
 
     async onModuleDestroy() {
         this.stopOrchestrator();
     }
 
-    private async initializeBarbarianAttacks() {
-        const { browser, context, page } = await createBrowserPage({ headless: true });
 
-        try {
-            const loginResult = await AuthUtils.loginAndSelectWorld(
-                page,
-                this.credentials,
-                this.settingsService
-            );
-
-            if (!loginResult.success || !loginResult.worldSelected) {
-                throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
-            }
-
-            // Get army data using ArmyUtils
-            await ArmyUtils.getArmyData(page, this.VILLAGE_ID, this.WORLD_NUMBER);
-
-        } catch (error) {
-            this.logger.error('Error during barbarian attacks initialization:', error);
-            throw error;
-        } finally {
-            await browser.close();
-        }
-    }
 
     /**
  * Validates the credentials
@@ -384,117 +361,11 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Executes mini attacks on barbarian villages
      */
     private async executeMiniAttacksTask(): Promise<void> {
-        this.logger.log('🗡️ Starting mini attacks task...');
+        // Execute mini attacks using BarbarianVillagesService
+        await this.barbarianVillagesService.executeMiniAttacks();
 
-        const { browser, context, page } = await createBrowserPage({ headless: true });
-
-        try {
-            const loginResult = await AuthUtils.loginAndSelectWorld(
-                page,
-                this.credentials,
-                this.settingsService
-            );
-
-            if (!loginResult.success || !loginResult.worldSelected) {
-                throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
-            }
-
-            // 1. Loading barbarian villages from JSON
-            this.logger.log('📋 Loading barbarian villages...');
-            const barbarianVillages = await AttackUtils.loadBarbarianVillages();
-            
-            if (barbarianVillages.length === 0) {
-                this.logger.warn('No barbarian villages found in JSON file');
-                return;
-            }
-
-            // 2. Get current target index from settings (persistent storage)
-            let currentTargetIndex = await this.getNextTargetIndex();
-            this.logger.log(`📍 Current target index: ${currentTargetIndex} (village: ${barbarianVillages[currentTargetIndex % barbarianVillages.length]?.name || 'unknown'})`);
-
-            // 3. Checking army availability using ArmyUtils
-            this.logger.log('⚔️ Checking army availability...');
-            const armyData = await ArmyUtils.getArmyData(page, this.VILLAGE_ID, this.WORLD_NUMBER);
-            
-            // Check if we have enough troops for any attacks
-            if (!AttackUtils.hasEnoughTroopsForAttack(armyData)) {
-                this.logger.warn('❌ Insufficient troops for mini attacks. Need at least 2 spear + 2 sword units.');
-                this.logger.log('🗡️ Mini attacks task completed - no attacks possible');
-                return;
-            }
-
-            // Calculate how many attacks we can perform
-            const attackCalculation = AttackUtils.calculateAvailableAttacks(armyData);
-            this.logger.log(`📊 Can perform ${attackCalculation.maxAttacks} attacks with available troops`);
-
-            // 4. Performing attacks
-            const attackResults: AttackResult[] = [];
-            const startingIndex = currentTargetIndex;
-            let attacksPerformed = 0;
-
-            this.logger.log(`🎯 Starting attack sequence from target index ${currentTargetIndex}...`);
-
-            for (let i = 0; i < attackCalculation.maxAttacks && i < barbarianVillages.length; i++) {
-                // 2. Selecting target based on nextTargetIndex
-                const { village: targetVillage, nextIndex } = AttackUtils.getNextTarget(barbarianVillages, currentTargetIndex);
-                
-                this.logger.log(`🎯 Attack ${i + 1}/${attackCalculation.maxAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinatesString})`);
-
-                try {
-                    // 4. Performing attack
-                    const attackResult = await AttackUtils.performMiniAttack(page, targetVillage, this.VILLAGE_ID);
-                    attackResults.push(attackResult);
-
-                    if (attackResult.success) {
-                        attacksPerformed++;
-                        this.logger.log(`✅ Attack ${i + 1} successful: ${targetVillage.name} (${targetVillage.coordinatesString})`);
-                    } else {
-                        this.logger.warn(`❌ Attack ${i + 1} failed: ${targetVillage.name} (${targetVillage.coordinatesString}) - ${attackResult.error}`);
-                    }
-
-                    // 5. Updating nextTargetIndex
-                    currentTargetIndex = nextIndex;
-                    await this.saveNextTargetIndex(currentTargetIndex);
-
-                    // Small delay between attacks to avoid overwhelming the server
-                    if (i < attackCalculation.maxAttacks - 1) {
-                        this.logger.debug('⏳ Waiting 2 seconds before next attack...');
-                        await page.waitForTimeout(2000);
-                    }
-
-                } catch (attackError) {
-                    this.logger.error(`💥 Error during attack ${i + 1} on ${targetVillage.name}:`, attackError);
-                    
-                    // Still update the target index to move to next village
-                    currentTargetIndex = nextIndex;
-                    await this.saveNextTargetIndex(currentTargetIndex);
-
-                    // Add failed result
-                    attackResults.push({
-                        success: false,
-                        targetVillage,
-                        error: attackError.message
-                    });
-
-                    // Continue with next village instead of stopping
-                    continue;
-                }
-            }
-
-            // Log summary of all attacks
-            AttackUtils.logAttackSummary(attackResults, attackCalculation.maxAttacks, startingIndex, currentTargetIndex);
-
-            // Update last attack time
-            this.crawlerPlan.miniAttacks.lastAttackTime = new Date();
-
-            this.logger.log(`🗡️ Mini attacks task completed: ${attacksPerformed}/${attackCalculation.maxAttacks} successful attacks`);
-
-        } catch (error) {
-            this.logger.error('Error during mini attacks execution:', error);
-            throw error;
-        } finally {
-            await browser.close();
-        }
+        // Update last attack time
+        this.crawlerPlan.miniAttacks.lastAttackTime = new Date();
     }
 
     /**
@@ -685,43 +556,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     public async triggerMiniAttacks(): Promise<void> {
         this.logger.log('Manually triggering mini attacks...');
 
-        try {
-            await this.executeMiniAttacksTask();
-            this.logger.log('✅ Manual mini attacks completed successfully');
-        } catch (error) {
-            this.logger.error('❌ Error during manual mini attacks:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Gets the next target index for mini attacks from persistent storage (settings)
-     * @returns Current target index (defaults to 0 if not set)
-     */
-    private async getNextTargetIndex(): Promise<number> {
-        try {
-            const setting = await this.settingsService.getSetting<{ value: number }>(SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX);
-            const index = setting?.value ?? 0;
-            this.logger.debug(`Retrieved next target index from settings: ${index}`);
-            return index;
-        } catch (error) {
-            this.logger.error('Failed to get next target index from settings:', error);
-            this.logger.debug('Using default target index: 0');
-            return 0; // Default to first target
-        }
-    }
-
-    /**
-     * Saves the next target index for mini attacks to persistent storage (settings)
-     * @param index Index to save
-     */
-    private async saveNextTargetIndex(index: number): Promise<void> {
-        try {
-            await this.settingsService.setSetting(SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: index });
-            this.logger.debug(`Saved next target index to settings: ${index}`);
-        } catch (error) {
-            this.logger.error(`Failed to save next target index (${index}) to settings:`, error);
-            // Don't throw error here, just log it - we don't want to stop the attack process
-        }
+        await this.barbarianVillagesService.executeMiniAttacks();
+        this.logger.log('✅ Manual mini attacks completed successfully');
     }
 } 

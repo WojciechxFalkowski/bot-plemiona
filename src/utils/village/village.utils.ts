@@ -1,7 +1,5 @@
 import { Page } from 'playwright';
 import { Logger } from '@nestjs/common';
-import { VillageOverviewPage, VillageData } from '../pages/village-overview.page';
-import { VillageDetailPage } from '../pages/village-detail.page';
 import {
     VillageCollectionOptions,
     VillageCollectionResult,
@@ -15,6 +13,8 @@ import {
     VillageExportOptions,
     VillageCacheOptions
 } from './village.interfaces';
+import { VillageData, VillageOverviewPage } from '@/crawler/pages/village-overview.page';
+import { VillageDetailPage } from '@/crawler/pages/village-detail.page';
 
 export class VillageUtils {
     private static logger = new Logger(VillageUtils.name);

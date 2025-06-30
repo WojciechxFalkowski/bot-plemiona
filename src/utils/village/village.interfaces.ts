@@ -1,5 +1,5 @@
+import { VillageData } from '@/crawler/pages/village-overview.page';
 import { Page } from 'playwright';
-import { VillageData } from '../pages/village-overview.page';
 
 // Interfejs dla opcji zbierania danych wiosek
 export interface VillageCollectionOptions {

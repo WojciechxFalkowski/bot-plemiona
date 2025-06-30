@@ -6,8 +6,8 @@ import { ConfigService } from '@nestjs/config';
 import { SettingsService } from '../settings/settings.service';
 import { SettingsKey } from '../settings/settings-keys.enum';
 import { createBrowserPage } from '../utils/browser.utils';
-import { PlemionaCredentials } from './utils/auth.interfaces';
-import { AuthUtils } from './utils/auth.utils';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
+import { AuthUtils } from '@/utils/auth/auth.utils';
 
 // Interface for Plemiona cookie
 interface PlemionaCookie {

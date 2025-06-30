@@ -8,9 +8,10 @@ import { CrawlerOrchestratorController } from './crawler-orchestrator.controller
 import { SettingsModule } from '../settings/settings.module';
 import { VillagesModule } from '../villages/villages.module';
 import { VillageConstructionQueueModule } from '../village-construction-queue/village-construction-queue.module';
+import { BarbarianVillagesModule } from '../barbarian-villages/barbarian-villages.module';
 
 @Module({
-  imports: [SettingsModule, VillagesModule, VillageConstructionQueueModule],
+  imports: [SettingsModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule],
   controllers: [CrawlerController, BuildingCrawlerController, CrawlerOrchestratorController],
   providers: [CrawlerService, BuildingCrawlerService, CrawlerOrchestratorService],
   exports: [CrawlerService, BuildingCrawlerService, CrawlerOrchestratorService],

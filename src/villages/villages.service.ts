@@ -4,12 +4,12 @@ import { VillageEntity } from './villages.entity';
 import { VILLAGES_ENTITY_REPOSITORY } from './villages.service.contracts';
 import { VillageData, VillagesSyncResult } from './contracts/villages.contract';
 import { VillageResponseDto, VillageToggleResponseDto, CreateVillageDto, UpdateVillageDto } from './dto';
-import { PlemionaCredentials } from '@/crawler/utils/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
 import { ConfigService } from '@nestjs/config';
-import { AuthUtils } from '@/crawler/utils/auth.utils';
 import { createBrowserPage } from '@/utils/browser.utils';
-import { VillageUtils } from '@/crawler/utils/village.utils';
+import { AuthUtils } from '@/utils/auth/auth.utils';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
+import { VillageUtils } from '@/utils/village/village.utils';
 
 @Injectable()
 export class VillagesService {

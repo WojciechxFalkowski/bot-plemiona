@@ -1,0 +1,50 @@
+[
+  {
+    "target": "1101",
+    "name": "Wioska barbarzyńska",
+    "coordinateX": 542,
+    "coordinateY": 489
+  },
+  {
+    "target": "938",
+    "name": "Wioska barbarzyńska",
+    "coordinateX": 541,
+    "coordinateY": 487
+  },
+  {
+    "target": "5416",
+    "name": "Osada koczowników",
+    "coordinateX": 543,
+    "coordinateY": 488
+  },
+  {
+    "target": "4555",
+    "name": "Osada koczowników",
+    "coordinateX": 542,
+    "coordinateY": 486
+  },
+  {
+    "target": "1992",
+    "name": "Wioska barbarzyńska",
+    "coordinateX": 541,
+    "coordinateY": 485
+  },
+  {
+    "target": "2928",
+    "name": "Wioska barbarzyńska",
+    "coordinateX": 542,
+    "coordinateY": 493
+  },
+  {
+    "target": "949",
+    "name": "Wioska barbarzyńska",
+    "coordinateX": 537,
+    "coordinateY": 493
+  },
+  {
+    "target": "970",
+    "name": "Osada koczowników",
+    "coordinateX": 536,
+    "coordinateY": 491
+  }
+]

@@ -16,22 +16,13 @@ import { setTimeout } from 'timers/promises'; // Użycie promisowej wersji setTi
 import { SettingsService } from '../settings/settings.service';
 import { SettingsKey } from '../settings/settings-keys.enum';
 import { ConfigService } from '@nestjs/config';
-import { VillageOverviewPage, VillageData } from './pages/village-overview.page';
-import { VillageDetailPage } from './pages/village-detail.page';
 import { VillagesService } from '../villages/villages.service';
 import { VillageResponseDto } from '../villages/dto';
-import { ScavengingUtils } from './utils/scavenging.utils';
-import {
-	ScavengeLevelStatus,
-	ScavengingLevelTimeData,
-	VillageScavengingData,
-	ScavengingTimeData,
-	LevelDispatchPlan
-} from './utils/scavenging.interfaces';
-import { AuthUtils } from './utils/auth.utils';
-import { PlemionaCredentials } from './utils/auth.interfaces';
-import { VillageUtils } from './utils/village.utils';
-import { VillageCollectionOptions } from './utils/village.interfaces';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
+import { AuthUtils } from '@/utils/auth/auth.utils';
+import { ScavengingTimeData } from '@/utils/scavenging/scavenging.interfaces';
+import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
+import { VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
 
 /**
  * Configuration for a scheduled attack or support

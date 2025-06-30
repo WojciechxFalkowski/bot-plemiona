@@ -1,10 +1,8 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { CreateBuildingCrawlerDto } from './dto/create-building-crawler.dto';
-import { UpdateBuildingCrawlerDto } from './dto/update-building-crawler.dto';
 import { Page, Browser } from 'playwright';
 import { BuildingQueueItem, BuildingQueueManager } from '@/models/tribal-wars/building-queue-manager';
-import { PlemionaCredentials } from '@/crawler/utils/auth.interfaces';
 import { VillagesCrawlerService } from '@/villages-crawler/villages-crawler.service';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 
 @Injectable()
 export class BuildingCrawlerService {

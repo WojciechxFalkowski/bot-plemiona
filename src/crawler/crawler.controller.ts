@@ -1,6 +1,6 @@
 import { Controller, Post, Logger, Body, BadRequestException, InternalServerErrorException, NotFoundException, HttpException, Get, Param } from '@nestjs/common';
 import { CrawlerService } from './crawler.service';
-import { ScavengingTimeData, VillageScavengingData } from './utils/scavenging.interfaces';
+import { ScavengingTimeData, VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
 import { ApiOperation, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
 
 // DTO for adding building to queue

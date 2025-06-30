@@ -2,12 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CreateVillagesCrawlerDto } from './dto/create-villages-crawler.dto';
 import { UpdateVillagesCrawlerDto } from './dto/update-villages-crawler.dto';
 import { createBrowserPage } from '../utils/browser.utils';
-import { PlemionaCredentials } from '@/crawler/utils/auth.interfaces';
-import { AuthUtils } from '@/crawler/utils/auth.utils';
 import { SettingsService } from '@/settings/settings.service';
 import { ConfigService } from '@nestjs/config';
-import { VillageUtils } from '@/crawler/utils/village.utils';
 import { VillageData } from '@/crawler/pages/village-overview.page';
+import { VillageUtils } from '@/utils/village/village.utils';
+import { AuthUtils } from '@/utils/auth/auth.utils';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 
 @Injectable()
 export class VillagesCrawlerService {
