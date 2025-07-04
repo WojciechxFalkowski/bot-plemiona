@@ -168,9 +168,14 @@ export class BarbarianVillagesService {
                 return [];
             }
 
-            // Calculate how many attacks we can perform
+            // Calculate how many attacks we can perform based on available troops
             const attackCalculation = AttackUtils.calculateAvailableAttacks(armyData);
-            this.logger.log(`📊 Can perform ${attackCalculation.maxAttacks} attacks with available troops`);
+            
+            // Ograniczenie: nie wysyłamy wszystkich dostępnych wojsk, tylko maksymalnie tyle ataków ile jest wiosek barbarzyńskich
+            // Dodatkowo wybieramy minimum z dostępnych ataków i liczby wiosek, żeby nie wysyłać wszystkich wojsk naraz
+            const maxPossibleAttacks = Math.min(attackCalculation.maxAttacks, barbarianVillages.length);
+            
+            this.logger.log(`📊 Troops available for ${attackCalculation.maxAttacks} attacks, but limiting to ${maxPossibleAttacks} attacks (max = min(${attackCalculation.maxAttacks}, ${barbarianVillages.length}))`);
 
             // 6. Performing attacks
             const attackResults: AttackResult[] = [];
@@ -179,11 +184,11 @@ export class BarbarianVillagesService {
 
             this.logger.log(`🎯 Starting attack sequence from target index ${currentTargetIndex}...`);
 
-            for (let i = 0; i < attackCalculation.maxAttacks && i < barbarianVillages.length; i++) {
+            for (let i = 0; i < maxPossibleAttacks; i++) {
                 // 6.1. Selecting target based on nextTargetIndex
                 const { village: targetVillage, nextIndex } = AttackUtils.getNextTarget(barbarianVillages, currentTargetIndex);
 
-                this.logger.log(`🎯 Attack ${i + 1}/${attackCalculation.maxAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+                this.logger.log(`🎯 Attack ${i + 1}/${maxPossibleAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 
                 try {
                     // 6.2. Performing attack
@@ -202,7 +207,7 @@ export class BarbarianVillagesService {
                     await this.saveNextTargetIndex(currentTargetIndex);
 
                     // Small delay between attacks to avoid overwhelming the server
-                    if (i < attackCalculation.maxAttacks - 1) {
+                    if (i < maxPossibleAttacks - 1) {
                         this.logger.debug('⏳ Waiting 2 seconds before next attack...');
                         await page.waitForTimeout(2000);
                     }
@@ -227,9 +232,9 @@ export class BarbarianVillagesService {
             }
 
             // Log summary of all attacks
-            AttackUtils.logAttackSummary(attackResults, attackCalculation.maxAttacks, startingIndex, currentTargetIndex);
+            AttackUtils.logAttackSummary(attackResults, maxPossibleAttacks, startingIndex, currentTargetIndex);
 
-            this.logger.log(`🗡️ Mini attacks task completed: ${attacksPerformed}/${attackCalculation.maxAttacks} successful attacks`);
+            this.logger.log(`🗡️ Mini attacks task completed: ${attacksPerformed}/${maxPossibleAttacks} successful attacks`);
 
             return attackResults;
 
