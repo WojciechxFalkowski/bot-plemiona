@@ -23,6 +23,13 @@ export interface AttackCalculationResult {
     swordPerAttack: number;
 }
 
+// Interfejs dla wyniku weryfikacji właściciela wioski
+export interface VillageOwnerVerification {
+    isValid: boolean;
+    owner: string;
+    error?: string;
+}
+
 // Interfejs dla wyniku ataku
 export interface AttackResult {
     success: boolean;
@@ -122,6 +129,78 @@ export class AttackUtils {
     }
 
     /**
+     * Weryfikuje czy wioska nadal należy do "Barbarzyńskie"
+     * @param page Instancja strony Playwright
+     * @param targetVillage Wioska do weryfikacji
+     * @returns Wynik weryfikacji właściciela
+     */
+    public static async verifyVillageOwner(page: Page, targetVillage: BarbarianVillage): Promise<VillageOwnerVerification> {
+        this.logger.debug(`Verifying owner of village: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+        try {
+            const villageInfoElement = page.locator('.village-info');
+            
+            if (await villageInfoElement.isVisible({ timeout: 5000 })) {
+                const villageInfoText = await villageInfoElement.textContent();
+                this.logger.debug(`Village info text: "${villageInfoText}"`);
+                
+                if (villageInfoText) {
+                    // Wyciągnij właściciela z tekstu (format: "Właściciel: Barbarzyńskie Punkty: 78")
+                    const ownerMatch = villageInfoText.match(/Właściciel:\s*([^\s]+)/);
+                    const owner = ownerMatch ? ownerMatch[1].trim() : '';
+                    
+                    this.logger.debug(`Extracted owner: "${owner}"`);
+                    
+                    if (owner !== 'Barbarzyńskie') {
+                        this.logger.warn(`⚠️ Village is no longer barbarian! Current owner: "${owner}" (expected: "Barbarzyńskie")`);
+                        
+                        return {
+                            isValid: false,
+                            owner,
+                            error: `Village is no longer barbarian! Current owner: "${owner}" (expected: "Barbarzyńskie")`
+                        };
+                    }
+                    
+                    this.logger.debug(`✅ Village owner verified: "${owner}"`);
+                    
+                    return {
+                        isValid: true,
+                        owner
+                    };
+                } else {
+                    const errorMessage = 'Could not extract village info text';
+                    this.logger.warn(`⚠️ ${errorMessage}`);
+                    
+                    return {
+                        isValid: false,
+                        owner: '',
+                        error: errorMessage
+                    };
+                }
+            } else {
+                const errorMessage = 'Village info element not found - might be different page layout';
+                this.logger.warn(`⚠️ ${errorMessage}`);
+                
+                // W tym przypadku zakładamy że może być inna struktura strony, więc nie blokujemy
+                return {
+                    isValid: true, // Pozwalamy kontynuować w przypadku problemów z layoutem
+                    owner: 'unknown',
+                    error: errorMessage
+                };
+            }
+        } catch (error) {
+            const errorMessage = `Error during village owner verification: ${error.message}`;
+            this.logger.error(errorMessage);
+            
+            return {
+                isValid: false,
+                owner: '',
+                error: errorMessage
+            };
+        }
+    }
+
+    /**
      * Wykonuje pojedynczy mini atak na wybraną wioskę barbarzyńską
      * @param page Instancja strony Playwright
      * @param targetVillage Wioska docelowa
@@ -152,6 +231,20 @@ export class AttackUtils {
             }
 
             this.logger.debug('Attack page loaded successfully');
+
+            // Weryfikacja właściciela wioski - sprawdź czy nadal należy do "Barbarzyńskie"
+            const ownerVerification = await this.verifyVillageOwner(page, targetVillage);
+            
+            if (!ownerVerification.isValid) {
+                return {
+                    success: false,
+                    targetVillage,
+                    error: ownerVerification.error || 'Village owner verification failed',
+                    attackUrl
+                };
+            }
+
+            this.logger.debug('✅ Village owner verification passed - proceeding with attack');
 
             // Wypełnij pole spear (2 jednostki)
             this.logger.debug(`Filling spear field with ${this.SPEAR_PER_ATTACK} units...`);
