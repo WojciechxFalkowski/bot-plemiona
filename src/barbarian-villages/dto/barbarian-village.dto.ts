@@ -38,6 +38,13 @@ export class BarbarianVillageDto {
     coordinateY: number;
 
     @ApiProperty({
+        example: true,
+        description: 'Flag indicating if the village can be attacked',
+        required: true
+    })
+    canAttack: boolean;
+
+    @ApiProperty({
         example: '2024-01-01T12:00:00Z',
         description: 'Date when the village was created'
     })

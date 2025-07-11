@@ -10,6 +10,7 @@ export interface BarbarianVillage {
     name: string;
     coordinateX: number;
     coordinateY: number;
+    canAttack: boolean;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -36,6 +37,14 @@ export interface AttackResult {
     targetVillage: BarbarianVillage;
     error?: string;
     attackUrl?: string;
+}
+
+// Interfejs dla wyniku sprawdzenia ostatniego ataku
+export interface LastAttackCheckResult {
+    canAttack: boolean;
+    reason: string;
+    lastAttackWasWin?: boolean;
+    hasReportTable?: boolean;
 }
 
 export class AttackUtils {
@@ -139,30 +148,30 @@ export class AttackUtils {
 
         try {
             const villageInfoElement = page.locator('.village-info');
-            
+
             if (await villageInfoElement.isVisible({ timeout: 5000 })) {
                 const villageInfoText = await villageInfoElement.textContent();
                 this.logger.debug(`Village info text: "${villageInfoText}"`);
-                
+
                 if (villageInfoText) {
                     // Wyciągnij właściciela z tekstu (format: "Właściciel: Barbarzyńskie Punkty: 78")
                     const ownerMatch = villageInfoText.match(/Właściciel:\s*([^\s]+)/);
                     const owner = ownerMatch ? ownerMatch[1].trim() : '';
-                    
+
                     this.logger.debug(`Extracted owner: "${owner}"`);
-                    
+
                     if (owner !== 'Barbarzyńskie') {
                         this.logger.warn(`⚠️ Village is no longer barbarian! Current owner: "${owner}" (expected: "Barbarzyńskie")`);
-                        
+
                         return {
                             isValid: false,
                             owner,
                             error: `Village is no longer barbarian! Current owner: "${owner}" (expected: "Barbarzyńskie")`
                         };
                     }
-                    
+
                     this.logger.debug(`✅ Village owner verified: "${owner}"`);
-                    
+
                     return {
                         isValid: true,
                         owner
@@ -170,7 +179,7 @@ export class AttackUtils {
                 } else {
                     const errorMessage = 'Could not extract village info text';
                     this.logger.warn(`⚠️ ${errorMessage}`);
-                    
+
                     return {
                         isValid: false,
                         owner: '',
@@ -180,7 +189,7 @@ export class AttackUtils {
             } else {
                 const errorMessage = 'Village info element not found - might be different page layout';
                 this.logger.warn(`⚠️ ${errorMessage}`);
-                
+
                 // W tym przypadku zakładamy że może być inna struktura strony, więc nie blokujemy
                 return {
                     isValid: true, // Pozwalamy kontynuować w przypadku problemów z layoutem
@@ -191,11 +200,95 @@ export class AttackUtils {
         } catch (error) {
             const errorMessage = `Error during village owner verification: ${error.message}`;
             this.logger.error(errorMessage);
-            
+
             return {
                 isValid: false,
                 owner: '',
                 error: errorMessage
+            };
+        }
+    }
+
+    /**
+     * Sprawdza czy można atakować wioskę na podstawie ostatniego ataku
+     * @param page Instancja strony Playwright
+     * @param targetVillage Wioska do sprawdzenia
+     * @param sourceVillageId ID wioski źródłowej
+     * @returns Wynik sprawdzenia czy można atakować
+     */
+    public static async checkLastAttackResult(
+        page: Page,
+        targetVillage: BarbarianVillage,
+        sourceVillageId: string = this.SOURCE_VILLAGE_ID
+    ): Promise<LastAttackCheckResult> {
+        this.logger.log(`🔍 Checking last attack result for ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+        try {
+            // Skonstruuj URL informacji o wiosce
+            const infoUrl = `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=info_village&id=${targetVillage.target}`;
+            this.logger.debug(`Info URL: ${infoUrl}`);
+
+            // Nawiguj do strony informacji o wiosce
+            this.logger.debug('Navigating to village info page...');
+            await page.goto(infoUrl, { waitUntil: 'networkidle', timeout: 15000 });
+            await page.waitForTimeout(2000);
+
+            // Sprawdź czy istnieje forma z raportami (form z id 'report_table')
+            const reportTableExists = await page.locator('#report_table').isVisible({ timeout: 5000 });
+
+            if (!reportTableExists) {
+                this.logger.log(`✅ No report table found - village can be attacked: ${targetVillage.name}`);
+                return {
+                    canAttack: true,
+                    reason: 'No report table found',
+                    hasReportTable: false
+                };
+            }
+
+            this.logger.debug('Report table found, checking last attack result...');
+
+            // Znajdź pierwszy wiersz z danymi (najnowszy atak)
+            const firstDataRow = page.locator('#report_table table.vis tbody tr').nth(1); // nth(0) to header, nth(1) to pierwszy wiersz danych
+
+            if (await firstDataRow.isVisible({ timeout: 5000 })) {
+                // Sprawdź czy w pierwszym wierszu jest element z data-title="Pełna wygrana"
+                const winIcon = firstDataRow.locator('img[data-title="Pełna wygrana"]');
+                const hasWinIcon = await winIcon.isVisible({ timeout: 2000 });
+
+                if (hasWinIcon) {
+                    this.logger.log(`✅ Last attack was successful - village can be attacked: ${targetVillage.name}`);
+                    return {
+                        canAttack: true,
+                        reason: 'Last attack was successful',
+                        hasReportTable: true,
+                        lastAttackWasWin: true
+                    };
+                } else {
+                    this.logger.log(`❌ Last attack was not successful - village should not be attacked: ${targetVillage.name}`);
+                    return {
+                        canAttack: false,
+                        reason: 'Last attack was not successful',
+                        hasReportTable: true,
+                        lastAttackWasWin: false
+                    };
+                }
+            } else {
+                this.logger.log(`✅ No data rows found in report table - village can be attacked: ${targetVillage.name}`);
+                return {
+                    canAttack: true,
+                    reason: 'No data rows found in report table',
+                    hasReportTable: true
+                };
+            }
+
+        } catch (error) {
+            this.logger.error(`Error checking last attack result for ${targetVillage.name}:`, error);
+
+            // W przypadku błędu, pozwalamy atakować (zachowawcze podejście)
+            return {
+                canAttack: true,
+                reason: `Error during check: ${error.message}`,
+                hasReportTable: undefined
             };
         }
     }
@@ -234,7 +327,7 @@ export class AttackUtils {
 
             // Weryfikacja właściciela wioski - sprawdź czy nadal należy do "Barbarzyńskie"
             const ownerVerification = await this.verifyVillageOwner(page, targetVillage);
-            
+
             if (!ownerVerification.isValid) {
                 return {
                     success: false,

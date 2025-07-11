@@ -6,7 +6,7 @@ import { BarbarianVillageEntity } from './entities/barbarian-village.entity';
 import { BARBARIAN_VILLAGES_ENTITY_REPOSITORY } from './barbarian-villages.service.contracts';
 import { CreateBarbarianVillageDto, UpdateBarbarianVillageDto } from './dto';
 import { ArmyData, ArmyUtils } from '@/utils/army/army.utils';
-import { AttackUtils, AttackResult, AttackCalculationResult, BarbarianVillage } from '@/utils/army/attack.utils';
+import { AttackUtils, AttackResult, AttackCalculationResult, BarbarianVillage, LastAttackCheckResult } from '@/utils/army/attack.utils';
 import { AuthUtils } from '@/utils/auth/auth.utils';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
@@ -60,7 +60,13 @@ export class BarbarianVillagesService {
             throw new ConflictException(`Barbarian village with target ${createBarbarianVillageDto.target} already exists`);
         }
 
-        const village = this.barbarianVillageRepository.create(createBarbarianVillageDto);
+        // Set default value for canAttack if not provided
+        const villageData = {
+            ...createBarbarianVillageDto,
+            canAttack: createBarbarianVillageDto.canAttack ?? true
+        };
+
+        const village = this.barbarianVillageRepository.create(villageData);
         return await this.barbarianVillageRepository.save(village);
     }
 
@@ -78,17 +84,18 @@ export class BarbarianVillagesService {
     }
 
     /**
-     * Gets all barbarian villages in the format expected by AttackUtils
+     * Gets all barbarian villages that can be attacked (canAttack = true)
      * Since BarbarianVillage interface is now identical to BarbarianVillageEntity, no conversion needed
      */
     async getBarbarianVillagesForAttacks(): Promise<BarbarianVillage[]> {
-        this.logger.debug('Loading barbarian villages from database...');
+        this.logger.debug('Loading attackable barbarian villages from database...');
 
         const villages = await this.barbarianVillageRepository.find({
+            where: { canAttack: true },
             order: { target: 'ASC' }
         });
 
-        this.logger.log(`Successfully loaded ${villages.length} barbarian villages from database`);
+        this.logger.log(`Successfully loaded ${villages.length} attackable barbarian villages from database`);
         return villages;
     }
 
@@ -119,6 +126,21 @@ export class BarbarianVillagesService {
             this.logger.debug(`Saved next target index to settings: ${index}`);
         } catch (error) {
             this.logger.error(`Failed to save next target index (${index}) to settings:`, error);
+            // Don't throw error here, just log it - we don't want to stop the attack process
+        }
+    }
+
+    /**
+     * Updates the canAttack flag for a specific barbarian village
+     * @param target Village target ID
+     * @param canAttack New canAttack flag value
+     */
+    private async updateCanAttackFlag(target: string, canAttack: boolean): Promise<void> {
+        try {
+            await this.barbarianVillageRepository.update({ target }, { canAttack });
+            this.logger.log(`Updated canAttack flag for village ${target} to ${canAttack}`);
+        } catch (error) {
+            this.logger.error(`Failed to update canAttack flag for village ${target}:`, error);
             // Don't throw error here, just log it - we don't want to stop the attack process
         }
     }
@@ -170,11 +192,11 @@ export class BarbarianVillagesService {
 
             // Calculate how many attacks we can perform based on available troops
             const attackCalculation = AttackUtils.calculateAvailableAttacks(armyData);
-            
+
             // Ograniczenie: nie wysyłamy wszystkich dostępnych wojsk, tylko maksymalnie tyle ataków ile jest wiosek barbarzyńskich
             // Dodatkowo wybieramy minimum z dostępnych ataków i liczby wiosek, żeby nie wysyłać wszystkich wojsk naraz
             const maxPossibleAttacks = Math.min(attackCalculation.maxAttacks, barbarianVillages.length);
-            
+
             this.logger.log(`📊 Troops available for ${attackCalculation.maxAttacks} attacks, but limiting to ${maxPossibleAttacks} attacks (max = min(${attackCalculation.maxAttacks}, ${barbarianVillages.length}))`);
 
             // 6. Performing attacks
@@ -191,6 +213,32 @@ export class BarbarianVillagesService {
                 this.logger.log(`🎯 Attack ${i + 1}/${maxPossibleAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 
                 try {
+                    // 6.1.5. Check last attack result before performing new attack
+                    this.logger.debug('Checking last attack result...');
+                    const lastAttackCheck = await AttackUtils.checkLastAttackResult(page, targetVillage, this.VILLAGE_ID);
+
+                    if (!lastAttackCheck.canAttack) {
+                        this.logger.warn(`❌ Skipping attack on ${targetVillage.name}: ${lastAttackCheck.reason}`);
+
+                        // Update canAttack flag to false in database
+                        await this.updateCanAttackFlag(targetVillage.target, false);
+
+                        // Move to next target
+                        currentTargetIndex = nextIndex;
+                        await this.saveNextTargetIndex(currentTargetIndex);
+
+                        // Add skipped result to attack results
+                        attackResults.push({
+                            success: false,
+                            targetVillage,
+                            error: `Skipped: ${lastAttackCheck.reason}`
+                        });
+
+                        continue; // Skip to next village
+                    }
+
+                    this.logger.debug(`✅ Last attack check passed: ${lastAttackCheck.reason}`);
+
                     // 6.2. Performing attack
                     const attackResult = await AttackUtils.performMiniAttack(page, targetVillage, this.VILLAGE_ID);
                     attackResults.push(attackResult);

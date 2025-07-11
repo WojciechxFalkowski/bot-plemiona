@@ -14,6 +14,9 @@ export class BarbarianVillageEntity {
     @Column()
     coordinateY: number;
 
+    @Column({ default: true })
+    canAttack: boolean;
+
     @CreateDateColumn()
     createdAt: Date;
 

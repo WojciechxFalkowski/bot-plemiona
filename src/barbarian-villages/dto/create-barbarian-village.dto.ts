@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, Min, Max, IsBoolean, IsOptional } from 'class-validator';
 
 /**
  * Data transfer object for creating a new barbarian village
@@ -47,4 +47,14 @@ export class CreateBarbarianVillageDto {
     @Min(0)
     @Max(1000)
     coordinateY: number;
+
+    @ApiProperty({
+        example: true,
+        description: 'Flag indicating if the village can be attacked',
+        required: false,
+        default: true
+    })
+    @IsBoolean()
+    @IsOptional()
+    canAttack?: boolean;
 } 
