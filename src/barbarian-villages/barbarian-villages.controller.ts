@@ -1,11 +1,12 @@
 import { Controller, Get, Post, Body, Param, Put, Delete } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { BarbarianVillagesService } from './barbarian-villages.service';
-import { CreateBarbarianVillageDto, UpdateBarbarianVillageDto } from './dto';
+import { CreateBarbarianVillageDto, CreateBarbarianVillageFromUrlDto, UpdateBarbarianVillageDto } from './dto';
 import {
   GetAllBarbarianVillagesDecorators,
   GetBarbarianVillageDecorators,
   CreateBarbarianVillageDecorators,
+  CreateBarbarianVillageFromUrlDecorators,
   UpdateBarbarianVillageDecorators,
   DeleteBarbarianVillageDecorators
 } from './decorators';
@@ -33,6 +34,12 @@ export class BarbarianVillagesController {
   @CreateBarbarianVillageDecorators()
   async create(@Body() createBarbarianVillageDto: CreateBarbarianVillageDto) {
     return await this.barbarianVillagesService.create(createBarbarianVillageDto);
+  }
+
+  @Post('from-url')
+  @CreateBarbarianVillageFromUrlDecorators()
+  async createFromUrl(@Body() createFromUrlDto: CreateBarbarianVillageFromUrlDto) {
+    return await this.barbarianVillagesService.createFromUrl(createFromUrlDto);
   }
 
   @Put(':target')

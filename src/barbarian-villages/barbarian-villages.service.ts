@@ -1,10 +1,10 @@
-import { Injectable, Inject, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, Logger, BadRequestException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Page } from 'playwright';
 import { ConfigService } from '@nestjs/config';
 import { BarbarianVillageEntity } from './entities/barbarian-village.entity';
 import { BARBARIAN_VILLAGES_ENTITY_REPOSITORY } from './barbarian-villages.service.contracts';
-import { CreateBarbarianVillageDto, UpdateBarbarianVillageDto } from './dto';
+import { CreateBarbarianVillageDto, CreateBarbarianVillageFromUrlDto, UpdateBarbarianVillageDto } from './dto';
 import { ArmyData, ArmyUtils } from '@/utils/army/army.utils';
 import { AttackUtils, AttackResult, AttackCalculationResult, BarbarianVillage, LastAttackCheckResult } from '@/utils/army/attack.utils';
 import { AuthUtils } from '@/utils/auth/auth.utils';
@@ -292,5 +292,87 @@ export class BarbarianVillagesService {
         } finally {
             await browser.close();
         }
+    }
+
+    /**
+     * Parses Plemiona URL to extract village ID and coordinates
+     * @param url - URL from Plemiona game
+     * @returns Parsed data with target, coordinateX, and coordinateY
+     */
+    private parseUrlData(url: string): { target: string; coordinateX: number; coordinateY: number } {
+        try {
+            // Extract ID parameter from URL
+            const urlParams = new URL(url);
+            const idParam = urlParams.searchParams.get('id');
+            
+            if (!idParam) {
+                throw new BadRequestException('URL does not contain required "id" parameter');
+            }
+
+            // Extract coordinates from hash (after #)
+            const hash = urlParams.hash;
+            if (!hash || !hash.startsWith('#')) {
+                throw new BadRequestException('URL does not contain coordinates in hash fragment');
+            }
+
+            // Remove # and split by semicolon
+            const coordinates = hash.substring(1).split(';');
+            if (coordinates.length !== 2) {
+                throw new BadRequestException('Invalid coordinate format. Expected format: #X;Y');
+            }
+
+            const coordinateX = parseInt(coordinates[0], 10);
+            const coordinateY = parseInt(coordinates[1], 10);
+
+            if (isNaN(coordinateX) || isNaN(coordinateY)) {
+                throw new BadRequestException('Coordinates must be valid numbers');
+            }
+
+            if (coordinateX < 0 || coordinateX > 1000 || coordinateY < 0 || coordinateY > 1000) {
+                throw new BadRequestException('Coordinates must be between 0 and 1000');
+            }
+
+            return {
+                target: idParam,
+                coordinateX,
+                coordinateY
+            };
+
+        } catch (error) {
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new BadRequestException(`Invalid URL format: ${error.message}`);
+        }
+    }
+
+    /**
+     * Creates a barbarian village from a Plemiona URL
+     * @param createFromUrlDto - DTO containing the URL
+     * @returns Created barbarian village entity
+     */
+    async createFromUrl(createFromUrlDto: CreateBarbarianVillageFromUrlDto): Promise<BarbarianVillageEntity> {
+        const { target, coordinateX, coordinateY } = this.parseUrlData(createFromUrlDto.url);
+
+        // Check if village with this target already exists
+        const existingVillage = await this.barbarianVillageRepository.findOne({
+            where: { target }
+        });
+
+        if (existingVillage) {
+            throw new ConflictException(`Barbarian village with target ${target} already exists`);
+        }
+
+        // Create village with parsed data
+        const villageData: CreateBarbarianVillageDto = {
+            target,
+            name: 'Wioska barbarzyńska',
+            coordinateX,
+            coordinateY,
+            canAttack: true
+        };
+
+        const village = this.barbarianVillageRepository.create(villageData);
+        return await this.barbarianVillageRepository.save(village);
     }
 } 
