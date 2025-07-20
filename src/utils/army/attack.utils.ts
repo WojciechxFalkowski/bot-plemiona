@@ -18,6 +18,13 @@ export interface BarbarianVillage {
 // Interfejs dla wyniku obliczenia dostępnych ataków
 export interface AttackCalculationResult {
     maxAttacks: number;
+    availableLight: number;
+    lightPerAttack: number;
+}
+
+// Interfejs dla wyniku obliczenia dostępnych ataków z pikami i mieczami
+export interface AttackCalculationResultSpearSword {
+    maxAttacks: number;
     availableSpear: number;
     availableSword: number;
     spearPerAttack: number;
@@ -50,9 +57,13 @@ export interface LastAttackCheckResult {
 export class AttackUtils {
     private static readonly logger = new Logger(AttackUtils.name);
 
-    // Stałe dla mini ataków
+    // Stałe dla mini ataków z lekką kawalerią
+    private static readonly LIGHT_PER_ATTACK = 2;
+    
+    // Stałe dla mini ataków z pikami i mieczami
     private static readonly SPEAR_PER_ATTACK = 2;
     private static readonly SWORD_PER_ATTACK = 2;
+    
     private static readonly WORLD_NUMBER = '216';
     private static readonly SOURCE_VILLAGE_ID = '2197';
 
@@ -85,6 +96,34 @@ export class AttackUtils {
     public static calculateAvailableAttacks(armyData: ArmyData): AttackCalculationResult {
         this.logger.debug('Calculating available attacks based on army data...');
 
+        // Znajdź dane o lekkiej kawalerii
+        const lightUnit = armyData.units.find(unit => unit.dataUnit === 'light');
+
+        const availableLight = lightUnit?.inVillage || 0;
+
+        // Oblicz ile ataków można wykonać (każdy atak wymaga 2 jednostki lekkiej kawalerii)
+        const maxAttacks = Math.floor(availableLight / this.LIGHT_PER_ATTACK);
+
+        const result: AttackCalculationResult = {
+            maxAttacks,
+            availableLight,
+            lightPerAttack: this.LIGHT_PER_ATTACK
+        };
+
+        this.logger.log(`Attack calculation: ${availableLight} light cavalry → ${maxAttacks} possible attacks`);
+        this.logger.debug(`  - Max attacks from light cavalry: ${maxAttacks} (${availableLight}/${this.LIGHT_PER_ATTACK})`);
+
+        return result;
+    }
+
+    /**
+     * Oblicza ile ataków można wykonać na podstawie dostępnego wojska (piki i miecze)
+     * @param armyData Dane o dostępnym wojsku
+     * @returns Wynik obliczeń z liczbą możliwych ataków z pikami i mieczami
+     */
+    public static calculateAvailableAttacksSpearSword(armyData: ArmyData): AttackCalculationResultSpearSword {
+        this.logger.debug('Calculating available attacks based on army data (spear & sword)...');
+
         // Znajdź dane o spear i sword
         const spearUnit = armyData.units.find(unit => unit.dataUnit === 'spear');
         const swordUnit = armyData.units.find(unit => unit.dataUnit === 'sword');
@@ -97,7 +136,7 @@ export class AttackUtils {
         const maxAttacksFromSword = Math.floor(availableSword / this.SWORD_PER_ATTACK);
         const maxAttacks = Math.min(maxAttacksFromSpear, maxAttacksFromSword);
 
-        const result: AttackCalculationResult = {
+        const result: AttackCalculationResultSpearSword = {
             maxAttacks,
             availableSpear,
             availableSword,
@@ -339,16 +378,10 @@ export class AttackUtils {
 
             this.logger.debug('✅ Village owner verification passed - proceeding with attack');
 
-            // Wypełnij pole spear (2 jednostki)
-            this.logger.debug(`Filling spear field with ${this.SPEAR_PER_ATTACK} units...`);
-            const spearInput = page.locator('#unit_input_spear');
-            await spearInput.fill(this.SPEAR_PER_ATTACK.toString());
-            await page.waitForTimeout(500);
-
-            // Wypełnij pole sword (2 jednostki)
-            this.logger.debug(`Filling sword field with ${this.SWORD_PER_ATTACK} units...`);
-            const swordInput = page.locator('#unit_input_sword');
-            await swordInput.fill(this.SWORD_PER_ATTACK.toString());
+            // Wypełnij pole lekkiej kawalerii (2 jednostki)
+            this.logger.debug(`Filling light cavalry field with ${this.LIGHT_PER_ATTACK} units...`);
+            const lightInput = page.locator('#unit_input_light');
+            await lightInput.fill(this.LIGHT_PER_ATTACK.toString());
             await page.waitForTimeout(500);
 
             // Kliknij przycisk ataku
@@ -396,6 +429,124 @@ export class AttackUtils {
             try {
                 await page.screenshot({
                     path: `mini_attack_error_${targetVillage.target}_${Date.now()}.png`,
+                    fullPage: true
+                });
+            } catch (screenshotError) {
+                this.logger.error('Failed to take error screenshot:', screenshotError);
+            }
+
+            return {
+                success: false,
+                targetVillage,
+                error: error.message,
+                attackUrl: `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`
+            };
+        }
+    }
+
+    /**
+     * Wykonuje pojedynczy mini atak na wybraną wioskę barbarzyńską (piki i miecze)
+     * @param page Instancja strony Playwright
+     * @param targetVillage Wioska docelowa
+     * @param sourceVillageId ID wioski źródłowej (opcjonalne, domyślnie SOURCE_VILLAGE_ID)
+     * @returns Wynik ataku
+     */
+    public static async performMiniAttackSpearSword(
+        page: Page,
+        targetVillage: BarbarianVillage,
+        sourceVillageId: string = this.SOURCE_VILLAGE_ID
+    ): Promise<AttackResult> {
+        this.logger.log(`🗡️ Starting mini attack with spear & sword on ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+        try {
+            // Skonstruuj URL ataku
+            const attackUrl = `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`;
+            this.logger.debug(`Attack URL: ${attackUrl}`);
+
+            // Nawiguj do strony ataku
+            this.logger.debug('Navigating to attack page...');
+            await page.goto(attackUrl, { waitUntil: 'networkidle', timeout: 15000 });
+            await page.waitForTimeout(2000);
+
+            // Sprawdź czy strona się załadowała poprawnie
+            const formExists = await page.locator('#command-data-form').isVisible({ timeout: 5000 });
+            if (!formExists) {
+                throw new Error('Attack form not found on page');
+            }
+
+            this.logger.debug('Attack page loaded successfully');
+
+            // Weryfikacja właściciela wioski - sprawdź czy nadal należy do "Barbarzyńskie"
+            const ownerVerification = await this.verifyVillageOwner(page, targetVillage);
+
+            if (!ownerVerification.isValid) {
+                return {
+                    success: false,
+                    targetVillage,
+                    error: ownerVerification.error || 'Village owner verification failed',
+                    attackUrl
+                };
+            }
+
+            this.logger.debug('✅ Village owner verification passed - proceeding with attack');
+
+            // Wypełnij pole spear (2 jednostki)
+            this.logger.debug(`Filling spear field with ${this.SPEAR_PER_ATTACK} units...`);
+            const spearInput = page.locator('#unit_input_spear');
+            await spearInput.fill(this.SPEAR_PER_ATTACK.toString());
+            await page.waitForTimeout(500);
+
+            // Wypełnij pole sword (2 jednostki)
+            this.logger.debug(`Filling sword field with ${this.SWORD_PER_ATTACK} units...`);
+            const swordInput = page.locator('#unit_input_sword');
+            await swordInput.fill(this.SWORD_PER_ATTACK.toString());
+            await page.waitForTimeout(500);
+
+            // Kliknij przycisk ataku
+            this.logger.debug('Clicking attack button...');
+            const attackButton = page.locator('#target_attack');
+            if (await attackButton.isVisible({ timeout: 5000 })) {
+                await attackButton.click();
+                this.logger.debug('Attack button clicked successfully');
+
+                // Poczekaj na załadowanie strony potwierdzenia
+                await page.waitForLoadState('networkidle', { timeout: 10000 });
+                await page.waitForTimeout(2000);
+                this.logger.debug('Confirmation page loaded');
+
+                // Kliknij przycisk potwierdzenia
+                this.logger.debug('Clicking confirmation button...');
+                const confirmButton = page.locator('#troop_confirm_submit');
+                if (await confirmButton.isVisible({ timeout: 5000 })) {
+                    await confirmButton.click();
+                    this.logger.debug('Confirmation button clicked successfully');
+
+                    // Poczekaj na finalizację
+                    await page.waitForTimeout(3000);
+
+                    this.logger.log(`✅ Mini attack with spear & sword completed successfully: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+                    return {
+                        success: true,
+                        targetVillage,
+                        attackUrl
+                    };
+
+                } else {
+                    throw new Error('Confirmation button not found or not visible');
+                }
+
+            } else {
+                throw new Error('Attack button not found or not visible');
+            }
+
+        } catch (error) {
+            this.logger.error(`❌ Mini attack with spear & sword failed on ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY}):`, error);
+
+            // Zrób screenshot w przypadku błędu
+            try {
+                await page.screenshot({
+                    path: `mini_attack_spear_sword_error_${targetVillage.target}_${Date.now()}.png`,
                     fullPage: true
                 });
             } catch (screenshotError) {
@@ -462,6 +613,20 @@ export class AttackUtils {
         const hasEnough = calculation.maxAttacks > 0;
 
         this.logger.debug(`Troops check: ${hasEnough ? 'sufficient' : 'insufficient'} troops for attack`);
+
+        return hasEnough;
+    }
+
+    /**
+     * Sprawdza czy dostępne jest wystarczające wojsko do wykonania ataku (piki i miecze)
+     * @param armyData Dane o wojsku
+     * @returns true jeśli jest wystarczające wojsko, false w przeciwnym razie
+     */
+    public static hasEnoughTroopsForAttackSpearSword(armyData: ArmyData): boolean {
+        const calculation = this.calculateAvailableAttacksSpearSword(armyData);
+        const hasEnough = calculation.maxAttacks > 0;
+
+        this.logger.debug(`Troops check (spear & sword): ${hasEnough ? 'sufficient' : 'insufficient'} troops for attack`);
 
         return hasEnough;
     }

@@ -185,7 +185,7 @@ export class BarbarianVillagesService {
 
             // 5. Check if we have enough troops for any attacks
             if (!AttackUtils.hasEnoughTroopsForAttack(armyData)) {
-                this.logger.warn('❌ Insufficient troops for mini attacks. Need at least 2 spear + 2 sword units.');
+                this.logger.warn('❌ Insufficient troops for mini attacks. Need at least 2 light cavalry units.');
                 this.logger.log('🗡️ Mini attacks task completed - no attacks possible');
                 return [];
             }
@@ -374,5 +374,154 @@ export class BarbarianVillagesService {
 
         const village = this.barbarianVillageRepository.create(villageData);
         return await this.barbarianVillageRepository.save(village);
+    }
+
+    /**
+     * Executes mini attacks on barbarian villages using spear and sword units
+     * Contains the complete attack logic including browser management and login
+     */
+    async executeMiniAttacksSpearSword(): Promise<AttackResult[]> {
+        this.logger.log('🗡️ Starting mini attacks task (spear & sword)...');
+
+        const { browser, context, page } = await createBrowserPage({ headless: true });
+
+        try {
+            // 1. Login and select world
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                this.credentials,
+                this.settingsService
+            );
+
+            if (!loginResult.success || !loginResult.worldSelected) {
+                throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+            }
+
+            // 2. Get army data using ArmyUtils
+            this.logger.log('⚔️ Checking army availability...');
+            const armyData = await ArmyUtils.getArmyData(page, this.VILLAGE_ID, this.WORLD_NUMBER);
+
+            // 3. Loading barbarian villages from database
+            this.logger.log('📋 Loading barbarian villages...');
+            const barbarianVillages = await this.getBarbarianVillagesForAttacks();
+
+            if (barbarianVillages.length === 0) {
+                this.logger.warn('No barbarian villages found in database');
+                return [];
+            }
+
+            // 4. Get current target index from settings (persistent storage)
+            let currentTargetIndex = await this.getNextTargetIndex();
+            this.logger.log(`📍 Current target index: ${currentTargetIndex} (village: ${barbarianVillages[currentTargetIndex % barbarianVillages.length]?.name || 'unknown'})`);
+
+            // 5. Check if we have enough troops for any attacks (spear & sword)
+            if (!AttackUtils.hasEnoughTroopsForAttackSpearSword(armyData)) {
+                this.logger.warn('❌ Insufficient troops for mini attacks. Need at least 2 spear + 2 sword units.');
+                this.logger.log('🗡️ Mini attacks task completed - no attacks possible');
+                return [];
+            }
+
+            // Calculate how many attacks we can perform based on available troops
+            const attackCalculation = AttackUtils.calculateAvailableAttacksSpearSword(armyData);
+
+            // Ograniczenie: nie wysyłamy wszystkich dostępnych wojsk, tylko maksymalnie tyle ataków ile jest wiosek barbarzyńskich
+            // Dodatkowo wybieramy minimum z dostępnych ataków i liczby wiosek, żeby nie wysyłać wszystkich wojsk naraz
+            const maxPossibleAttacks = Math.min(attackCalculation.maxAttacks, barbarianVillages.length);
+
+            this.logger.log(`📊 Troops available for ${attackCalculation.maxAttacks} attacks, but limiting to ${maxPossibleAttacks} attacks (max = min(${attackCalculation.maxAttacks}, ${barbarianVillages.length}))`);
+
+            // 6. Performing attacks
+            const attackResults: AttackResult[] = [];
+            const startingIndex = currentTargetIndex;
+            let attacksPerformed = 0;
+
+            this.logger.log(`🎯 Starting attack sequence from target index ${currentTargetIndex}...`);
+
+            for (let i = 0; i < maxPossibleAttacks; i++) {
+                // 6.1. Selecting target based on nextTargetIndex
+                const { village: targetVillage, nextIndex } = AttackUtils.getNextTarget(barbarianVillages, currentTargetIndex);
+
+                this.logger.log(`🎯 Attack ${i + 1}/${maxPossibleAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+                try {
+                    // 6.1.5. Check last attack result before performing new attack
+                    this.logger.debug('Checking last attack result...');
+                    const lastAttackCheck = await AttackUtils.checkLastAttackResult(page, targetVillage, this.VILLAGE_ID);
+
+                    if (!lastAttackCheck.canAttack) {
+                        this.logger.warn(`❌ Skipping attack on ${targetVillage.name}: ${lastAttackCheck.reason}`);
+
+                        // Update canAttack flag to false in database
+                        await this.updateCanAttackFlag(targetVillage.target, false);
+
+                        // Move to next target
+                        currentTargetIndex = nextIndex;
+                        await this.saveNextTargetIndex(currentTargetIndex);
+
+                        // Add skipped result to attack results
+                        attackResults.push({
+                            success: false,
+                            targetVillage,
+                            error: `Skipped: ${lastAttackCheck.reason}`
+                        });
+
+                        continue; // Skip to next village
+                    }
+
+                    this.logger.debug(`✅ Last attack check passed: ${lastAttackCheck.reason}`);
+
+                    // 6.2. Performing attack with spear & sword
+                    const attackResult = await AttackUtils.performMiniAttackSpearSword(page, targetVillage, this.VILLAGE_ID);
+                    attackResults.push(attackResult);
+
+                    if (attackResult.success) {
+                        attacksPerformed++;
+                        this.logger.log(`✅ Attack ${i + 1} successful: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+                    } else {
+                        this.logger.warn(`❌ Attack ${i + 1} failed: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY}) - ${attackResult.error}`);
+                    }
+
+                    // 6.3. Updating nextTargetIndex
+                    currentTargetIndex = nextIndex;
+                    await this.saveNextTargetIndex(currentTargetIndex);
+
+                    // Small delay between attacks to avoid overwhelming the server
+                    if (i < maxPossibleAttacks - 1) {
+                        this.logger.debug('⏳ Waiting 2 seconds before next attack...');
+                        await page.waitForTimeout(2000);
+                    }
+
+                } catch (attackError) {
+                    this.logger.error(`💥 Error during attack ${i + 1} on ${targetVillage.name}:`, attackError);
+
+                    // Still update the target index to move to next village
+                    currentTargetIndex = nextIndex;
+                    await this.saveNextTargetIndex(currentTargetIndex);
+
+                    // Add failed result
+                    attackResults.push({
+                        success: false,
+                        targetVillage,
+                        error: attackError.message
+                    });
+
+                    // Continue with next village instead of stopping
+                    continue;
+                }
+            }
+
+            // Log summary of all attacks
+            AttackUtils.logAttackSummary(attackResults, maxPossibleAttacks, startingIndex, currentTargetIndex);
+
+            this.logger.log(`🗡️ Mini attacks task completed (spear & sword): ${attacksPerformed}/${maxPossibleAttacks} successful attacks`);
+
+            return attackResults;
+
+        } catch (error) {
+            this.logger.error('Error during mini attacks execution (spear & sword):', error);
+            throw error;
+        } finally {
+            await browser.close();
+        }
     }
 } 
