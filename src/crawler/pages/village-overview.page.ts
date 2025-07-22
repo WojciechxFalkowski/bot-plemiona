@@ -88,7 +88,7 @@ export class VillageOverviewPage {
 	private readonly productionTable: Locator;
 
 	// URL pattern for village overview
-	private readonly VILLAGE_OVERVIEW_URL = 'https://pl216.plemiona.pl/game.php?screen=overview_villages&intro';
+	private readonly VILLAGE_OVERVIEW_URL = 'https://pl216.plemiona.pl/game.php?screen=overview_villages&mode=prod';
 
 	constructor(page: Page) {
 		this.page = page;
@@ -100,6 +100,7 @@ export class VillageOverviewPage {
 	 */
 	async navigate(): Promise<void> {
 		await this.page.goto(this.VILLAGE_OVERVIEW_URL, { waitUntil: 'networkidle' });
+		
 		await this.page.waitForSelector('#production_table', { timeout: 10000 });
 	}
 

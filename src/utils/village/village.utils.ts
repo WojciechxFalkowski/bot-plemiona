@@ -184,7 +184,11 @@ export class VillageUtils {
             const villageOverviewPage = new VillageOverviewPage(page);
 
             // Nawiguj do strony przeglądu wiosek
+            console.log('v1');
+            
             await villageOverviewPage.navigate();
+            console.log("v2");
+            
             this.logger.log('Successfully navigated to village overview page');
 
             // Poczekaj na załadowanie tabeli

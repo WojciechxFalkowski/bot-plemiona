@@ -3,7 +3,6 @@ import { BuildingCrawlerService } from './building-crawler.service';
 import { CrawlerService } from './crawler.service';
 import { BuildingQueueItem } from '../models/tribal-wars/building-queue-manager';
 import { ApiOperation, ApiResponse as SwaggerApiResponse, ApiTags, ApiBody, ApiParam } from '@nestjs/swagger';
-import { CreateBuildingCrawlerDto } from '@/building-crawler/dto/create-building-crawler.dto';
 import { SuccessResponse } from '@/utils/response';
 
 @ApiTags('Building Crawler')
@@ -97,7 +96,7 @@ export class BuildingCrawlerController {
     @Post('queue')
     @ApiOperation({ summary: 'Set the complete building queue' })
     @ApiBody({
-        type: [CreateBuildingCrawlerDto],
+        // type: [BuildingQueueItem],
         description: 'Array of buildings to add to the queue',
         examples: {
             example1: {

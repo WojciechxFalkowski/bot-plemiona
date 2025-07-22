@@ -7,12 +7,12 @@ import configuration from './database/database-configuration';
 import { CrawlerModule } from './crawler/crawler.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SettingsModule } from './settings/settings.module';
-import { BuildingCrawlerModule } from './building-crawler/building-crawler.module';
 import { VillagesCrawlerModule } from './villages-crawler/villages-crawler.module';
 import { VillagesModule } from './villages/villages.module';
 import { VillageConstructionQueueModule } from './village-construction-queue/village-construction-queue.module';
 import { ClerkAuthModule } from './clerk-auth/clerk-auth.module';
 import { BarbarianVillagesModule } from './barbarian-villages/barbarian-villages.module';
+import { BuildingsModule } from './buildings/buildings.module';
 
 @Module({
   imports: [
@@ -21,12 +21,12 @@ import { BarbarianVillagesModule } from './barbarian-villages/barbarian-villages
     DatabaseModule,
     CrawlerModule,
     SettingsModule,
-    BuildingCrawlerModule,
     VillagesCrawlerModule,
     VillagesModule,
     VillageConstructionQueueModule,
     ClerkAuthModule,
     BarbarianVillagesModule,
+    BuildingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
