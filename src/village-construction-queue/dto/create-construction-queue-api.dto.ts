@@ -34,4 +34,12 @@ export class CreateConstructionQueueApiDto {
     @Min(1)
     @Max(30)
     targetLevel: number;
+
+    @ApiProperty({
+        description: 'ID serwera',
+        example: 216
+    })
+    @IsInt()
+    @IsNotEmpty()
+    serverId: number;
 } 

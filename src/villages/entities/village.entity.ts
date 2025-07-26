@@ -1,9 +1,13 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { ServerEntity } from '@/servers/entities/server.entity';
 
 @Entity('villages')
 export class VillageEntity {
-    @PrimaryColumn()
-    id: number; // Game ID, not auto-generated
+    @PrimaryColumn({ type: 'varchar' })
+    id: string; // Game ID, not auto-generated
+
+    @Column({ type: 'int' })
+    serverId: number;
 
     @Column()
     name: string;

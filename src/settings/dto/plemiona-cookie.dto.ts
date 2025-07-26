@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty } from 'class-validator';
 
 /**
  * Data transfer object for a single Plemiona cookie
@@ -10,13 +11,17 @@ export class PlemionaCookieDto {
         description: 'The name of the cookie as defined by the Plemiona website',
         required: true
     })
+    @IsString()
+    @IsNotEmpty()
     name: string;
 
     @ApiProperty({
-        example: 'd10f35ddd864:c449c0dffdf525d354be8b618cb73de0e1c42b42f388623341cb5c2ae2bce504',
+        example: '69a13f7d6688:631d5f23baec92d2dc8d1a4d724250f862e640b21670255261db23da7a4b19af',
         description: 'The value of the cookie, typically a hash or identifier',
         required: true
     })
+    @IsString()
+    @IsNotEmpty()
     value: string;
 
     @ApiProperty({
@@ -24,6 +29,8 @@ export class PlemionaCookieDto {
         description: 'The domain for which the cookie is valid, usually .plemiona.pl or pl216.plemiona.pl',
         required: true
     })
+    @IsString()
+    @IsNotEmpty()
     domain: string;
 
     @ApiProperty({
@@ -31,6 +38,8 @@ export class PlemionaCookieDto {
         description: 'The path for which the cookie is valid, usually /',
         required: true
     })
+    @IsString()
+    @IsNotEmpty()
     path: string;
 
     @ApiProperty({
@@ -38,5 +47,6 @@ export class PlemionaCookieDto {
         description: 'The expiration timestamp of the cookie in seconds (Unix timestamp). Use -1 for session cookies',
         required: true
     })
+    @IsNotEmpty()
     expires: number;
 } 

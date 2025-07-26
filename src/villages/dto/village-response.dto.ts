@@ -1,5 +1,6 @@
 export class VillageResponseDto {
     id: string;
+    serverId: number;
     name: string;
     coordinates: string;
     isAutoBuildEnabled: boolean;

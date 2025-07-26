@@ -36,7 +36,7 @@ export class VillageConstructionQueueController {
 
         try {
             // Find village by name to get its ID
-            const village = await this.villagesService.findByName(createDto.villageName);
+            const village = await this.villagesService.findByName(createDto.serverId, createDto.villageName);
 
             if (!village) {
                 this.logger.error(`Village not found: "${createDto.villageName}"`);
@@ -47,7 +47,8 @@ export class VillageConstructionQueueController {
             const serviceDto: CreateConstructionQueueDto = {
                 villageId: village.id,
                 buildingId: createDto.buildingId,
-                targetLevel: createDto.targetLevel
+                targetLevel: createDto.targetLevel,
+                serverId: createDto.serverId
             };
 
             const result = await this.constructionQueueService.addToQueue(serviceDto);
@@ -63,13 +64,14 @@ export class VillageConstructionQueueController {
     @HttpCode(HttpStatus.OK)
     @GetVillageQueueDecorators()
     async getVillageQueue(
-        @Param('villageName') villageName: string
+        @Param('villageName') villageName: string,
+        @Param('serverId') serverId: number
     ): Promise<VillageConstructionQueueEntity[]> {
         this.logger.log(`Request to get construction queue for village "${villageName}"`);
 
         try {
             // Find village by name to get its ID
-            const village = await this.villagesService.findByName(villageName);
+            const village = await this.villagesService.findByName(serverId, villageName);
 
             if (!village) {
                 this.logger.error(`Village not found: "${villageName}"`);
@@ -123,7 +125,8 @@ export class VillageConstructionQueueController {
     @HttpCode(HttpStatus.OK)
     @ScrapeVillageQueueDecorators()
     async scrapeVillageQueue(
-        @Param('villageName') villageName: string
+        @Param('villageName') villageName: string,
+        @Param('serverId') serverId: number
     ): Promise<{
         villageInfo: VillageResponseDto;
         buildingLevels: BuildingLevels;
@@ -132,7 +135,7 @@ export class VillageConstructionQueueController {
         this.logger.log(`Request to scrape queue for village "${villageName}"`);
 
         try {
-            const result = await this.constructionQueueService.scrapeVillageQueue(villageName);
+            const result = await this.constructionQueueService.scrapeVillageQueue(serverId, villageName);
             this.logger.log(`Successfully scraped queue for village "${villageName}"`);
             return result;
         } catch (error) {
@@ -145,11 +148,13 @@ export class VillageConstructionQueueController {
     @Get('scrape-all-villages-queue')
     @HttpCode(HttpStatus.OK)
     @ScrapeAllVillagesQueueDecorators()
-    async scrapeAllVillagesQueue(): Promise<{
+    async scrapeAllVillagesQueue(
+        @Param('serverId') serverId: number
+    ): Promise<{
         villageInfo: VillageResponseDto;
         buildingLevels: BuildingLevels;
         buildQueue: BuildQueueItem[];
     }[]> {
-        return await this.constructionQueueService.scrapeAllVillagesQueue();
+        return await this.constructionQueueService.scrapeAllVillagesQueue(serverId);
     }
 }

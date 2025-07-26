@@ -80,6 +80,7 @@ export class VillageUtils {
      * @param options - Opcje zbierania danych
      */
     static async collectDetailedVillageInformation(
+        serverCode: string,
         page: Page,
         options: VillageCollectionOptions = {}
     ): Promise<VillageCollectionResult> {
@@ -105,6 +106,7 @@ export class VillageUtils {
 
             // Teraz zbierz szczegółowe dane dla każdej wioski
             const detailedResult = await this.collectDetailedVillageData(
+                serverCode,
                 page,
                 basicResult.data,
                 {
@@ -154,6 +156,7 @@ export class VillageUtils {
      * @param options - Opcje zbierania danych
      */
     static async collectVillageInformation(
+        serverCode: string,
         page: Page,
         options: VillageCollectionOptions = {}
     ): Promise<VillageCollectionResult> {
@@ -168,7 +171,7 @@ export class VillageUtils {
                 timeoutPerPage: options.timeoutPerVillage
             });
         } else {
-            return this.collectDetailedVillageInformation(page, options);
+            return this.collectDetailedVillageInformation(serverCode, page, options);
         }
     }
 
@@ -216,6 +219,7 @@ export class VillageUtils {
      * @param options - Opcje zbierania szczegółowych danych
      */
     static async collectDetailedVillageData(
+        serverCode: string,
         page: Page,
         villageData: VillageData[],
         options: {
@@ -257,12 +261,12 @@ export class VillageUtils {
                 page.setDefaultTimeout(timeoutPerVillage);
 
                 // Nawiguj do konkretnej wioski
-                await villageDetailPage.navigateToVillage(village.id);
+                await villageDetailPage.navigateToVillage(serverCode, village.id);
                 this.logger.log(`Successfully navigated to village ${village.name}`);
 
                 // Zbierz poziomy budynków
                 this.logger.log(`Collecting building levels for ${village.name}...`);
-                village.buildingLevels = await villageDetailPage.extractBuildingLevels();
+                village.buildingLevels = await villageDetailPage.extractBuildingLevels(serverCode);
 
                 // Zbierz jednostki armii
                 this.logger.log(`Collecting army units for ${village.name}...`);
@@ -270,7 +274,7 @@ export class VillageUtils {
 
                 // Zbierz kolejkę budowy
                 this.logger.log(`Collecting build queue for ${village.name}...`);
-                village.buildQueue = await villageDetailPage.extractBuildQueue();
+                village.buildQueue = await villageDetailPage.extractBuildQueue(serverCode);
 
                 // Zbierz kolejkę badań
                 this.logger.log(`Collecting research queue for ${village.name}...`);

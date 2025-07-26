@@ -6,9 +6,11 @@ import { DatabaseModule } from '@/database/database.module';
 import { ConfigModule } from '@nestjs/config';
 import { SettingsModule } from '@/settings/settings.module';
 import { VillagesModule } from '@/villages/villages.module';
+import { PlemionaCookiesModule } from '@/plemiona-cookies';
+import { ServersModule } from '@/servers';
 
 @Module({
-    imports: [DatabaseModule, ConfigModule, SettingsModule, VillagesModule],
+    imports: [DatabaseModule, ConfigModule, SettingsModule, VillagesModule, PlemionaCookiesModule, ServersModule],
     controllers: [VillageConstructionQueueController],
     providers: [...villageConstructionQueueProviders, VillageConstructionQueueService],
     exports: [VillageConstructionQueueService]

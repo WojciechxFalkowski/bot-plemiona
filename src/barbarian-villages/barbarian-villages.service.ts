@@ -12,6 +12,8 @@ import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
 import { SettingsKey } from '@/settings/settings-keys.enum';
 import { createBrowserPage } from '@/utils/browser.utils';
+import { PlemionaCookiesService } from '@/plemiona-cookies';
+import { ServersService } from '@/servers';
 
 @Injectable()
 export class BarbarianVillagesService {
@@ -19,14 +21,16 @@ export class BarbarianVillagesService {
     private readonly credentials: PlemionaCredentials;
 
     // Configuration constants for village information
-    private readonly WORLD_NUMBER = '216';
-    private readonly VILLAGE_ID = '2197';
+    // private readonly WORLD_NUMBER = '216';
+    // private readonly VILLAGE_ID = '2197';
 
     constructor(
         @Inject(BARBARIAN_VILLAGES_ENTITY_REPOSITORY)
         private readonly barbarianVillageRepository: Repository<BarbarianVillageEntity>,
         private readonly settingsService: SettingsService,
+        private readonly plemionaCookiesService: PlemionaCookiesService,
         private readonly configService: ConfigService,
+        private readonly serversService: ServersService
     ) {
         // Initialize credentials from environment variables
         this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -103,9 +107,9 @@ export class BarbarianVillagesService {
      * Gets the next target index for mini attacks from persistent storage (settings)
      * @returns Current target index (defaults to 0 if not set)
      */
-    private async getNextTargetIndex(): Promise<number> {
+    private async getNextTargetIndex(serverId: number): Promise<number> {
         try {
-            const setting = await this.settingsService.getSetting<{ value: number }>(SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX);
+            const setting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX);
             const index = setting?.value ?? 0;
             this.logger.debug(`Retrieved next target index from settings: ${index}`);
             return index;
@@ -120,9 +124,9 @@ export class BarbarianVillagesService {
      * Saves the next target index for mini attacks to persistent storage (settings)
      * @param index Index to save
      */
-    private async saveNextTargetIndex(index: number): Promise<void> {
+    private async saveNextTargetIndex(serverId: number, index: number): Promise<void> {
         try {
-            await this.settingsService.setSetting(SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: index });
+            await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: index });
             this.logger.debug(`Saved next target index to settings: ${index}`);
         } catch (error) {
             this.logger.error(`Failed to save next target index (${index}) to settings:`, error);
@@ -149,17 +153,19 @@ export class BarbarianVillagesService {
      * Executes mini attacks on barbarian villages
      * Contains the complete attack logic including browser management and login
      */
-    async executeMiniAttacks(): Promise<AttackResult[]> {
+    async executeMiniAttacks(serverId: number, villageId: string): Promise<AttackResult[]> {
         this.logger.log('🗡️ Starting mini attacks task...');
 
-        const { browser, context, page } = await createBrowserPage({ headless: true });
+        const { browser, context, page } = await createBrowserPage({ headless: false });
 
         try {
             // 1. Login and select world
+            const serverName = await this.serversService.getServerName(serverId);
             const loginResult = await AuthUtils.loginAndSelectWorld(
                 page,
                 this.credentials,
-                this.settingsService
+                this.plemionaCookiesService,
+                serverName
             );
 
             if (!loginResult.success || !loginResult.worldSelected) {
@@ -168,7 +174,7 @@ export class BarbarianVillagesService {
 
             // 2. Get army data using ArmyUtils
             this.logger.log('⚔️ Checking army availability...');
-            const armyData = await ArmyUtils.getArmyData(page, this.VILLAGE_ID, this.WORLD_NUMBER);
+            const armyData = await ArmyUtils.getArmyData(page, villageId, serverId.toString());
 
             // 3. Loading barbarian villages from database
             this.logger.log('📋 Loading barbarian villages...');
@@ -180,7 +186,7 @@ export class BarbarianVillagesService {
             }
 
             // 4. Get current target index from settings (persistent storage)
-            let currentTargetIndex = await this.getNextTargetIndex();
+            let currentTargetIndex = await this.getNextTargetIndex(serverId);
             this.logger.log(`📍 Current target index: ${currentTargetIndex} (village: ${barbarianVillages[currentTargetIndex % barbarianVillages.length]?.name || 'unknown'})`);
 
             // 5. Check if we have enough troops for any attacks
@@ -215,7 +221,7 @@ export class BarbarianVillagesService {
                 try {
                     // 6.1.5. Check last attack result before performing new attack
                     this.logger.debug('Checking last attack result...');
-                    const lastAttackCheck = await AttackUtils.checkLastAttackResult(page, targetVillage, this.VILLAGE_ID);
+                    const lastAttackCheck = await AttackUtils.checkLastAttackResult(page, targetVillage, villageId);
 
                     if (!lastAttackCheck.canAttack) {
                         this.logger.warn(`❌ Skipping attack on ${targetVillage.name}: ${lastAttackCheck.reason}`);
@@ -225,7 +231,7 @@ export class BarbarianVillagesService {
 
                         // Move to next target
                         currentTargetIndex = nextIndex;
-                        await this.saveNextTargetIndex(currentTargetIndex);
+                        await this.saveNextTargetIndex(serverId, currentTargetIndex);
 
                         // Add skipped result to attack results
                         attackResults.push({
@@ -240,8 +246,13 @@ export class BarbarianVillagesService {
                     this.logger.debug(`✅ Last attack check passed: ${lastAttackCheck.reason}`);
 
                     // 6.2. Performing attack
-                    const attackResult = await AttackUtils.performMiniAttack(page, targetVillage, this.VILLAGE_ID);
+                    const attackResult = await AttackUtils.performMiniAttack(page, targetVillage, villageId);
                     attackResults.push(attackResult);
+
+                    // 6.2.1. Update canAttack to false if error text contains "Village is no longer barbarian"
+                    if (attackResult.error && attackResult.error.includes('Village is no longer barbarian')) {
+                        await this.updateCanAttackFlag(targetVillage.target, false);
+                    }
 
                     if (attackResult.success) {
                         attacksPerformed++;
@@ -252,7 +263,7 @@ export class BarbarianVillagesService {
 
                     // 6.3. Updating nextTargetIndex
                     currentTargetIndex = nextIndex;
-                    await this.saveNextTargetIndex(currentTargetIndex);
+                    await this.saveNextTargetIndex(serverId, currentTargetIndex);
 
                     // Small delay between attacks to avoid overwhelming the server
                     if (i < maxPossibleAttacks - 1) {
@@ -265,7 +276,7 @@ export class BarbarianVillagesService {
 
                     // Still update the target index to move to next village
                     currentTargetIndex = nextIndex;
-                    await this.saveNextTargetIndex(currentTargetIndex);
+                    await this.saveNextTargetIndex(serverId, currentTargetIndex);
 
                     // Add failed result
                     attackResults.push({
@@ -304,7 +315,7 @@ export class BarbarianVillagesService {
             // Extract ID parameter from URL
             const urlParams = new URL(url);
             const idParam = urlParams.searchParams.get('id');
-            
+
             if (!idParam) {
                 throw new BadRequestException('URL does not contain required "id" parameter');
             }
@@ -380,17 +391,19 @@ export class BarbarianVillagesService {
      * Executes mini attacks on barbarian villages using spear and sword units
      * Contains the complete attack logic including browser management and login
      */
-    async executeMiniAttacksSpearSword(): Promise<AttackResult[]> {
+    async executeMiniAttacksSpearSword(serverId: number, villageId: string): Promise<AttackResult[]> {
         this.logger.log('🗡️ Starting mini attacks task (spear & sword)...');
 
         const { browser, context, page } = await createBrowserPage({ headless: true });
 
         try {
             // 1. Login and select world
+            const serverName = await this.serversService.getServerName(serverId);
             const loginResult = await AuthUtils.loginAndSelectWorld(
                 page,
                 this.credentials,
-                this.settingsService
+                this.plemionaCookiesService,
+                serverName
             );
 
             if (!loginResult.success || !loginResult.worldSelected) {
@@ -399,7 +412,7 @@ export class BarbarianVillagesService {
 
             // 2. Get army data using ArmyUtils
             this.logger.log('⚔️ Checking army availability...');
-            const armyData = await ArmyUtils.getArmyData(page, this.VILLAGE_ID, this.WORLD_NUMBER);
+            const armyData = await ArmyUtils.getArmyData(page, villageId, serverId.toString());
 
             // 3. Loading barbarian villages from database
             this.logger.log('📋 Loading barbarian villages...');
@@ -411,7 +424,7 @@ export class BarbarianVillagesService {
             }
 
             // 4. Get current target index from settings (persistent storage)
-            let currentTargetIndex = await this.getNextTargetIndex();
+            let currentTargetIndex = await this.getNextTargetIndex(serverId);
             this.logger.log(`📍 Current target index: ${currentTargetIndex} (village: ${barbarianVillages[currentTargetIndex % barbarianVillages.length]?.name || 'unknown'})`);
 
             // 5. Check if we have enough troops for any attacks (spear & sword)
@@ -446,7 +459,7 @@ export class BarbarianVillagesService {
                 try {
                     // 6.1.5. Check last attack result before performing new attack
                     this.logger.debug('Checking last attack result...');
-                    const lastAttackCheck = await AttackUtils.checkLastAttackResult(page, targetVillage, this.VILLAGE_ID);
+                    const lastAttackCheck = await AttackUtils.checkLastAttackResult(page, targetVillage, villageId);
 
                     if (!lastAttackCheck.canAttack) {
                         this.logger.warn(`❌ Skipping attack on ${targetVillage.name}: ${lastAttackCheck.reason}`);
@@ -456,7 +469,7 @@ export class BarbarianVillagesService {
 
                         // Move to next target
                         currentTargetIndex = nextIndex;
-                        await this.saveNextTargetIndex(currentTargetIndex);
+                        await this.saveNextTargetIndex(serverId, currentTargetIndex);
 
                         // Add skipped result to attack results
                         attackResults.push({
@@ -471,7 +484,7 @@ export class BarbarianVillagesService {
                     this.logger.debug(`✅ Last attack check passed: ${lastAttackCheck.reason}`);
 
                     // 6.2. Performing attack with spear & sword
-                    const attackResult = await AttackUtils.performMiniAttackSpearSword(page, targetVillage, this.VILLAGE_ID);
+                    const attackResult = await AttackUtils.performMiniAttackSpearSword(page, targetVillage, villageId);
                     attackResults.push(attackResult);
 
                     if (attackResult.success) {
@@ -483,7 +496,7 @@ export class BarbarianVillagesService {
 
                     // 6.3. Updating nextTargetIndex
                     currentTargetIndex = nextIndex;
-                    await this.saveNextTargetIndex(currentTargetIndex);
+                    await this.saveNextTargetIndex(serverId, currentTargetIndex);
 
                     // Small delay between attacks to avoid overwhelming the server
                     if (i < maxPossibleAttacks - 1) {
@@ -496,7 +509,7 @@ export class BarbarianVillagesService {
 
                     // Still update the target index to move to next village
                     currentTargetIndex = nextIndex;
-                    await this.saveNextTargetIndex(currentTargetIndex);
+                    await this.saveNextTargetIndex(serverId, currentTargetIndex);
 
                     // Add failed result
                     attackResults.push({

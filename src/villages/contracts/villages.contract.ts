@@ -5,8 +5,9 @@ export interface VillageData {
 }
 
 export interface VillagesSyncResult {
+    totalProcessed: number;
     added: number;
     updated: number;
     deleted: number;
-    total: number;
+    currentTotal: number;
 } 

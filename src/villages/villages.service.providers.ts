@@ -1,6 +1,6 @@
 import { DATA_SOURCE } from 'src/database/database.contracts';
 import { DataSource } from 'typeorm';
-import { VillageEntity } from './villages.entity';
+import { VillageEntity } from './entities/village.entity';
 import { VILLAGES_ENTITY_REPOSITORY } from './villages.service.contracts';
 
 export const villagesProviders = [

@@ -52,7 +52,7 @@ describe('VillagesService', () => {
 
             mockRepository.findOne.mockResolvedValue(village);
 
-            const result = await service.findById('1');
+            const result = await service.findById(1, '1');
 
             expect(result).toEqual(village);
             expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: '1' } });
@@ -61,7 +61,7 @@ describe('VillagesService', () => {
         it('should throw NotFoundException when village not found', async () => {
             mockRepository.findOne.mockResolvedValue(null);
 
-            await expect(service.findById('999')).rejects.toThrow(NotFoundException);
+            await expect(service.findById(1, '999')).rejects.toThrow(NotFoundException);
         });
     });
 
@@ -80,7 +80,7 @@ describe('VillagesService', () => {
             mockRepository.findOne.mockResolvedValue(village);
             mockRepository.save.mockResolvedValue({ ...village, isAutoScavengingEnabled: true });
 
-            const result = await service.toggleAutoScavenging('1');
+            const result = await service.toggleAutoScavenging(1, '1');
 
             expect(result).toEqual({
                 id: '1',
@@ -105,7 +105,7 @@ describe('VillagesService', () => {
                 { id: '2', name: 'B', coordinates: '200|200' },
             ];
 
-            const result = await service.syncVillages(input);
+            const result = await service.syncVillages(1, input);
             expect(result).toEqual({ added: 2, updated: 0, deleted: 0, total: 2 });
             expect(mockRepository.create).toHaveBeenCalledTimes(2);
             expect(mockRepository.save).toHaveBeenCalledTimes(2);
@@ -122,7 +122,7 @@ describe('VillagesService', () => {
                 { id: '1', name: 'A2', coordinates: '100|101' },
             ];
 
-            const result = await service.syncVillages(input);
+            const result = await service.syncVillages(1, input);
             expect(result).toEqual({ added: 0, updated: 1, deleted: 0, total: 1 });
             expect(mockRepository.save).toHaveBeenCalledTimes(1);
         });
@@ -139,7 +139,7 @@ describe('VillagesService', () => {
                 { id: '1', name: 'A', coordinates: '100|100' },
             ];
 
-            const result = await service.syncVillages(input);
+            const result = await service.syncVillages(1, input);
             expect(result).toEqual({ added: 0, updated: 0, deleted: 0, total: 1 });
             expect(mockRepository.save).toHaveBeenCalledTimes(1); // Zawsze save dla updatedAt
         });

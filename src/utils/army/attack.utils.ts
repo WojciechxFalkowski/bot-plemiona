@@ -201,7 +201,6 @@ export class AttackUtils {
 
                     if (owner !== 'Barbarzyńskie') {
                         this.logger.warn(`⚠️ Village is no longer barbarian! Current owner: "${owner}" (expected: "Barbarzyńskie")`);
-
                         return {
                             isValid: false,
                             owner,

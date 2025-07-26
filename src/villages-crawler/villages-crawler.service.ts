@@ -8,6 +8,8 @@ import { VillageData } from '@/crawler/pages/village-overview.page';
 import { VillageUtils } from '@/utils/village/village.utils';
 import { AuthUtils } from '@/utils/auth/auth.utils';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
+import { PlemionaCookiesService } from '@/plemiona-cookies';
+import { ServersService } from '@/servers';
 
 @Injectable()
 export class VillagesCrawlerService {
@@ -17,7 +19,9 @@ export class VillagesCrawlerService {
 
   constructor(
     private settingsService: SettingsService,
-    private configService: ConfigService
+    private plemionaCookiesService: PlemionaCookiesService,
+    private configService: ConfigService,
+    private serversService: ServersService
   ) {
     // Initialize credentials from environment variables with default values if not set
     this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -44,7 +48,7 @@ export class VillagesCrawlerService {
  * @param options - Browser options
  * @returns Promise with login and villages overview result
  */
-  public async getVillagesOverview(options?: { headless?: boolean }): Promise<{
+  public async getVillagesOverview(serverId: number, options?: { headless?: boolean }): Promise<{
     success: boolean;
     message?: string;
     villages?: Array<{
@@ -60,11 +64,13 @@ export class VillagesCrawlerService {
     const { browser, context, page } = await createBrowserPage({ headless });
 
     try {
+      const serverName = await this.serversService.getServerName(serverId);
       // Use AuthUtils for comprehensive login and world selection
       const loginResult = await AuthUtils.loginAndSelectWorld(
         page,
         this.credentials,
-        this.settingsService
+        this.plemionaCookiesService,
+        serverName
       );
 
       if (!loginResult.success || !loginResult.worldSelected) {

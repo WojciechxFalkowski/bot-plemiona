@@ -3,6 +3,7 @@ export { CreateSettingDecorators } from './create-setting.decorator';
 export { UpdateSettingDecorators } from './update-setting.decorator';
 export { DeleteSettingDecorators } from './delete-setting.decorator';
 export { GetAllKeysDecorators } from './get-all-keys.decorator';
+export { GetAllSettingsForServerDecorators } from './get-all-settings-for-server.decorator';
 export { GetPlemionaCookiesDecorators } from './get-plemiona-cookies.decorator';
 export { SetPlemionaCookiesDecorators } from './set-plemiona-cookies.decorator';
 export { UpdatePlemionaCookiesDecorators } from './update-plemiona-cookies.decorator';

@@ -2,6 +2,7 @@ import { BrowserContext, Page } from 'playwright';
 import { Logger } from '@nestjs/common';
 import { SettingsService } from '../../settings/settings.service';
 import { SettingsKey } from '../../settings/settings-keys.enum';
+import { PlemionaCookiesService } from '../../plemiona-cookies';
 import {
     PlemionaCookie,
     PlemionaCredentials,
@@ -22,20 +23,19 @@ export class AuthUtils {
 
     /**
      * Adds Plemiona cookies to the browser context.
-     * Fetches cookies from the database using SettingsService.
+     * Fetches cookies from the database using PlemionaCookiesService.
      * @param context - The Playwright BrowserContext object.
-     * @param settingsService - Service to fetch cookies from database
+     * @param plemionaCookiesService - Service to fetch cookies from database
      */
-    static async addPlemionaCookies(context: BrowserContext, settingsService: SettingsService): Promise<void> {
+    static async addPlemionaCookies(context: BrowserContext, plemionaCookiesService: PlemionaCookiesService): Promise<void> {
         try {
-            // Fetch cookies from settings
-            const cookiesData = await settingsService.getSetting<PlemionaCookie[]>(SettingsKey.PLEMIONA_COOKIES);
+            // Fetch cookies from plemiona cookies service
+            const cookiesData = await plemionaCookiesService.getCookies();
 
-            if (!cookiesData || cookiesData.length === 0) {
+            if (!cookiesData) {
                 throw new Error('No Plemiona cookies found in settings');
             }
 
-            // Transform cookies data from DB to the full format needed by Playwright
             const cookies = cookiesData.map(cookie => ({
                 ...cookie,
                 httpOnly: true,  // Default values for static properties
@@ -118,13 +118,14 @@ export class AuthUtils {
      * Also handles world selection.
      * @param page - The Playwright Page object
      * @param credentials - User credentials
-     * @param settingsService - Settings service for cookie retrieval
+     * @param plemionaCookiesService - Service for cookie retrieval
      * @param options - Additional login options
      */
     static async loginAndSelectWorld(
         page: Page,
         credentials: PlemionaCredentials,
-        settingsService: SettingsService,
+        plemionaCookiesService: PlemionaCookiesService,
+        serverName: string,
         options: LoginOptions = {}
     ): Promise<LoginResult> {
         const {
@@ -133,6 +134,8 @@ export class AuthUtils {
             loginTimeout = 15000,
             worldSelectionTimeout = 15000
         } = options;
+        // TODO trzeba wywalic serverName
+        // TODO trzeba zmienic na serverName z tabeli "servers"
 
         this.logger.log('Starting comprehensive login and world selection process');
 
@@ -148,7 +151,7 @@ export class AuthUtils {
             // Step 1: Try to add cookies (unless skipped or manual login forced)
             if (!skipCookies && !useManualLogin) {
                 try {
-                    await this.addPlemionaCookies(page.context(), settingsService);
+                    await this.addPlemionaCookies(page.context(), plemionaCookiesService);
                     cookiesAdded = true;
                     this.logger.log('Cookies added successfully');
                 } catch (cookieError) {
@@ -162,7 +165,7 @@ export class AuthUtils {
 
             // Step 3: Check if world selector is visible (indicates successful cookie login)
             const worldSelectorVisible = await page.isVisible(
-                this.PLEMIONA_WORLD_SELECTOR(credentials.targetWorld),
+                this.PLEMIONA_WORLD_SELECTOR(serverName),
                 { timeout: 5000 }
             );
 
@@ -178,7 +181,7 @@ export class AuthUtils {
                 // Wait a bit and check again for world selector
                 await page.waitForTimeout(2000);
                 const worldSelectorVisibleAfterLogin = await page.isVisible(
-                    this.PLEMIONA_WORLD_SELECTOR(credentials.targetWorld),
+                    this.PLEMIONA_WORLD_SELECTOR(serverName),
                     { timeout: 5000 }
                 );
 
@@ -188,7 +191,7 @@ export class AuthUtils {
             }
 
             // Step 5: Select the target world
-            await this.selectWorld(page, credentials.targetWorld, worldSelectionTimeout);
+            await this.selectWorld(page, serverName, worldSelectionTimeout);
             result.worldSelected = true;
             result.success = true;
 
@@ -231,9 +234,6 @@ export class AuthUtils {
         if (!credentials.password || credentials.password.trim() === '') {
             missingFields.push('password');
         }
-        if (!credentials.targetWorld || credentials.targetWorld.trim() === '') {
-            missingFields.push('targetWorld');
-        }
 
         // Additional validation rules
         if (credentials.username && credentials.username.length < 3) {
@@ -241,9 +241,6 @@ export class AuthUtils {
         }
         if (credentials.password && credentials.password.length < 5) {
             errors.push('Password must be at least 5 characters long');
-        }
-        if (credentials.targetWorld && !credentials.targetWorld.includes('Świat')) {
-            errors.push('Target world should be in format "Świat XXX"');
         }
 
         const isValid = missingFields.length === 0 && errors.length === 0;

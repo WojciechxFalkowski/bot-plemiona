@@ -515,8 +515,8 @@ export class VillageDetailPage {
      * Navigates to a specific village by ID
      * @param villageId - The village ID to navigate to
      */
-    async navigateToVillage(villageId: string): Promise<void> {
-        const villageUrl = `https://pl216.plemiona.pl/game.php?village=${villageId}&screen=main`;
+    async navigateToVillage(serverCode: string, villageId: string): Promise<void> {
+        const villageUrl = `https://${serverCode}.plemiona.pl/game.php?village=${villageId}&screen=main`;
         await this.page.goto(villageUrl, { waitUntil: 'networkidle' });
         await this.page.waitForTimeout(2000); // Wait for page to fully load
     }
@@ -525,7 +525,7 @@ export class VillageDetailPage {
      * Extracts building levels from the village main screen
      * @returns BuildingLevels object with all building levels
      */
-    async extractBuildingLevels(): Promise<BuildingLevels> {
+    async extractBuildingLevels(serverCode: string): Promise<BuildingLevels> {
         try {
             // Wait for buildings table to be visible
             await this.page.waitForSelector('#buildings', { timeout: 10000 });
@@ -725,7 +725,7 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check
      * @returns BuildingAvailability object with build status and details
      */
-    async checkBuildingBuildAvailability(buildingId: BuildingId | string): Promise<BuildingAvailability> {
+    async checkBuildingBuildAvailability(serverCode: string, buildingId: BuildingId | string): Promise<BuildingAvailability> {
         try {
             // Ensure we're on the main screen where buildings are visible
             const currentUrl = this.page.url();
@@ -741,7 +741,7 @@ export class VillageDetailPage {
             const villageId = villageIdMatch[1];
             if (!currentUrl.includes('screen=main')) {
                 console.log('Navigating to main screen to check building availability');
-                await this.navigateToVillage(villageId);
+                await this.navigateToVillage(serverCode, villageId);
             }
             // Wait for buildings table to be visible
             await this.page.waitForSelector('#buildings', { timeout: 10000 });
@@ -756,7 +756,7 @@ export class VillageDetailPage {
                 };
             }
             // Get current building level
-            const currentLevel = await this.getBuildingLevel(buildingId);
+            const currentLevel = await this.getBuildingLevel(serverCode, buildingId);
             // Check building availability using our helper method
             const availability = await this.checkBuildingAvailability(buildingRow, buildingId, currentLevel);
             // If we have an availableAt time, try to parse it to a Date object
@@ -800,7 +800,7 @@ export class VillageDetailPage {
      * Extracts current build queue
      * @returns Array of BuildQueueItem objects
      */
-    async extractBuildQueue(): Promise<BuildQueueItem[]> {
+    async extractBuildQueue(serverCode: string): Promise<BuildQueueItem[]> {
         try {
             // Get current village ID from URL for navigation purposes
             const currentUrl = this.page.url();
@@ -816,7 +816,7 @@ export class VillageDetailPage {
             // Ensure we're on the main screen where build queue is visible
             if (!currentUrl.includes('screen=main')) {
                 console.log('Navigating to main screen to access build queue');
-                await this.navigateToVillage(villageId);
+                await this.navigateToVillage(serverCode, villageId);
             }
 
             // Wait for build queue wrapper to be present
@@ -1513,7 +1513,7 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check (e.g., 'main', 'barracks', 'stable')
      * @returns Promise with building level (0 if not built)
      */
-    async getBuildingLevel(buildingId: BuildingId | string): Promise<number> {
+    async getBuildingLevel(serverCode: string, buildingId: BuildingId | string): Promise<number> {
         try {
             // Get current village ID from URL
             const currentUrl = this.page.url();
@@ -1529,7 +1529,7 @@ export class VillageDetailPage {
             // Ensure we're on the main screen where buildings are visible
             if (!currentUrl.includes('screen=main')) {
                 console.log('Navigating to main screen to check building level');
-                await this.navigateToVillage(villageId);
+                await this.navigateToVillage(serverCode, villageId);
             }
 
             // Wait for buildings table to be visible
@@ -1566,8 +1566,8 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check
      * @returns Promise with boolean indicating if building is built
      */
-    async isBuildingBuilt(buildingId: BuildingId | string): Promise<boolean> {
-        const level = await this.getBuildingLevel(buildingId);
+    async isBuildingBuilt(serverCode: string, buildingId: BuildingId | string): Promise<boolean> {
+        const level = await this.getBuildingLevel(serverCode, buildingId);
         return level > 0;
     }
 
@@ -1576,7 +1576,7 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check
      * @returns Promise with detailed building information
      */
-    async getBuildingInfo(buildingId: BuildingId | string): Promise<{
+    async getBuildingInfo(serverCode: string, buildingId: BuildingId | string): Promise<{
         id: string;
         level: number;
         isBuilt: boolean;
@@ -1585,7 +1585,7 @@ export class VillageDetailPage {
         maxLevel?: number;
     }> {
         try {
-            const level = await this.getBuildingLevel(buildingId);
+            const level = await this.getBuildingLevel(serverCode, buildingId);
             const config = getBuildingConfig(buildingId);
 
             return {
@@ -1612,14 +1612,14 @@ export class VillageDetailPage {
      * @param buildingId - The building ID to check requirements for
      * @returns Promise with requirements check result
      */
-    async checkBuildingRequirements(buildingId: BuildingId | string): Promise<{
+    async checkBuildingRequirements(serverCode: string, buildingId: BuildingId | string): Promise<{
         met: boolean;
         missingRequirements: BuildingRequirement[];
         currentLevels: BuildingLevels;
     }> {
         try {
             // Get all current building levels
-            const currentLevels = await this.extractBuildingLevels();
+            const currentLevels = await this.extractBuildingLevels(serverCode);
 
             // Check requirements using the helper function
             const requirementCheck = areBuildingRequirementsMet(buildingId, currentLevels);
@@ -1644,7 +1644,7 @@ export class VillageDetailPage {
      * Gets a list of all buildings that can be upgraded
      * @returns Promise with array of buildings that can be upgraded
      */
-    async getUpgradeableBuildingsList(): Promise<Array<{
+    async getUpgradeableBuildingsList(serverCode: string): Promise<Array<{
         id: string;
         name: string;
         currentLevel: number;
@@ -1662,11 +1662,11 @@ export class VillageDetailPage {
                 requirementsMet: boolean;
             }> = [];
 
-            const currentLevels = await this.extractBuildingLevels();
+            const currentLevels = await this.extractBuildingLevels(serverCode);
 
             // Check each building from our configuration
             for (const [_, buildingConfig] of Object.entries(TRIBAL_WARS_BUILDINGS)) {
-                const currentLevel = await this.getBuildingLevel(buildingConfig.id);
+                const currentLevel = await this.getBuildingLevel(serverCode, buildingConfig.id);
                 const requirementCheck = areBuildingRequirementsMet(buildingConfig.id, currentLevels);
 
                 const canUpgrade = currentLevel < buildingConfig.maxLevel;

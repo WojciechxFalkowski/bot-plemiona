@@ -16,13 +16,13 @@ import {
 export class ClerkAuthController {
   constructor(private readonly clerkAuthService: ClerkAuthService) {}
 
-  @Get('profile')
-  @ClerkAuth()
-  @GetProfileDecorators()
-  async getProfile(@CurrentUser() user: UserEntity): Promise<UserProfileDto> {
-    console.log('GET -> getProfile');
-    return this.clerkAuthService.getUserProfile(user.clerkUserId);
-  }
+  // @Get('profile')
+  // @ClerkAuth()
+  // @GetProfileDecorators()
+  // async getProfile(@CurrentUser() user: UserEntity): Promise<UserProfileDto> {
+  //   console.log('GET -> getProfile');
+  //   return this.clerkAuthService.getUserProfile(user.clerkUserId);
+  // }
 
   @Put('profile') 
   @ClerkAuth()
@@ -35,19 +35,19 @@ export class ClerkAuthController {
     return this.clerkAuthService.updateUserProfile(user.clerkUserId, updateData);
   }
 
-  @Post('verify')
-  @VerifyTokenDecorators()
-  async verifyToken(@Headers('authorization') authHeader: string): Promise<TokenVerificationDto> {
-    console.log('POST -> verifyToken');
-    if (!authHeader) {
-      throw new UnauthorizedException('No authorization header provided');
-    }
+  // @Post('verify')
+  // @VerifyTokenDecorators()
+  // async verifyToken(@Headers('authorization') authHeader: string): Promise<TokenVerificationDto> {
+  //   console.log('POST -> verifyToken');
+  //   if (!authHeader) {
+  //     throw new UnauthorizedException('No authorization header provided');
+  //   }
 
-    const [type, token] = authHeader.split(' ');
-    if (type !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Invalid authorization header format');
-    }
+  //   const [type, token] = authHeader.split(' ');
+  //   if (type !== 'Bearer' || !token) {
+  //     throw new UnauthorizedException('Invalid authorization header format');
+  //   }
 
-    return this.clerkAuthService.verifyToken(token);
-  }
+  //   return this.clerkAuthService.verifyToken(token);
+  // }
 } 

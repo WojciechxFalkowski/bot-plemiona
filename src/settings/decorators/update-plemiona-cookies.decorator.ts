@@ -1,6 +1,6 @@
 import { applyDecorators } from '@nestjs/common';
 import { ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
-import { PlemionaCookiesDto } from '../dto';
+import { PlemionaCookieDto } from '../dto';
 
 export function UpdatePlemionaCookiesDecorators() {
     return applyDecorators(
@@ -9,7 +9,7 @@ export function UpdatePlemionaCookiesDecorators() {
             description: 'Updates all Plemiona cookies needed for the bot to function. This will overwrite any existing cookies.'
         }),
         ApiBody({
-            type: PlemionaCookiesDto,
+            type: PlemionaCookieDto,
             description: 'The cookies data for Plemiona login'
         }),
         ApiResponse({

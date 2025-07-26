@@ -1,9 +1,13 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { ServerEntity } from '@/servers/entities/server.entity';
 
 @Entity('barbarian_villages')
 export class BarbarianVillageEntity {
     @PrimaryColumn()
     target: string; // Primary key - unique village target ID
+
+    @Column({ type: 'int' })
+    serverId: number;
 
     @Column()
     name: string;
@@ -22,4 +26,8 @@ export class BarbarianVillageEntity {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    @ManyToOne(() => ServerEntity, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'serverId' })
+    server: ServerEntity;
 } 

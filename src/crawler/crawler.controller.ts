@@ -27,9 +27,9 @@ export class CrawlerController {
     description: 'Manually starts the scavenging bot in visible mode (shows browser window)'
   })
   @ApiResponse({ status: 200, description: 'Bot started successfully' })
-  public async runScavengingVisible() {
+  public async runScavengingVisible(@Param('serverId') serverId: number) {
     this.logger.log('Manually triggered scavenging bot (visible browser)');
-    await this.crawlerService.runScavengingBot({ headless: false });
+    await this.crawlerService.runScavengingBot(serverId, { headless: false });
     return { message: 'Scavenging bot started in visible mode successfully' };
   }
 
@@ -43,9 +43,9 @@ export class CrawlerController {
     description: 'Manually starts the scavenging bot in headless mode (browser runs in background)'
   })
   @ApiResponse({ status: 200, description: 'Bot started successfully' })
-  public async runScavengingHeadless() {
+  public async runScavengingHeadless(@Param('serverId') serverId: number) {
     this.logger.log('Manually triggered scavenging bot (headless)');
-    await this.crawlerService.runScavengingBot({ headless: true });
+    await this.crawlerService.runScavengingBot(serverId, { headless: true });
     return { message: 'Scavenging bot started in headless mode successfully' };
   }
 

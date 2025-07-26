@@ -1,15 +1,16 @@
 // settings.controller.ts
-import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus, Logger, ParseIntPipe } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import { SettingsKey } from './settings-keys.enum';
-import { PlemionaCookieDto, PlemionaCookiesDto, AutoScavengingDto } from './dto';
+import { PlemionaCookieDto, PlemionaCookiesDto } from './dto';
 import {
     GetSettingDecorators,
     CreateSettingDecorators,
     UpdateSettingDecorators,
     DeleteSettingDecorators,
     GetAllKeysDecorators,
+    GetAllSettingsForServerDecorators,
     GetPlemionaCookiesDecorators,
     SetPlemionaCookiesDecorators,
     UpdatePlemionaCookiesDecorators,
@@ -41,123 +42,118 @@ export class SettingsController {
         };
     }
 
-    @Get(':key')
-    @GetSettingDecorators()
-    async getSetting(@Param('key') key: string) {
-        this.validateKey(key);
-        return this.settingsService.getSetting(SettingsKey[key]);
+    @Get(':serverId')
+    @GetAllSettingsForServerDecorators()
+    async getAllSettingsForServer(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Getting all settings for server ${serverId}`);
+        return this.settingsService.getAllSettingsForServer(serverId);
     }
 
-    @Post(':key')
-    @CreateSettingDecorators()
-    async createSetting(@Param('key') key: string, @Body() value: any) {
+    @Get(':serverId/:key')
+    @GetSettingDecorators()
+    async getSetting(@Param('serverId', ParseIntPipe) serverId: number, @Param('key') key: string) {
         this.validateKey(key);
+        this.logger.log(`Getting setting ${key} for server ${serverId}`);
+        return this.settingsService.getSetting(serverId, SettingsKey[key]);
+    }
+
+    @Post(':serverId/:key')
+    @CreateSettingDecorators()
+    async createSetting(@Param('serverId', ParseIntPipe) serverId: number, @Param('key') key: string, @Body() value: any) {
+        this.validateKey(key);
+        this.logger.log(`Creating setting ${key} for server ${serverId}`);
 
         // If this is for Plemiona cookies, validate the format
         if (key === 'PLEMIONA_COOKIES' && value.cookies) {
-            await this.settingsService.setSetting(SettingsKey[key], value.cookies);
+            await this.settingsService.setSetting(serverId, SettingsKey[key], value.cookies);
         } else {
-            await this.settingsService.setSetting(SettingsKey[key], value);
+            await this.settingsService.setSetting(serverId, SettingsKey[key], value);
         }
 
         return { message: 'Setting created successfully' };
     }
 
-    @Put(':key')
+    @Put(':serverId/:key')
     @UpdateSettingDecorators()
-    async updateSetting(@Param('key') key: string, @Body() value: any) {
+    async updateSetting(@Param('serverId', ParseIntPipe) serverId: number, @Param('key') key: string, @Body() value: any) {
         this.validateKey(key);
+        this.logger.log(`Updating setting ${key} for server ${serverId}`);
 
         // If this is for Plemiona cookies, validate the format
         if (key === 'PLEMIONA_COOKIES' && value.cookies) {
-            await this.settingsService.setSetting(SettingsKey[key], value.cookies);
+            await this.settingsService.setSetting(serverId, SettingsKey[key], value.cookies);
         } else {
-            await this.settingsService.setSetting(SettingsKey[key], value);
+            await this.settingsService.setSetting(serverId, SettingsKey[key], value);
         }
 
         return { message: 'Setting updated successfully' };
     }
 
-    @Delete(':key')
+    @Delete(':serverId/:key')
     @DeleteSettingDecorators()
-    async deleteSetting(@Param('key') key: string) {
+    async deleteSetting(@Param('serverId', ParseIntPipe) serverId: number, @Param('key') key: string) {
         this.validateKey(key);
-        await this.settingsService.deleteSetting(SettingsKey[key]);
+        this.logger.log(`Deleting setting ${key} for server ${serverId}`);
+        await this.settingsService.deleteSetting(serverId, SettingsKey[key]);
         return { message: 'Setting deleted successfully' };
     }
 
     // Dedicated endpoints for Plemiona cookies
 
-    @Get('plemiona/cookies')
+    @Get(':serverId/plemiona/cookies')
     @GetPlemionaCookiesDecorators()
-    async getPlemionaCookies() {
-        const cookies = await this.settingsService.getSetting<PlemionaCookieDto[]>(SettingsKey.PLEMIONA_COOKIES);
+    async getPlemionaCookies(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Getting Plemiona cookies for server ${serverId}`);
+        const cookies = await this.settingsService.getSetting<PlemionaCookieDto[]>(serverId, SettingsKey.PLEMIONA_COOKIES);
         return { cookies };
     }
 
-    @Post('plemiona/cookies')
+    @Post(':serverId/plemiona/cookies')
     @SetPlemionaCookiesDecorators()
-    async setPlemionaCookies(@Body() data: PlemionaCookiesDto) {
-        if (!data.cookies || !Array.isArray(data.cookies) || data.cookies.length === 0) {
+    async setPlemionaCookies(@Param('serverId', ParseIntPipe) serverId: number, @Body() data: PlemionaCookieDto) {
+        this.logger.log(`Setting Plemiona cookies for server ${serverId}`);
+
+        if (!data) {
             throw new HttpException('Invalid cookies data: must provide an array of cookies', HttpStatus.BAD_REQUEST);
         }
 
-        // Validate required cookies
-        const requiredCookies = ['pl_auth', 'cid', 'sid', 'global_village_id'];
-        const cookieNames = data.cookies.map(c => c.name);
-
-        const missingCookies = requiredCookies.filter(name => !cookieNames.includes(name));
-        if (missingCookies.length > 0) {
-            throw new HttpException(
-                `Missing required cookies: ${missingCookies.join(', ')}`,
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        await this.settingsService.setSetting(SettingsKey.PLEMIONA_COOKIES, data.cookies);
+        await this.settingsService.setSetting(serverId, SettingsKey.PLEMIONA_COOKIES, data);
         return { message: 'Plemiona cookies saved successfully' };
     }
 
-    @Put('plemiona/cookies')
+    @Put(':serverId/plemiona/cookies')
     @UpdatePlemionaCookiesDecorators()
-    async updatePlemionaCookies(@Body() data: PlemionaCookiesDto) {
-        if (!data.cookies || !Array.isArray(data.cookies) || data.cookies.length === 0) {
+    async updatePlemionaCookies(@Param('serverId', ParseIntPipe) serverId: number, @Body() data: PlemionaCookieDto) {
+        this.logger.log(`Updating Plemiona cookies for server ${serverId}`);
+
+        if (!data) {
             throw new HttpException('Invalid cookies data: must provide an array of cookies', HttpStatus.BAD_REQUEST);
         }
 
-        // Validate required cookies
-        const requiredCookies = ['pl_auth', 'cid', 'sid', 'global_village_id'];
-        const cookieNames = data.cookies.map(c => c.name);
-
-        const missingCookies = requiredCookies.filter(name => !cookieNames.includes(name));
-        if (missingCookies.length > 0) {
-            throw new HttpException(
-                `Missing required cookies: ${missingCookies.join(', ')}`,
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        await this.settingsService.setSetting(SettingsKey.PLEMIONA_COOKIES, data.cookies);
+        await this.settingsService.setSetting(serverId, SettingsKey.PLEMIONA_COOKIES, data);
         return { message: 'Plemiona cookies updated successfully' };
     }
 
-    @Delete('plemiona/cookies')
+    @Delete(':serverId/plemiona/cookies')
     @DeletePlemionaCookiesDecorators()
-    async deletePlemionaCookies() {
-        await this.settingsService.deleteSetting(SettingsKey.PLEMIONA_COOKIES);
+    async deletePlemionaCookies(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Deleting Plemiona cookies for server ${serverId}`);
+        await this.settingsService.deleteSetting(serverId, SettingsKey.PLEMIONA_COOKIES);
         return { message: 'Plemiona cookies deleted successfully' };
     }
 
-    @Get('scavenging/auto')
+    @Get(':serverId/scavenging/auto')
     @GetAutoScavengingDecorators()
-    async getAutoScavenging() {
-        const setting = await this.settingsService.getSetting<{ value: boolean }>(SettingsKey.AUTO_SCAVENGING_ENABLED);
+    async getAutoScavenging(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Getting auto-scavenging setting for server ${serverId}`);
+        const setting = await this.settingsService.getSetting<{ value: boolean }>(serverId, SettingsKey.AUTO_SCAVENGING_ENABLED);
         return { enabled: setting?.value !== undefined ? setting.value : false };
     }
 
-    @Put('scavenging/auto')
+    @Put(':serverId/scavenging/auto')
     @UpdateAutoScavengingDecorators()
-    async updateAutoScavenging(@Body() data: any) {
+    async updateAutoScavenging(@Param('serverId', ParseIntPipe) serverId: number, @Body() data: any) {
+        this.logger.log(`Updating auto-scavenging for server ${serverId}`);
         // Log the entire request body for debugging
         this.logger.log(`Received request body: ${JSON.stringify(data)}`);
 
@@ -183,7 +179,7 @@ export class SettingsController {
             }
         }
 
-        await this.settingsService.setSetting(SettingsKey.AUTO_SCAVENGING_ENABLED, { value: enabledValue });
+        await this.settingsService.setSetting(serverId, SettingsKey.AUTO_SCAVENGING_ENABLED, { value: enabledValue });
         return {
             message: `Auto-scavenging has been ${enabledValue ? 'enabled' : 'disabled'} successfully`,
             enabled: enabledValue

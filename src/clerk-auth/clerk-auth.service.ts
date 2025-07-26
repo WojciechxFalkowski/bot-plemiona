@@ -18,49 +18,49 @@ export class ClerkAuthService {
         private readonly settingsService: SettingsService,
     ) { }
 
-    async verifyToken(token: string): Promise<TokenVerificationDto> {
-        try {
-            const clerkSecretKey = await this.settingsService.getSetting<{ value: string }>(SettingsKey.CLERK_SECRET_KEY);
-            if (!clerkSecretKey || !clerkSecretKey.value) {
-                throw new Error('CLERK_SECRET_KEY is not set');
-            }
+    // async verifyToken(token: string): Promise<TokenVerificationDto> {
+    //     try {
+    //         const clerkSecretKey = await this.settingsService.getSetting<{ value: string }>(SettingsKey.CLERK_SECRET_KEY);
+    //         if (!clerkSecretKey || !clerkSecretKey.value) {
+    //             throw new Error('CLERK_SECRET_KEY is not set');
+    //         }
 
-            const payload = await verifyToken(token, {
-                secretKey: clerkSecretKey?.value,
-            });
+    //         const payload = await verifyToken(token, {
+    //             secretKey: clerkSecretKey?.value,
+    //         });
 
-            return {
-                valid: true,
-                clerkUserId: payload.sub as string,
-                email: payload.email as string,
-            };
-        } catch (error) {
-            console.log('error', error);
-            return {
-                valid: false,
-            };
-        }
-    }
+    //         return {
+    //             valid: true,
+    //             clerkUserId: payload.sub as string,
+    //             email: payload.email as string,
+    //         };
+    //     } catch (error) {
+    //         console.log('error', error);
+    //         return {
+    //             valid: false,
+    //         };
+    //     }
+    // }
 
-    async getUserProfile(clerkUserId: string): Promise<UserProfileDto> {
-        const user = await this.userRepository.findOne({
-            where: { clerkUserId },
-        });
+    // async getUserProfile(clerkUserId: string): Promise<UserProfileDto> {
+    //     const user = await this.userRepository.findOne({
+    //         where: { clerkUserId },
+    //     });
 
-        if (!user) {
-            throw new NotFoundException('User not found');
-        }
+    //     if (!user) {
+    //         throw new NotFoundException('User not found');
+    //     }
 
-        return {
-            id: user.id,
-            clerkUserId: user.clerkUserId,
-            email: user.email,
-            gameNick: user.gameNick,
-            gameServer: user.gameServer,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt,
-        };
-    }
+    //     return {
+    //         id: user.id,
+    //         clerkUserId: user.clerkUserId,
+    //         email: user.email,
+    //         gameNick: user.gameNick,
+    //         gameServer: user.gameServer,
+    //         createdAt: user.createdAt,
+    //         updatedAt: user.updatedAt,
+    //     };
+    // }
 
     async updateUserProfile(
         clerkUserId: string,

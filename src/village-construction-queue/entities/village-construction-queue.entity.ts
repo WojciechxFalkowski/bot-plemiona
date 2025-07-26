@@ -1,5 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
-import { VillageEntity } from '../../villages/villages.entity';
+import { VillageEntity } from '../../villages/entities/village.entity';
+import { ServerEntity } from '../../servers/entities/server.entity';
 
 export enum ConstructionQueueStatus {
     PENDING = 'pending',
@@ -11,6 +12,9 @@ export enum ConstructionQueueStatus {
 export class VillageConstructionQueueEntity {
     @PrimaryGeneratedColumn()
     id: number;
+
+    @Column({ type: 'int' })
+    serverId: number;
 
     @Column({ type: 'varchar', length: 255 })
     @Index()
@@ -43,4 +47,9 @@ export class VillageConstructionQueueEntity {
     @ManyToOne(() => VillageEntity, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'villageId' })
     village: VillageEntity;
+
+    // Relacja do Server
+    @ManyToOne(() => ServerEntity, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'serverId' })
+    server: ServerEntity;
 } 

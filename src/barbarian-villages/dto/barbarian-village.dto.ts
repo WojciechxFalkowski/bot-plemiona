@@ -13,6 +13,13 @@ export class BarbarianVillageDto {
     target: string;
 
     @ApiProperty({
+        example: 1,
+        description: 'Server ID where this barbarian village exists',
+        required: true
+    })
+    serverId: number;
+
+    @ApiProperty({
         example: 'Wioska barbarzyńska',
         description: 'Name of the barbarian village',
         required: true

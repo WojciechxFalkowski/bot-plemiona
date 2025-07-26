@@ -16,16 +16,16 @@ export class BuildingCrawlerController {
     /**
      * Start the building crawler
      */
-    @Post('start')
+    @Post('start/:serverId')
     @ApiOperation({ summary: 'Start the building crawler' })
     @SwaggerApiResponse({
         status: 200,
         description: 'Crawler started successfully',
         type: SuccessResponse
     })
-    async startCrawler() {
+    async startCrawler(@Param('serverId') serverId: number) {
         try {
-            await this.buildingCrawlerService.start();
+            await this.buildingCrawlerService.start(serverId);
 
             return { success: true, message: 'Building crawler started successfully' };
         } catch (error) {

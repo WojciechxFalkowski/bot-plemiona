@@ -23,43 +23,45 @@ export class ClerkAuthGuard implements CanActivate {
   ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
-    const token = this.extractTokenFromHeader(request);
+  //   const request = context.switchToHttp().getRequest();
+  //   const token = this.extractTokenFromHeader(request);
 
-    if (!token) {
-      throw new UnauthorizedException('No token provided');
-    }
+  //   if (!token) {
+  //     throw new UnauthorizedException('No token provided');
+  //   }
 
-    try {
-      // Verify token with Clerk
-      const clerkSecretKey = await this.settingsService.getSetting<{ value: string }>(SettingsKey.CLERK_SECRET_KEY);
-      if (!clerkSecretKey || !clerkSecretKey.value) {
-        throw new UnauthorizedException('CLERK_SECRET_KEY is not set');
-      }
-      const payload = await verifyToken(token, {
-        secretKey: clerkSecretKey.value,
-      });
+  //   try {
+  //     // Verify token with Clerk
+  //     const clerkSecretKey = await this.settingsService.getSetting<{ value: string }>(SettingsKey.CLERK_SECRET_KEY);
+  //     if (!clerkSecretKey || !clerkSecretKey.value) {
+  //       throw new UnauthorizedException('CLERK_SECRET_KEY is not set');
+  //     }
+  //     const payload = await verifyToken(token, {
+  //       secretKey: clerkSecretKey.value,
+  //     });
 
-      // Find or create user in database
-      let user = await this.userRepository.findOne({
-        where: { clerkUserId: payload.sub },
-      });
+  //     // Find or create user in database
+  //     let user = await this.userRepository.findOne({
+  //       where: { clerkUserId: payload.sub },
+  //     });
 
-      if (!user) {
-        // Create new user if doesn't exist
-        user = this.userRepository.create({
-          clerkUserId: payload.sub as string,
-          email: (payload.email as string) || '',
-        });
-        await this.userRepository.save(user);
-      }
+  //     if (!user) {
+  //       // Create new user if doesn't exist
+  //       user = this.userRepository.create({
+  //         clerkUserId: payload.sub as string,
+  //         email: (payload.email as string) || '',
+  //       });
+  //       await this.userRepository.save(user);
+  //     }
 
-      // Attach user to request
-      request.user = user;
-      return true;
-    } catch (error) {
-      throw new UnauthorizedException('Invalid token');
-    }
+  //     // Attach user to request
+  //     request.user = user;
+  //     return true;
+  //   } catch (error) {
+  //     throw new UnauthorizedException('Invalid token');
+  //   }
+
+  return false;
   }
 
   private extractTokenFromHeader(request: any): string | undefined {

@@ -4,7 +4,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0001',
             buildingId: 'main',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'wood-level-1': {
@@ -12,7 +13,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0001',
             buildingId: 'wood',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'stone-level-1': {
@@ -20,7 +22,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0001',
             buildingId: 'stone',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'iron-level-1': {
@@ -28,7 +31,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0001',
             buildingId: 'iron',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'farm-level-1': {
@@ -36,7 +40,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0002',
             buildingId: 'farm',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'storage-level-1': {
@@ -44,7 +49,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0002',
             buildingId: 'storage',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'hide-level-1': {
@@ -52,7 +58,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0002',
             buildingId: 'hide',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'place-level-1': {
@@ -60,7 +67,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0002',
             buildingId: 'place',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'barracks-level-1': {
@@ -68,7 +76,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0003',
             buildingId: 'barracks',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'stable-level-1': {
@@ -76,7 +85,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0003',
             buildingId: 'stable',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'garage-level-1': {
@@ -84,7 +94,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0003',
             buildingId: 'garage',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'smith-level-1': {
@@ -92,7 +103,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0003',
             buildingId: 'smith',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'wall-level-1': {
@@ -100,7 +112,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0004',
             buildingId: 'wall',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'market-level-1': {
@@ -108,7 +121,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0004',
             buildingId: 'market',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'snob-level-1': {
@@ -116,7 +130,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0004',
             buildingId: 'snob',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'church-level-1': {
@@ -124,7 +139,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0005',
             buildingId: 'church',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'first_church-level-1': {
@@ -132,7 +148,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0005',
             buildingId: 'first_church',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'watchtower-level-1': {
@@ -140,7 +157,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0005',
             buildingId: 'watchtower',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     },
     'statue-level-1': {
@@ -148,7 +166,8 @@ export const ApiExamplesAddToQueue = {
         value: {
             villageName: '0005',
             buildingId: 'statue',
-            targetLevel: 1
+            targetLevel: 1,
+            serverId: 216
         }
     }
 }; 

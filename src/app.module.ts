@@ -13,6 +13,8 @@ import { VillageConstructionQueueModule } from './village-construction-queue/vil
 import { ClerkAuthModule } from './clerk-auth/clerk-auth.module';
 import { BarbarianVillagesModule } from './barbarian-villages/barbarian-villages.module';
 import { BuildingsModule } from './buildings/buildings.module';
+import { ServersModule } from './servers/servers.module';
+import { PlemionaCookiesModule } from './plemiona-cookies';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { BuildingsModule } from './buildings/buildings.module';
     ClerkAuthModule,
     BarbarianVillagesModule,
     BuildingsModule,
+    ServersModule,
+		PlemionaCookiesModule
   ],
   controllers: [AppController],
   providers: [AppService],

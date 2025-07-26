@@ -8,6 +8,8 @@ import { SettingsKey } from '../settings/settings-keys.enum';
 import { createBrowserPage } from '../utils/browser.utils';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { AuthUtils } from '@/utils/auth/auth.utils';
+import { ServersService } from '@/servers';
+import { PlemionaCookiesService } from '@/plemiona-cookies';
 
 // Interface for Plemiona cookie
 interface PlemionaCookie {
@@ -42,7 +44,9 @@ export class BuildingCrawlerService implements OnModuleInit {
 
     constructor(
         private settingsService: SettingsService,
-        private configService: ConfigService
+        private configService: ConfigService,
+        private serversService: ServersService,
+        private plemionaCookiesService: PlemionaCookiesService
     ) {
         // Initialize credentials from environment variables with default values if not set
         this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -69,14 +73,14 @@ export class BuildingCrawlerService implements OnModuleInit {
      * Start the building crawler
      * @param options - Browser options
      */
-    async start(options?: { headless?: boolean }): Promise<void> {
+    async start(serverId: number, options?: { headless?: boolean }): Promise<void> {
         this.logger.log(`Starting Plemiona Building Bot for user: ${this.credentials.username}`);
         const { browser, context, page } = await createBrowserPage(options);
 
         try {
             let cookiesAdded = false;
             try {
-                await this.addPlemionaCookies(context);
+                await this.addPlemionaCookies(context, serverId);
                 cookiesAdded = true;
             } catch (cookieError) {
                 this.logger.warn('Failed to add cookies. Will attempt manual login.', cookieError);
@@ -86,7 +90,8 @@ export class BuildingCrawlerService implements OnModuleInit {
             await page.goto(this.PLEMIONA_LOGIN_URL, { waitUntil: 'networkidle' });
             this.logger.log(`Navigated to ${this.PLEMIONA_LOGIN_URL}`);
 
-            const worldSelectorVisible = await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.credentials.targetWorld));
+            const server = await this.serversService.findById(serverId);
+            const worldSelectorVisible = await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(server.serverName));
 
             if (worldSelectorVisible && cookiesAdded) {
                 this.logger.log('Login via cookies appears successful (world selector visible).');
@@ -105,7 +110,7 @@ export class BuildingCrawlerService implements OnModuleInit {
                     this.logger.log('World page loaded.');
 
                     // --- Start the building process instead of scavenging ---
-                    await this.performBuilding(page);
+                    await this.performBuilding(page, serverId);
 
                 } catch (worldSelectionOrBuildingError) {
                     this.logger.error(`Error during world selection or building: ${worldSelectionOrBuildingError}`);
@@ -126,7 +131,7 @@ export class BuildingCrawlerService implements OnModuleInit {
      * Performs the building process - initializes the queue manager and processes the building queue
      * @param page - The Playwright page instance
      */
-    private async performBuilding(page: Page): Promise<void> {
+    private async performBuilding(page: Page, serverId: number): Promise<void> {
         this.page = page; // Store the page for later use
 
         try {
@@ -160,7 +165,7 @@ export class BuildingCrawlerService implements OnModuleInit {
             this.isRunning = true;
 
             // Schedule the next run
-            this.scheduleNextRun();
+            this.scheduleNextRun(serverId);
 
         } catch (error) {
             this.logger.error('Error during building process:', error);
@@ -203,10 +208,10 @@ export class BuildingCrawlerService implements OnModuleInit {
      * Add Plemiona cookies to the browser context
      * @param context - Browser context to add cookies to
      */
-    private async addPlemionaCookies(context: BrowserContext): Promise<void> {
+    private async addPlemionaCookies(context: BrowserContext, serverId: number): Promise<void> {
         try {
-            // Fetch cookies from settings
-            const cookiesData = await this.settingsService.getSetting<PlemionaCookie[]>(SettingsKey.PLEMIONA_COOKIES);
+            // Fetch cookies from plemiona cookies service
+            const cookiesData = await this.plemionaCookiesService.getCookies();
 
             if (!cookiesData || cookiesData.length === 0) {
                 throw new Error('No Plemiona cookies found in settings');
@@ -233,7 +238,7 @@ export class BuildingCrawlerService implements OnModuleInit {
      * Schedule the next run with a random delay between min and max interval
      * @param fallbackDelaySeconds - Optional fallback delay in seconds
      */
-    private scheduleNextRun(fallbackDelaySeconds: number = 300): void {
+    private scheduleNextRun(serverId: number, fallbackDelaySeconds: number = 300): void {
         // Calculate random delay between minInterval and maxInterval
         const minDelay = this.minIntervalMinutes * 60 * 1000;
         const maxDelay = this.maxIntervalMinutes * 60 * 1000;
@@ -244,7 +249,7 @@ export class BuildingCrawlerService implements OnModuleInit {
 
         this.logger.log(`Scheduling next run in ${minutes}m ${seconds}s`);
 
-        this.timerId = setTimeout(() => this.start(), delay);//delay
+        this.timerId = setTimeout(() => this.start(serverId), delay);//delay
     }
 
     /**

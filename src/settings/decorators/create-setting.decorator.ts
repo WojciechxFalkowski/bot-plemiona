@@ -43,7 +43,7 @@ export function CreateSettingDecorators() {
                 AUTO_CONSTRUCTION_QUEUE_ENABLED: {
                     summary: 'Auto construction queue setting',
                     description: 'Object with enabled boolean property for auto construction queue',
-                    value: { value: false }
+                    value: { value: true }
                 },
                 CRAWLER_ORCHESTRATOR_ENABLED: {
                     summary: 'Crawler orchestrator setting',

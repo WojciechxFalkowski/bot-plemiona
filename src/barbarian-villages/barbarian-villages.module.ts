@@ -5,9 +5,11 @@ import { SettingsModule } from '../settings/settings.module';
 import { BarbarianVillagesController } from './barbarian-villages.controller';
 import { BarbarianVillagesService } from './barbarian-villages.service';
 import { barbarianVillagesProviders } from './barbarian-villages.service.providers';
+import { PlemionaCookiesModule } from '@/plemiona-cookies';
+import { ServersModule } from '@/servers';
 
 @Module({
-  imports: [DatabaseModule, ConfigModule, SettingsModule],
+  imports: [DatabaseModule, ConfigModule, SettingsModule, PlemionaCookiesModule, ServersModule],
   controllers: [BarbarianVillagesController],
   providers: [...barbarianVillagesProviders, BarbarianVillagesService],
   exports: [BarbarianVillagesService],

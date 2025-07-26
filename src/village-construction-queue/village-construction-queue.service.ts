@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, ConflictException, NotFoundException, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { VillageConstructionQueueEntity } from './entities/village-construction-queue.entity';
-import { VillageEntity } from '../villages/villages.entity';
+import { VillageEntity } from '../villages/entities/village.entity';
 import { CreateConstructionQueueDto } from './dto/create-construction-queue.dto';
 import { VillageDetailPage, getBuildingConfig, areBuildingRequirementsMet, TRIBAL_WARS_BUILDINGS, BuildingAvailability } from '../crawler/pages/village-detail.page';
 import { Page } from 'playwright';
@@ -15,6 +15,8 @@ import { VillageResponseDto } from '@/villages/dto';
 import { VillagesService } from '@/villages/villages.service';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { AuthUtils } from '@/utils/auth/auth.utils';
+import { PlemionaCookiesService } from '@/plemiona-cookies';
+import { ServersService } from '@/servers';
 
 @Injectable()
 export class VillageConstructionQueueService implements OnModuleInit, OnModuleDestroy {
@@ -41,7 +43,9 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         @Inject(VILLAGES_ENTITY_REPOSITORY)
         private readonly villageRepository: Repository<VillageEntity>,
         private settingsService: SettingsService,
-        private configService: ConfigService
+        private plemionaCookiesService: PlemionaCookiesService,
+        private configService: ConfigService,
+        private serversService: ServersService
     ) {
         // Initialize credentials from environment variables with default values if not set
         this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -78,34 +82,34 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * Uruchamia procesor kolejki budowy który w losowych odstępach sprawdza bazę danych
      * i próbuje zrealizować najstarsze budynki z kolejki
      */
-    private startConstructionQueueProcessor(): void {
+    private startConstructionQueueProcessor(serverId: number): void {
         this.logger.log(`Starting construction queue processor with random interval: ${this.MIN_INTERVAL / 1000 / 60}-${this.MAX_INTERVAL / 1000 / 60} minutes`);
 
         // Uruchom od razu przy starcie (nie czekaj pierwszego interwału)
         this.logger.log('🚀 Running initial queue processing...');
-        this.processAndCheckConstructionQueue().catch(error => {
+        this.processAndCheckConstructionQueue(serverId).catch(error => {
             this.logger.error('Error during initial queue processing:', error);
         });
 
         // Następnie ustaw losowy interwał
-        this.scheduleNextExecution();
+        this.scheduleNextExecution(serverId);
     }
 
     /**
      * Planuje następne wykonanie procesora w losowym czasie
      */
-    private scheduleNextExecution(): void {
+    private scheduleNextExecution(serverId: number): void {
         const nextInterval = this.getRandomInterval();
         const nextMinutes = Math.round(nextInterval / 1000 / 60 * 10) / 10;
         this.logger.log(`⏰ Next execution scheduled in ${nextMinutes} minutes`);
 
         this.queueProcessorIntervalId = setTimeout(async () => {
             try {
-                await this.processAndCheckConstructionQueue();
+                await this.processAndCheckConstructionQueue(serverId);
             } catch (error) {
                 this.logger.error('Error during construction queue processing:', error);
             }
-            this.scheduleNextExecution(); // Rekursywnie zaplanuj następne
+            this.scheduleNextExecution(serverId); // Rekursywnie zaplanuj następne
         }, nextInterval);
     }
 
@@ -116,10 +120,11 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * 3. Dla każdej wioski używa scrappera do sprawdzenia czy można budować
      * 4. Loguje informacje o możliwych budowach
      */
-    public async processAndCheckConstructionQueue(): Promise<void> {
+    public async processAndCheckConstructionQueue(serverId: number): Promise<void> {
         this.logger.log('🔄 Processing construction queue from database...');
 
         try {
+            const serverCode = await this.serversService.findById(serverId).then(server => server.serverCode);
             // 1. Pobierz najstarsze budynki per wioska (FIFO)
             const buildingsToProcess = await this.getOldestBuildingPerVillage();
 
@@ -132,7 +137,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
             // 2. Zaloguj się do gry (jedna sesja dla całego batch'a)
             this.logger.log('🔐 Creating browser session and logging in...');
-            const { browser, context, page } = await this.createBrowserSession();
+            const { browser, context, page } = await this.createBrowserSession(serverId);
 
             try {
                 // 3. Przetworz każdy budynek sekwencyjnie
@@ -145,7 +150,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
                     this.logger.log(`🏘️  Processing village ${building.village?.name || building.villageId} (${processedCount}/${buildingsToProcess.length}): ${building.buildingName} Level ${building.targetLevel}`);
 
                     try {
-                        const result = await this.processSingleBuilding(building, page);
+                        const result = await this.processSingleBuilding(serverCode, building, page);
                         if (result.success) {
                             successCount++;
                         }
@@ -194,14 +199,16 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         // === ZAAWANSOWANA WALIDACJA (z scrappowaniem) ===
 
         // 4. Stwórz sesję przeglądarki do scrappowania danych z gry
-        const { browser, context, page } = await this.createBrowserSession();
+        const { browser, context, page } = await this.createBrowserSession(dto.serverId);
 
         try {
             // 5. Sprawdź wymagania budynku używając danych z gry
-            await this.validateBuildingRequirementsWithScraping(dto.villageId, dto.buildingId, page);
+            await this.validateBuildingRequirementsWithScraping(dto.villageId, dto.buildingId, dto.serverId, page);
 
             // 6. Sprawdź ciągłość poziomów (gra + budowa + baza)
-            await this.validateLevelContinuity(dto.villageId, dto.buildingId, dto.targetLevel, buildingConfig.name, page);
+            const serverCode = await this.serversService.findById(dto.serverId).then(server => server.serverCode);
+
+            await this.validateLevelContinuity(serverCode, dto.villageId, dto.buildingId, dto.targetLevel, buildingConfig.name, page);
 
         } finally {
             // Zawsze zamykaj przeglądarkę
@@ -300,13 +307,14 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * @returns Obiekt z przeglądarką, kontekstem i stroną
      * @throws BadRequestException jeśli logowanie się nie powiodło
      */
-    private async createBrowserSession() {
+    private async createBrowserSession(serverId: number) {
         const { browser, context, page } = await createBrowserPage({ headless: true });
-
+        const serverName = await this.serversService.getServerName(serverId);
         const loginResult = await AuthUtils.loginAndSelectWorld(
             page,
             this.credentials,
-            this.settingsService
+            this.plemionaCookiesService,
+            serverName
         );
 
         if (!loginResult.success || !loginResult.worldSelected) {
@@ -332,14 +340,15 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     private async validateBuildingRequirementsWithScraping(
         villageId: string,
         buildingId: string,
+        serverId: number,
         page: Page
     ): Promise<void> {
         try {
             const villageDetailPage = new VillageDetailPage(page);
-            await villageDetailPage.navigateToVillage(villageId);
-
+            const serverCode = await this.serversService.findById(serverId).then(server => server.serverCode);
+            await villageDetailPage.navigateToVillage(serverCode, villageId);
             // Sprawdź wymagania budynku używając aktualnych danych z gry
-            const requirementsCheck = await villageDetailPage.checkBuildingRequirements(buildingId);
+            const requirementsCheck = await villageDetailPage.checkBuildingRequirements(serverCode, buildingId);
 
             if (!requirementsCheck.met) {
                 const missingReqs = requirementsCheck.missingRequirements
@@ -381,6 +390,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * @throws BadRequestException jeśli nie można dodać budynku na tym poziomie
      */
     private async validateLevelContinuity(
+        serverCode: string,
         villageId: string,
         buildingId: string,
         targetLevel: number,
@@ -389,7 +399,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     ): Promise<void> {
         try {
             // 1. Pobierz wszystkie potrzebne dane
-            const gameData = await this.scrapeVillageBuildingData(villageId, page);
+            const gameData = await this.scrapeVillageBuildingData(serverCode, villageId, page);
             const databaseQueue = await this.getDatabaseQueue(villageId, buildingId);
 
             // 2. Oblicz następny dozwolony poziom
@@ -424,16 +434,21 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     // METODY SCRAPOWANIA DANYCH Z GŁY
     // ==============================
 
-    public async scrapeAllVillagesQueue(): Promise<{
+    public async scrapeAllVillagesQueue(serverId: number): Promise<{
         villageInfo: VillageResponseDto;
         buildingLevels: BuildingLevels;
         buildQueue: BuildQueueItem[];
     }[]> {
-        const { browser, context, page } = await this.createBrowserSession();
+        const { browser, context, page } = await this.createBrowserSession(serverId);
+        const server = await this.serversService.findById(serverId);
+        const serverCode = server.serverCode;
+        const serverName = server.serverName;
+
         const loginResult = await AuthUtils.loginAndSelectWorld(
             page,
             this.credentials,
-            this.settingsService
+            this.plemionaCookiesService,
+            serverName
         );
         if (!loginResult.success || !loginResult.worldSelected) {
             await browser.close();
@@ -448,7 +463,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         }[] = [];
         for (const village of villages) {
             const villageResponseDto = this.villagesService.mapToResponseDto(village);
-            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(village.id, page);
+            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverCode, village.id, page);
             data.push({ villageInfo: villageResponseDto, buildingLevels, buildQueue });
         }
         return data;
@@ -459,7 +474,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * @param villageName Nazwa wioski (np. "0001") 
      * @returns Dane o kolejce budowy dla danej wioski
      */
-    public async scrapeVillageQueue(villageName: string): Promise<{
+    public async scrapeVillageQueue(serverId: number, villageName: string): Promise<{
         villageInfo: VillageResponseDto;
         buildingLevels: BuildingLevels;
         buildQueue: BuildQueueItem[];
@@ -467,17 +482,22 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         this.logger.log(`Scraping queue for village: ${villageName}`);
 
         // Znajdź wioskę po nazwie
-        const village = await this.villagesService.findByName(villageName);
+        const village = await this.villagesService.findByName(serverId, villageName);
         if (!village) {
             throw new NotFoundException(`Village with name "${villageName}" not found`);
         }
 
-        const { browser, context, page } = await this.createBrowserSession();
+        const server = await this.serversService.findById(serverId);
+        const serverCode = server.serverCode;
+        const serverName = server.serverName;
+
+        const { browser, context, page } = await this.createBrowserSession(serverId);
         try {
             const loginResult = await AuthUtils.loginAndSelectWorld(
                 page,
                 this.credentials,
-                this.settingsService
+                this.plemionaCookiesService,
+                serverName
             );
             if (!loginResult.success || !loginResult.worldSelected) {
                 await browser.close();
@@ -485,7 +505,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
             }
 
             const villageResponseDto = this.villagesService.mapToResponseDto(village);
-            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(village.id, page);
+            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverCode, village.id, page);
 
             this.logger.log(`Successfully scraped queue for village "${villageName}" (ID: ${village.id})`);
 
@@ -509,15 +529,15 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * @param page Strona przeglądarki
      * @returns Dane z gry (poziomy budynków i kolejka budowy)
      */
-    private async scrapeVillageBuildingData(villageId: string, page: Page) {
+    private async scrapeVillageBuildingData(serverCode: string, villageId: string, page: Page) {
         const villageDetailPage = new VillageDetailPage(page);
-        await villageDetailPage.navigateToVillage(villageId);
+        await villageDetailPage.navigateToVillage(serverCode, villageId);
 
         // Pobierz poziomy budynków z gry
-        const buildingLevels = await villageDetailPage.extractBuildingLevels();
+        const buildingLevels = await villageDetailPage.extractBuildingLevels(serverCode);
 
         // Pobierz aktualną kolejkę budowy z gry
-        const buildQueue = await villageDetailPage.extractBuildQueue();
+        const buildQueue = await villageDetailPage.extractBuildQueue(serverCode);
 
         this.logger.log(`Scraped game data for village ${villageId}: ${Object.keys(buildingLevels).length} buildings, ${buildQueue.length} items in game queue`);
 
@@ -813,6 +833,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * @returns Rezultat przetwarzania
      */
     private async processSingleBuilding(
+        serverCode: string,
         building: VillageConstructionQueueEntity,
         page: Page
     ): Promise<{ success: boolean; reason: string; shouldDelete: boolean }> {
@@ -822,11 +843,11 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         try {
             // 1. Nawiguj do wioski z retry mechanism
             this.logger.debug(`🧭 Navigating to village ${building.villageId}`);
-            await this.navigateToVillageWithRetry(building.villageId, page);
+            await this.navigateToVillageWithRetry(serverCode, building.villageId, page);
 
             // 2. Sprawdź aktualny poziom budynku vs target level
             this.logger.debug(`🔍 Checking current building level for ${building.buildingId}`);
-            const currentLevel = await this.getCurrentBuildingLevel(building.buildingId, page);
+            const currentLevel = await this.getCurrentBuildingLevel(serverCode, building.buildingId, page);
 
             if (building.targetLevel <= currentLevel) {
                 this.logger.log(`✅ ${buildingInfo} - Already built (current: ${currentLevel})`);
@@ -836,7 +857,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
             // 3. Sprawdź kolejkę budowy w grze (czy ma miejsce)
             this.logger.debug(`📋 Checking game build queue capacity`);
-            const gameQueue = await this.extractGameBuildQueue(page);
+            const gameQueue = await this.extractGameBuildQueue(serverCode, page);
 
             if (gameQueue.length >= 2) {
                 this.logger.log(`⏳ ${buildingInfo} - Game queue full (${gameQueue.length}/2 slots)`);
@@ -855,12 +876,12 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
             // 4. Sprawdź czy można budować (przycisk vs czas)
             this.logger.debug(`🔍 Checking if building can be constructed`);
             const villageDetailPage = new VillageDetailPage(page);
-            const buildingStatus = await villageDetailPage.checkBuildingBuildAvailability(building.buildingId);
+            const buildingStatus = await villageDetailPage.checkBuildingBuildAvailability(serverCode, building.buildingId);
 
             if (buildingStatus.canBuild) {
                 // 5. Kliknij przycisk budowania
                 this.logger.log(`🔨 Attempting to build ${buildingInfo}`);
-                const buildResult = await this.attemptToBuildWithRetry(buildingStatus.buttonSelector!, page);
+                const buildResult = await this.attemptToBuildWithRetry(serverCode, buildingStatus.buttonSelector!, page);
 
                 if (buildResult.success) {
                     this.logger.log(`✅ Successfully added ${buildingInfo} to game queue`);
@@ -893,11 +914,11 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     /**
      * Nawiguje do wioski z mechanizmem retry
      */
-    private async navigateToVillageWithRetry(villageId: string, page: Page): Promise<void> {
+    private async navigateToVillageWithRetry(serverCode: string, villageId: string, page: Page): Promise<void> {
         for (let attempt = 1; attempt <= this.CONFIG.MAX_RETRIES; attempt++) {
             try {
                 const villageDetailPage = new VillageDetailPage(page);
-                await villageDetailPage.navigateToVillage(villageId);
+                await villageDetailPage.navigateToVillage(serverCode, villageId);
                 return; // Success
             } catch (error) {
                 this.logger.warn(`Navigation attempt ${attempt}/${this.CONFIG.MAX_RETRIES} failed for village ${villageId}:`, error);
@@ -912,10 +933,10 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     /**
      * Pobiera aktualny poziom budynku z gry
      */
-    private async getCurrentBuildingLevel(buildingId: string, page: Page): Promise<number> {
+    private async getCurrentBuildingLevel(serverCode: string, buildingId: string, page: Page): Promise<number> {
         try {
             const villageDetailPage = new VillageDetailPage(page);
-            return await villageDetailPage.getBuildingLevel(buildingId);
+            return await villageDetailPage.getBuildingLevel(serverCode, buildingId);
         } catch (error) {
             this.logger.warn(`Error getting building level for ${buildingId}:`, error);
             return 0;
@@ -925,10 +946,10 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     /**
      * Pobiera kolejkę budowy z gry
      */
-    private async extractGameBuildQueue(page: Page): Promise<BuildQueueItem[]> {
+    private async extractGameBuildQueue(serverCode: string, page: Page): Promise<BuildQueueItem[]> {
         try {
             const villageDetailPage = new VillageDetailPage(page);
-            return await villageDetailPage.extractBuildQueue();
+            return await villageDetailPage.extractBuildQueue(serverCode);
         } catch (error) {
             this.logger.warn('Error extracting game build queue:', error);
             return [];
@@ -955,12 +976,12 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     /**
      * Próbuje zbudować budynek z mechanizmem retry
      */
-    private async attemptToBuildWithRetry(buttonSelector: string, page: Page): Promise<{
+    private async attemptToBuildWithRetry(serverCode: string, buttonSelector: string, page: Page): Promise<{
         success: boolean;
         reason: string;
     }> {
         // Get initial queue length for verification
-        const initialQueue = await this.extractGameBuildQueue(page);
+        const initialQueue = await this.extractGameBuildQueue(serverCode, page);
         const initialQueueLength = initialQueue.length;
 
         this.logger.debug(`Initial game queue length: ${initialQueueLength}`);
@@ -1011,7 +1032,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
                 // 4. Verify by checking if queue length increased
                 this.logger.debug('Verifying if building was added to queue...');
-                const newQueue = await this.extractGameBuildQueue(page);
+                const newQueue = await this.extractGameBuildQueue(serverCode, page);
                 const newQueueLength = newQueue.length;
 
                 this.logger.debug(`Queue length after click: ${newQueueLength} (was: ${initialQueueLength})`);
