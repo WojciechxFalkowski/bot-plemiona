@@ -86,20 +86,9 @@ export class CrawlerService implements OnModuleInit {
     constructor(
         private settingsService: SettingsService,
         private plemionaCookiesService: PlemionaCookiesService,
-        private configService: ConfigService,
         private villagesService: VillagesService,
         private serversService: ServersService
     ) {
-        // Initialize credentials from environment variables with default values if not set
-        this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
-
-        // Validate credentials
-        const validation = AuthUtils.validateCredentials(this.credentials);
-        if (!validation.isValid) {
-            this.logger.warn(`Invalid credentials: missing fields: ${validation.missingFields.join(', ')}, errors: ${validation.errors.join(', ')}. Fallback to cookies will be attempted.`);
-        } else {
-            this.logger.log('Plemiona credentials loaded from environment variables successfully.');
-        }
     }
 
     /**
@@ -341,13 +330,14 @@ export class CrawlerService implements OnModuleInit {
                             console.log(availableUnits);
 
 
-                            const totalUnitsAvailable = Object.values(availableUnits).reduce((sum, count) => sum + (count || 0), 0);
+                            // Sprawdź tylko pikinierów (spear)
+                            const spearUnitsAvailable = availableUnits['spear'] || 0;
 
-                            if (totalUnitsAvailable > 0) {
-                                this.logger.log(`✓ Village ${village.name} added to processing queue (${freeLevels.length} free levels, ${totalUnitsAvailable} units available)`);
+                            if (spearUnitsAvailable > 0) {
+                                this.logger.log(`✓ Village ${village.name} added to processing queue (${freeLevels.length} free levels, ${spearUnitsAvailable} spear units available)`);
                                 villagesToProcess.push(village);
                             } else {
-                                this.logger.log(`✗ Village ${village.name} skipped - no units available`);
+                                this.logger.log(`✗ Village ${village.name} skipped - no spear units available`);
                             }
                         } else {
                             this.logger.log(`✗ Village ${village.name} skipped - ${busyLevels.length} busy levels, no free levels`);

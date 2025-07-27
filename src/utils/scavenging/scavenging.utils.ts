@@ -143,36 +143,44 @@ export class ScavengingUtils {
 
         const unitsToSendTotal: Partial<Record<ScavengingUnit, number>> = {};
 
-        // Wysyłaj wszystkie dostępne jednostki
-        for (const unit of unitOrder) {
-            let available = availableUnits[unit] || 0;
-            unitsToSendTotal[unit] = available;
-        }
-        this.logger.debug('Total units eligible for sending (after limits):', unitsToSendTotal);
+        // Używaj tylko pikinierów (spear) do obliczania wojska
+        const spearUnits = availableUnits['spear'] || 0;
+        unitsToSendTotal['spear'] = spearUnits;
 
-        // Rozdziel jednostki proporcjonalnie na poziomy
+        // Pozostałe jednostki ustaw na 0
+        for (const unit of unitOrder) {
+            if (unit !== 'spear') {
+                unitsToSendTotal[unit] = 0;
+            }
+        }
+
+        this.logger.debug(`Using only spear units for scavenging: ${spearUnits} units`);
+        this.logger.debug('Total units eligible for sending (only spear):', unitsToSendTotal);
+
+        // Rozdziel tylko pikinierów proporcjonalnie na poziomy
         for (const levelStatus of eligibleLevels) {
             const level = levelStatus.level;
             const levelPack = levelPacks[level];
             const plan = dispatchPlan.find(p => p.level === level);
             if (!plan) continue;
 
-            for (const unit of unitOrder) {
-                if (!unitsToSendTotal[unit] || unitsToSendTotal[unit] === 0) continue;
+            // Oblicz liczbę pikinierów dla tego poziomu
+            const spearCountForLevel = Math.floor((spearUnits * levelPack) / totalPacks);
+            plan.dispatchUnits['spear'] = spearCountForLevel;
 
-                const countForLevel = Math.floor((unitsToSendTotal[unit] * levelPack) / totalPacks);
-                plan.dispatchUnits[unit] = countForLevel;
+            // Pozostałe jednostki ustaw na 0
+            for (const unit of unitOrder) {
+                if (unit !== 'spear') {
+                    plan.dispatchUnits[unit] = 0;
+                }
             }
         }
 
-        // Zastosuj limit max_resources dla każdego poziomu osobno
+        // Zastosuj limit max_resources dla każdego poziomu osobno (tylko pikinierzy)
         for (const plan of dispatchPlan) {
-            let currentCapacity = 0;
-            for (const unit of unitOrder) {
-                if (plan.dispatchUnits[unit]) {
-                    currentCapacity += plan.dispatchUnits[unit] * unitSettings[unit].capacity;
-                }
-            }
+            // Oblicz pojemność tylko dla pikinierów
+            const spearUnits = plan.dispatchUnits['spear'] || 0;
+            const currentCapacity = spearUnits * unitSettings['spear'].capacity;
 
             let levelMaxResources = scavengingSettings.max_resources;
             // Dostosuj max_resources dla poziomu (logika z JS)
@@ -183,12 +191,8 @@ export class ScavengingUtils {
 
             if (currentCapacity > levelMaxResources) {
                 const ratio = levelMaxResources / currentCapacity;
-                this.logger.debug(`Level ${plan.level} capacity ${currentCapacity} exceeds limit ${levelMaxResources}. Applying ratio ${ratio}.`);
-                for (const unit of unitOrder) {
-                    if (plan.dispatchUnits[unit]) {
-                        plan.dispatchUnits[unit] = Math.floor(plan.dispatchUnits[unit] * ratio);
-                    }
-                }
+                this.logger.debug(`Level ${plan.level} spear capacity ${currentCapacity} exceeds limit ${levelMaxResources}. Applying ratio ${ratio}.`);
+                plan.dispatchUnits['spear'] = Math.floor(spearUnits * ratio);
             }
         }
 
