@@ -165,22 +165,13 @@ export class BarbarianVillagesService {
         return villages;
     }
 
-    async executeMiniAttacks(serverId: number, villageId: string): Promise<AttackResult[]> {
-        this.logger.log(`Starting mini attacks execution for server ${serverId}, village ${villageId}`);
-        const attackableVillages: BarbarianVillageEntity[] = await this.findAttackableVillages(serverId, villageId);
-
-        if (attackableVillages.length === 0) {
-            this.logger.log(`No attackable barbarian villages found for server ${serverId}, village ${villageId}`);
-            return [];
-        }
-
-        this.logger.log(`Found ${attackableVillages.length} attackable villages for server ${serverId}, village ${villageId}`);
-
+    async executeMiniAttacksForAllVillagesInServer(serverId: number): Promise<AttackResult[]> {
         const { browser, page } = await createBrowserPage({ headless: false });
-        const serverName = await this.serversService.getServerName(serverId);
-        const serverCode = await this.serversService.getServerCode(serverId);
 
         try {
+            const serverName = await this.serversService.getServerName(serverId);
+            const serverCode = await this.serversService.getServerCode(serverId);
+
             // 1. Login and select world
             const loginResult = await AuthUtils.loginAndSelectWorld(
                 page,
@@ -195,15 +186,36 @@ export class BarbarianVillagesService {
 
             this.logger.log(`Successfully logged in for server ${serverId}, starting mini attacks...`);
 
-            // 2. Get army data
-            console.log("army data");
-            
-            console.log("serverId", serverId);
-            console.log("villageId", villageId);
+            const strategies = await this.miniAttackStrategiesService.findAllByServer(serverId);
+            const attackResults: AttackResult[] = [];
+            for (const strategy of strategies) {
+                const results = await this.executeMiniAttacks(serverId, strategy.villageId, page, serverCode);
+                attackResults.push(...results);
+            }
 
+            return attackResults;
+
+        } finally {
+            await browser.close();
+        }
+    }
+
+    async executeMiniAttacks(serverId: number, villageId: string, page: Page, serverCode: string): Promise<AttackResult[]> {
+        this.logger.log(`Starting mini attacks execution for server ${serverId}, village ${villageId}`);
+        const attackableVillages: BarbarianVillageEntity[] = await this.findAttackableVillages(serverId, villageId);
+
+        if (attackableVillages.length === 0) {
+            this.logger.log(`No attackable barbarian villages found for server ${serverId}, village ${villageId}`);
+            return [];
+        }
+
+        this.logger.log(`Found ${attackableVillages.length} attackable villages for server ${serverId}, village ${villageId}`);
+
+        try {
+            // 1. Get army data
             const armyData = await ArmyUtils.getArmyData(page, villageId, serverId.toString());
 
-            // 3. Check if there's a strategy and calculate max attacks
+            // 2. Check if there's a strategy and calculate max attacks
             let maxPossibleAttacks = 0;
             let attackStrategy: any = null;
 
@@ -235,9 +247,10 @@ export class BarbarianVillagesService {
                 return [];
             }
 
-            // 4. Limit attacks to available villages
+            // 3. Limit attacks to available villages
             maxPossibleAttacks = Math.min(maxPossibleAttacks, attackableVillages.length);
 
+            // 4. Check if there are any attacks to perform
             if (maxPossibleAttacks === 0) {
                 this.logger.warn('❌ Insufficient troops for mini attacks or no available targets');
                 return [];
@@ -266,6 +279,40 @@ export class BarbarianVillagesService {
                 this.logger.log(`🎯 Attack ${i + 1}/${maxPossibleAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 
                 try {
+                    // Check last attack result before performing new attack
+                    this.logger.debug('Checking last attack result...');
+                    const lastAttackCheck = await AttackUtils.checkLastAttackResult(page, targetVillage, villageId, serverCode);
+
+                    if (!lastAttackCheck.canAttack) {
+                        this.logger.warn(`❌ Skipping attack on ${targetVillage.name}: ${lastAttackCheck.reason}`);
+
+                        // Update canAttack flag to false in database
+                        await this.updateCanAttackFlag(targetVillage.target, false);
+
+                        // Move to next target
+                        currentTargetIndex = (currentTargetIndex + 1) % attackableVillages.length;
+                        await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: currentTargetIndex });
+
+                        // Add skipped result to attack results
+                        attackResults.push({
+                            success: false,
+                            targetVillage: {
+                                target: targetVillage.target,
+                                name: targetVillage.name,
+                                coordinateX: targetVillage.coordinateX,
+                                coordinateY: targetVillage.coordinateY,
+                                canAttack: targetVillage.canAttack,
+                                createdAt: targetVillage.createdAt,
+                                updatedAt: targetVillage.updatedAt
+                            },
+                            error: `Skipped: ${lastAttackCheck.reason}`
+                        });
+
+                        continue; // Skip to next village
+                    }
+
+                    this.logger.debug(`✅ Last attack check passed: ${lastAttackCheck.reason}`);
+
                     // Execute attack on current village
                     const attackResult = await this.executeAttackOnVillage(page, targetVillage, armyData, villageId, serverCode);
                     attackResults.push(attackResult);
@@ -333,7 +380,6 @@ export class BarbarianVillagesService {
             return attackResults;
 
         } finally {
-            await browser.close();
         }
     }
 
@@ -559,6 +605,21 @@ export class BarbarianVillagesService {
             this.logger.warn(`No barbarian village found with target ${target} to delete.`);
         } else {
             this.logger.log(`Barbarian village with target ${target} deleted successfully.`);
+        }
+    }
+
+    /**
+     * Updates the canAttack flag for a specific barbarian village
+     * @param target Village target ID
+     * @param canAttack New canAttack flag value
+     */
+    private async updateCanAttackFlag(target: string, canAttack: boolean): Promise<void> {
+        try {
+            await this.barbarianVillageRepository.update({ target }, { canAttack });
+            this.logger.log(`Updated canAttack flag for village ${target} to ${canAttack}`);
+        } catch (error) {
+            this.logger.error(`Failed to update canAttack flag for village ${target}:`, error);
+            // Don't throw error here, just log it - we don't want to stop the attack process
         }
     }
 } 

@@ -8,7 +8,7 @@ import { BarbarianVillagesService } from './barbarian-villages.service';
 export class BarbarianVillagesController {
   constructor(
     private readonly barbarianVillagesService: BarbarianVillagesService
-  ) {}
+  ) { }
 
   @Get(':serverId')
   @ApiOperation({
@@ -178,10 +178,10 @@ export class BarbarianVillagesController {
     return { message: `Barbarian village ${target} deleted successfully from server ${serverId}` };
   }
 
-  @Post(':serverId/execute-mini-attacks/:villageId')
+  @Post(':serverId/execute-mini-attacks-for-all-villages-in-server')
   @ApiOperation({
-    summary: 'Execute mini attacks',
-    description: 'Executes mini attacks on barbarian villages for a specific server'
+    summary: 'Execute mini attacks for all villages in server',
+    description: 'Executes mini attacks on all barbarian villages for a specific server'
   })
   @ApiParam({
     name: 'serverId',
@@ -189,14 +189,8 @@ export class BarbarianVillagesController {
     type: 'number',
     example: 217
   })
-  @ApiParam({
-    name: 'villageId',
-    description: 'Village ID',
-    type: 'string',
-    example: '32005'
-  })
-  async executeMiniAttacks(@Param('serverId', ParseIntPipe) serverId: number, @Param('villageId') villageId: string) {
-    const result = await this.barbarianVillagesService.executeMiniAttacks(serverId, villageId);
+  async executeMiniAttacks(@Param('serverId', ParseIntPipe) serverId: number) {
+    const result = await this.barbarianVillagesService.executeMiniAttacksForAllVillagesInServer(serverId);
     return {
       message: `Mini attacks executed for server ${serverId}`,
       results: result

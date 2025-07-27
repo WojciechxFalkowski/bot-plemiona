@@ -502,13 +502,33 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             // Execute mini attacks for each strategy (village)
             for (const strategy of strategies) {
                 this.logger.log(`🗡️ Executing mini attacks for village ${strategy.villageId} on server ${serverId}`);
+                const { browser, page } = await createBrowserPage({ headless: false });
 
                 try {
-                    await this.barbarianVillagesService.executeMiniAttacks(serverId, strategy.villageId);
+                    const serverName = await this.serversService.getServerName(serverId);
+                    const serverCode = await this.serversService.getServerCode(serverId);
+
+                    // 1. Login and select world
+                    const loginResult = await AuthUtils.loginAndSelectWorld(
+                        page,
+                        this.credentials,
+                        this.plemionaCookiesService,
+                        serverName
+                    );
+
+                    if (!loginResult.success || !loginResult.worldSelected) {
+                        throw new Error(`Login failed for server ${serverId}: ${loginResult.error || 'Unknown error'}`);
+                    }
+
+                    this.logger.log(`Successfully logged in for server ${serverId}, starting mini attacks...`);
+
+                    await this.barbarianVillagesService.executeMiniAttacks(serverId, strategy.villageId, page, serverCode);
                     this.logger.log(`✅ Mini attacks completed for village ${strategy.villageId} on server ${serverId}`);
                 } catch (villageError) {
                     this.logger.error(`❌ Error executing mini attacks for village ${strategy.villageId} on server ${serverId}:`, villageError);
                     // Continue with next village instead of stopping
+                } finally {
+                    await browser.close();
                 }
             }
 
