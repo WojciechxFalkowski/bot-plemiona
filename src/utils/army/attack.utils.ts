@@ -64,7 +64,6 @@ export class AttackUtils {
     private static readonly SPEAR_PER_ATTACK = 2;
     private static readonly SWORD_PER_ATTACK = 2;
     
-    private static readonly WORLD_NUMBER = '216';
     private static readonly SOURCE_VILLAGE_ID = '2197';
 
     /**
@@ -252,18 +251,20 @@ export class AttackUtils {
      * @param page Instancja strony Playwright
      * @param targetVillage Wioska do sprawdzenia
      * @param sourceVillageId ID wioski źródłowej
+     * @param serverCode Kod serwera (np. 'pl217')
      * @returns Wynik sprawdzenia czy można atakować
      */
     public static async checkLastAttackResult(
         page: Page,
         targetVillage: BarbarianVillage,
-        sourceVillageId: string = this.SOURCE_VILLAGE_ID
+        sourceVillageId: string = this.SOURCE_VILLAGE_ID,
+        serverCode: string
     ): Promise<LastAttackCheckResult> {
         this.logger.log(`🔍 Checking last attack result for ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 
         try {
             // Skonstruuj URL informacji o wiosce
-            const infoUrl = `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=info_village&id=${targetVillage.target}`;
+            const infoUrl = `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=info_village&id=${targetVillage.target}`;
             this.logger.debug(`Info URL: ${infoUrl}`);
 
             // Nawiguj do strony informacji o wiosce
@@ -332,22 +333,26 @@ export class AttackUtils {
     }
 
     /**
-     * Wykonuje pojedynczy mini atak na wybraną wioskę barbarzyńską
-     * @param page Instancja strony Playwright
-     * @param targetVillage Wioska docelowa
+     * Wykonuje mini atak na wioskę barbarzyńską z użyciem lekkiej kawalerii (2 jednostki)
+     * @param page Instancja Playwright Page
+     * @param targetVillage Dane wioski docelowej
      * @param sourceVillageId ID wioski źródłowej (opcjonalne, domyślnie SOURCE_VILLAGE_ID)
+     * @param serverCode Kod serwera (np. 'pl217')
+     * @param lightCount Liczba lekkiej kawalerii do wysłania (opcjonalne, domyślnie 2)
      * @returns Wynik ataku
      */
     public static async performMiniAttack(
         page: Page,
         targetVillage: BarbarianVillage,
-        sourceVillageId: string = this.SOURCE_VILLAGE_ID
+        sourceVillageId: string = this.SOURCE_VILLAGE_ID,
+        serverCode: string,
+        lightCount: number = this.LIGHT_PER_ATTACK
     ): Promise<AttackResult> {
         this.logger.log(`🗡️ Starting mini attack on ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 
         try {
             // Skonstruuj URL ataku
-            const attackUrl = `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`;
+            const attackUrl = `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`;
             this.logger.debug(`Attack URL: ${attackUrl}`);
 
             // Nawiguj do strony ataku
@@ -377,10 +382,10 @@ export class AttackUtils {
 
             this.logger.debug('✅ Village owner verification passed - proceeding with attack');
 
-            // Wypełnij pole lekkiej kawalerii (2 jednostki)
-            this.logger.debug(`Filling light cavalry field with ${this.LIGHT_PER_ATTACK} units...`);
+            // Wypełnij pole lekkiej kawalerii (customowa liczba jednostek)
+            this.logger.debug(`Filling light cavalry field with ${lightCount} units...`);
             const lightInput = page.locator('#unit_input_light');
-            await lightInput.fill(this.LIGHT_PER_ATTACK.toString());
+            await lightInput.fill(lightCount.toString());
             await page.waitForTimeout(500);
 
             // Kliknij przycisk ataku
@@ -438,28 +443,34 @@ export class AttackUtils {
                 success: false,
                 targetVillage,
                 error: error.message,
-                attackUrl: `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`
+                attackUrl: `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`
             };
         }
     }
 
     /**
-     * Wykonuje pojedynczy mini atak na wybraną wioskę barbarzyńską (piki i miecze)
+     * Wykonuje mini atak na wioskę barbarzyńską z użyciem pikinierów i mieczników (2+2 jednostki)
      * @param page Instancja strony Playwright
      * @param targetVillage Wioska docelowa
      * @param sourceVillageId ID wioski źródłowej (opcjonalne, domyślnie SOURCE_VILLAGE_ID)
+     * @param serverCode Kod serwera (np. 'pl217')
+     * @param spearCount Liczba pikinierów do wysłania (opcjonalne, domyślnie 2)
+     * @param swordCount Liczba mieczników do wysłania (opcjonalne, domyślnie 2)
      * @returns Wynik ataku
      */
     public static async performMiniAttackSpearSword(
         page: Page,
         targetVillage: BarbarianVillage,
-        sourceVillageId: string = this.SOURCE_VILLAGE_ID
+        sourceVillageId: string = this.SOURCE_VILLAGE_ID,
+        serverCode: string,
+        spearCount: number = this.SPEAR_PER_ATTACK,
+        swordCount: number = this.SWORD_PER_ATTACK
     ): Promise<AttackResult> {
         this.logger.log(`🗡️ Starting mini attack with spear & sword on ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 
         try {
             // Skonstruuj URL ataku
-            const attackUrl = `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`;
+            const attackUrl = `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`;
             this.logger.debug(`Attack URL: ${attackUrl}`);
 
             // Nawiguj do strony ataku
@@ -489,16 +500,16 @@ export class AttackUtils {
 
             this.logger.debug('✅ Village owner verification passed - proceeding with attack');
 
-            // Wypełnij pole spear (2 jednostki)
-            this.logger.debug(`Filling spear field with ${this.SPEAR_PER_ATTACK} units...`);
+            // Wypełnij pole spear (customowa liczba jednostek)
+            this.logger.debug(`Filling spear field with ${spearCount} units...`);
             const spearInput = page.locator('#unit_input_spear');
-            await spearInput.fill(this.SPEAR_PER_ATTACK.toString());
+            await spearInput.fill(spearCount.toString());
             await page.waitForTimeout(500);
 
-            // Wypełnij pole sword (2 jednostki)
-            this.logger.debug(`Filling sword field with ${this.SWORD_PER_ATTACK} units...`);
+            // Wypełnij pole sword (customowa liczba jednostek)
+            this.logger.debug(`Filling sword field with ${swordCount} units...`);
             const swordInput = page.locator('#unit_input_sword');
-            await swordInput.fill(this.SWORD_PER_ATTACK.toString());
+            await swordInput.fill(swordCount.toString());
             await page.waitForTimeout(500);
 
             // Kliknij przycisk ataku
@@ -556,7 +567,7 @@ export class AttackUtils {
                 success: false,
                 targetVillage,
                 error: error.message,
-                attackUrl: `https://pl${this.WORLD_NUMBER}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`
+                attackUrl: `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`
             };
         }
     }

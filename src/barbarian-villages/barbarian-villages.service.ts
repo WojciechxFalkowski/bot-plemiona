@@ -14,6 +14,7 @@ import { SettingsKey } from '@/settings/settings-keys.enum';
 import { createBrowserPage } from '@/utils/browser.utils';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { ServersService } from '@/servers';
+import { MiniAttackStrategiesService } from '@/mini-attack-strategies';
 
 @Injectable()
 export class BarbarianVillagesService {
@@ -27,6 +28,7 @@ export class BarbarianVillagesService {
         private readonly plemionaCookiesService: PlemionaCookiesService,
         private readonly configService: ConfigService,
         private readonly serversService: ServersService,
+        private readonly miniAttackStrategiesService: MiniAttackStrategiesService,
     ) {
         // Initialize credentials from environment variables
         this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -155,27 +157,31 @@ export class BarbarianVillagesService {
 
     async findAttackableVillages(serverId: number, villageId: string): Promise<BarbarianVillageEntity[]> {
         this.logger.debug(`Finding attackable barbarian villages for server ${serverId}`);
-        return await this.barbarianVillageRepository.find({
+        const villages = await this.barbarianVillageRepository.find({
             where: { serverId, canAttack: true, villageId },
             order: { createdAt: 'ASC' }
         });
+        this.logger.log(`Found ${villages.length} attackable barbarian villages for server ${serverId} and village ${villageId}`);
+        return villages;
     }
 
     async executeMiniAttacks(serverId: number, villageId: string): Promise<AttackResult[]> {
-        this.logger.log(`Starting mini attacks execution${serverId ? ` for server ${serverId}` : ' for all servers'}`);
+        this.logger.log(`Starting mini attacks execution for server ${serverId}, village ${villageId}`);
         const attackableVillages: BarbarianVillageEntity[] = await this.findAttackableVillages(serverId, villageId);
 
         if (attackableVillages.length === 0) {
-            this.logger.log(`No attackable barbarian villages found${serverId ? ` for server ${serverId}` : ''}`);
+            this.logger.log(`No attackable barbarian villages found for server ${serverId}, village ${villageId}`);
             return [];
         }
 
-        this.logger.log(`Found ${attackableVillages.length} attackable villages${serverId ? ` for server ${serverId}` : ''}`);
-
+        this.logger.log(`Found ${attackableVillages.length} attackable villages for server ${serverId}, village ${villageId}`);
 
         const { browser, page } = await createBrowserPage({ headless: false });
         const serverName = await this.serversService.getServerName(serverId);
+        const serverCode = await this.serversService.getServerCode(serverId);
+
         try {
+            // 1. Login and select world
             const loginResult = await AuthUtils.loginAndSelectWorld(
                 page,
                 this.credentials,
@@ -184,42 +190,147 @@ export class BarbarianVillagesService {
             );
 
             if (!loginResult.success || !loginResult.worldSelected) {
-                throw new Error(`Login failed${serverId ? ` for server ${serverId}` : ''}: ${loginResult.error || 'Unknown error'}`);
+                throw new Error(`Login failed for server ${serverId}: ${loginResult.error || 'Unknown error'}`);
             }
 
-            this.logger.log(`Successfully logged in${serverId ? ` for server ${serverId}` : ''}, starting mini attacks...`);
+            this.logger.log(`Successfully logged in for server ${serverId}, starting mini attacks...`);
 
-            // Get next target index from settings
-            const nextTargetIndexSetting = serverId
-                ? await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX)
-                : await this.settingsService.getSetting<{ value: number }>(1, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX); // fallback
-
-            let nextTargetIndex = nextTargetIndexSetting?.value || 0;
-
-            // Ensure index is within bounds
-            if (nextTargetIndex >= attackableVillages.length) {
-                nextTargetIndex = 0;
-            }
-
-            const targetVillage = attackableVillages[nextTargetIndex];
-            this.logger.log(`Targeting village: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
-
-            // Check army and execute attack
-            // Note: These should be dynamic per server, but for now using placeholders
+            // 2. Get army data
+            console.log("army data");
+            
+            console.log("serverId", serverId);
+            console.log("villageId", villageId);
 
             const armyData = await ArmyUtils.getArmyData(page, villageId, serverId.toString());
-            const attackResult = await this.executeAttackOnVillage(page, targetVillage, armyData, villageId);
 
-            // Update next target index
-            const newNextTargetIndex = (nextTargetIndex + 1) % attackableVillages.length;
-            if (serverId) {
-                await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: newNextTargetIndex });
-            } else {
-                await this.settingsService.setSetting(1, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: newNextTargetIndex });
+            // 3. Check if there's a strategy and calculate max attacks
+            let maxPossibleAttacks = 0;
+            let attackStrategy: any = null;
+
+            try {
+                attackStrategy = await this.miniAttackStrategiesService.findByServerAndVillage(serverId, villageId);
+                this.logger.log(`Found strategy for village ${villageId}: spear=${attackStrategy.spear}, sword=${attackStrategy.sword}, light=${attackStrategy.light}`);
+
+                // Calculate max attacks based on strategy
+                if (attackStrategy.spear > 0 && attackStrategy.sword > 0) {
+                    const spearUnit = armyData.units.find(u => u.dataUnit === 'spear');
+                    const swordUnit = armyData.units.find(u => u.dataUnit === 'sword');
+                    const maxAttacksFromSpear = spearUnit ? Math.floor(spearUnit.inVillage / attackStrategy.spear) : 0;
+                    const maxAttacksFromSword = swordUnit ? Math.floor(swordUnit.inVillage / attackStrategy.sword) : 0;
+                    maxPossibleAttacks = Math.min(maxAttacksFromSpear, maxAttacksFromSword);
+                    this.logger.log(`Strategy calculation: spear ${spearUnit?.inVillage || 0}/${attackStrategy.spear}=${maxAttacksFromSpear}, sword ${swordUnit?.inVillage || 0}/${attackStrategy.sword}=${maxAttacksFromSword} → ${maxPossibleAttacks} attacks`);
+                } else if (attackStrategy.light > 0) {
+                    const lightUnit = armyData.units.find(u => u.dataUnit === 'light');
+                    maxPossibleAttacks = lightUnit ? Math.floor(lightUnit.inVillage / attackStrategy.light) : 0;
+                    this.logger.log(`Strategy calculation: light ${lightUnit?.inVillage || 0}/${attackStrategy.light} → ${maxPossibleAttacks} attacks`);
+                } else {
+                    this.logger.warn(`Strategy has unsupported units, falling back to default calculation`);
+                    const lightUnit = armyData.units.find(u => u.dataUnit === 'light');
+                    maxPossibleAttacks = lightUnit ? Math.floor(lightUnit.inVillage / 2) : 0; // Default 2 light cavalry
+                }
+
+            } catch (strategyError) {
+                this.logger.error(`No strategy found for village ${villageId}. No attacks will be performed.`);
+                maxPossibleAttacks = 0; // No strategy = no attacks
+                return [];
             }
 
-            this.logger.log(`Mini attacks execution completed${serverId ? ` for server ${serverId}` : ''}. Next target index: ${newNextTargetIndex}`);
-            return [attackResult];
+            // 4. Limit attacks to available villages
+            maxPossibleAttacks = Math.min(maxPossibleAttacks, attackableVillages.length);
+
+            if (maxPossibleAttacks === 0) {
+                this.logger.warn('❌ Insufficient troops for mini attacks or no available targets');
+                return [];
+            }
+
+            this.logger.log(`📊 Will perform ${maxPossibleAttacks} attacks (limited by min(troops, ${attackableVillages.length} villages))`);
+
+            // 5. Get current target index from settings
+            const nextTargetIndexSetting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX);
+            let currentTargetIndex = nextTargetIndexSetting?.value || 0;
+
+            // Ensure index is within bounds
+            if (currentTargetIndex >= attackableVillages.length) {
+                currentTargetIndex = 0;
+            }
+
+            this.logger.log(`📍 Starting from target index: ${currentTargetIndex} (village: ${attackableVillages[currentTargetIndex]?.name || 'unknown'})`);
+
+            // 6. Execute attacks in loop
+            const attackResults: AttackResult[] = [];
+            const startingIndex = currentTargetIndex;
+            let attacksPerformed = 0;
+
+            for (let i = 0; i < maxPossibleAttacks; i++) {
+                const targetVillage = attackableVillages[currentTargetIndex];
+                this.logger.log(`🎯 Attack ${i + 1}/${maxPossibleAttacks}: Targeting ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+                try {
+                    // Execute attack on current village
+                    const attackResult = await this.executeAttackOnVillage(page, targetVillage, armyData, villageId, serverCode);
+                    attackResults.push(attackResult);
+
+                    if (attackResult.success) {
+                        attacksPerformed++;
+                        this.logger.log(`✅ Attack ${i + 1} successful: ${targetVillage.name}`);
+                    } else {
+                        this.logger.warn(`❌ Attack ${i + 1} failed: ${targetVillage.name} - ${attackResult.error}`);
+                    }
+
+                    // Update canAttack to false if error text contains "Village is no longer barbarian"
+                    if (attackResult.error && attackResult.error.includes('Village is no longer barbarian')) {
+                        await this.removeBarbarianVillage(targetVillage.target);
+                        this.logger.log(`🗑️ Deleted village ${targetVillage.name} from database - no longer barbarian`);
+                    }
+
+                    // Update target index for next attack (round-robin)
+                    currentTargetIndex = (currentTargetIndex + 1) % attackableVillages.length;
+
+                    // Save current index to settings (for resumption after interruption)
+                    await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: currentTargetIndex });
+
+                    // Delay between attacks to avoid overwhelming the server
+                    if (i < maxPossibleAttacks - 1) {
+                        this.logger.debug('⏳ Waiting 2 seconds before next attack...');
+                        await page.waitForTimeout(2000);
+                    }
+
+                } catch (attackError) {
+                    this.logger.error(`💥 Error during attack ${i + 1} on ${targetVillage.name}:`, attackError);
+
+                    // Still update the target index to move to next village
+                    currentTargetIndex = (currentTargetIndex + 1) % attackableVillages.length;
+                    await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: currentTargetIndex });
+
+                    // Add failed result
+                    attackResults.push({
+                        success: false,
+                        targetVillage: {
+                            target: targetVillage.target,
+                            name: targetVillage.name,
+                            coordinateX: targetVillage.coordinateX,
+                            coordinateY: targetVillage.coordinateY,
+                            canAttack: targetVillage.canAttack,
+                            createdAt: targetVillage.createdAt,
+                            updatedAt: targetVillage.updatedAt
+                        },
+                        error: attackError.message
+                    });
+
+                    // Continue with next village instead of stopping
+                    continue;
+                }
+            }
+
+            // 7. Log attack summary
+            this.logger.log(`🗡️ Mini attacks completed: ${attacksPerformed}/${maxPossibleAttacks} successful attacks`);
+            this.logger.log(`📍 Attack sequence: ${startingIndex} → ${currentTargetIndex} (next start point)`);
+
+            const successfulAttacks = attackResults.filter(r => r.success).length;
+            const failedAttacks = attackResults.filter(r => !r.success).length;
+            this.logger.log(`📊 Results: ${successfulAttacks} successful, ${failedAttacks} failed, ${attackResults.length} total`);
+
+            return attackResults;
 
         } finally {
             await browser.close();
@@ -337,7 +448,7 @@ export class BarbarianVillagesService {
         }
     }
 
-    private async executeAttackOnVillage(page: Page, village: BarbarianVillageEntity, armyData: ArmyData, villageId: string): Promise<AttackResult> {
+    private async executeAttackOnVillage(page: Page, village: BarbarianVillageEntity, armyData: ArmyData, villageId: string, serverCode: string): Promise<AttackResult> {
         this.logger.log(`Executing attack on village ${village.name} (${village.coordinateX}|${village.coordinateY})`);
 
         try {
@@ -352,8 +463,42 @@ export class BarbarianVillagesService {
                 updatedAt: village.updatedAt
             };
 
-            // Use AttackUtils to perform the attack
-            const attackResult = await AttackUtils.performMiniAttack(page, barbarianVillage, villageId);
+            // Check if there's a custom strategy for this server and village
+            let attackResult: AttackResult;
+            try {
+                this.logger.debug(`Checking for strategy: serverId=${village.serverId}, villageId=${villageId} (type: ${typeof villageId})`);
+                const strategy = await this.miniAttackStrategiesService.findByServerAndVillage(village.serverId, villageId);
+                this.logger.log(`Found custom strategy for village ${villageId}: spear=${strategy.spear}, sword=${strategy.sword}, light=${strategy.light}`);
+
+                // If strategy has spear and sword units, use performMiniAttackSpearSword
+                if (strategy.spear > 0 && strategy.sword > 0) {
+                    this.logger.log(`Using spear & sword attack strategy (${strategy.spear} spear, ${strategy.sword} sword)`);
+                    attackResult = await AttackUtils.performMiniAttackSpearSword(page, barbarianVillage, villageId, serverCode, strategy.spear, strategy.sword);
+                }
+                // If strategy has only light cavalry, use performMiniAttack
+                else if (strategy.light > 0) {
+                    this.logger.log(`Using light cavalry attack strategy (${strategy.light} light)`);
+                    attackResult = await AttackUtils.performMiniAttack(page, barbarianVillage, villageId, serverCode, strategy.light);
+                }
+                // If strategy has other units, log error and return failure
+                else {
+                    this.logger.error(`Strategy has units not supported by current attack methods. No attack will be performed.`);
+                    attackResult = {
+                        success: false,
+                        targetVillage: barbarianVillage,
+                        error: 'Strategy has unsupported units - no attack performed'
+                    };
+                }
+
+            } catch (strategyError) {
+                // No strategy found - return failure instead of performing default attack
+                this.logger.error(`No custom strategy found for village ${villageId}. Error: ${strategyError.message}. No attack will be performed.`);
+                attackResult = {
+                    success: false,
+                    targetVillage: barbarianVillage,
+                    error: `No strategy found for village ${villageId} - no attack performed`
+                };
+            }
 
             this.logger.log(`Attack executed successfully on ${village.name}: ${attackResult.success ? 'SUCCESS' : 'FAILED'}`);
 
@@ -405,5 +550,15 @@ export class BarbarianVillagesService {
         // from extractBarbarianVillagesFromGame
 
         return { added, updated, deleted };
+    }
+
+    private async removeBarbarianVillage(target: string): Promise<void> {
+        this.logger.log(`Removing barbarian village with target ${target} from database`);
+        const result = await this.barbarianVillageRepository.delete({ target });
+        if (result.affected === 0) {
+            this.logger.warn(`No barbarian village found with target ${target} to delete.`);
+        } else {
+            this.logger.log(`Barbarian village with target ${target} deleted successfully.`);
+        }
     }
 } 

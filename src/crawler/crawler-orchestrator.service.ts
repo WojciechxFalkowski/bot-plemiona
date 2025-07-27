@@ -12,6 +12,7 @@ import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
 import { BarbarianVillagesService } from '@/barbarian-villages/barbarian-villages.service';
 import { ServerResponseDto } from '@/servers/dto';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
+import { MiniAttackStrategiesService } from '@/mini-attack-strategies/mini-attack-strategies.service';
 
 interface CrawlerTask {
     nextExecutionTime: Date;
@@ -78,7 +79,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly configService: ConfigService,
         private readonly crawlerService: CrawlerService,
         private readonly constructionQueueService: VillageConstructionQueueService,
-        private readonly barbarianVillagesService: BarbarianVillagesService
+        private readonly barbarianVillagesService: BarbarianVillagesService,
+        private readonly miniAttackStrategiesService: MiniAttackStrategiesService
     ) {
         // Initialize credentials from environment variables
         this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
@@ -329,6 +331,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const delay = Math.max(0, task.nextExecutionTime.getTime() - Date.now());
         const plan = this.multiServerState.serverPlans.get(serverId)!;
 
+        this.logDetailedTaskSchedule();
         this.logger.log(`⏰ Next task: ${taskType} on server ${plan.serverCode} in ${Math.round(delay / 1000)}s`);
 
         this.mainTimer = setTimeout(async () => {
@@ -484,12 +487,36 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Executes mini attacks on barbarian villages for a server
      */
     private async executeMiniAttacksTask(serverId: number): Promise<void> {
-        const villageId = await this.settingsService.getSetting<{ value: string }>(serverId, SettingsKey.MINI_ATTACKS_VILLAGE_ID);
-        if (!villageId) {
-            this.logger.error(`❌ No village ID found for server ${serverId}`);
-            return;
+        this.logger.log(`🚀 Executing mini attacks for server ${serverId}`);
+
+        try {
+            // Get all strategies for this server
+            const strategies = await this.miniAttackStrategiesService.findAllByServer(serverId);
+            if (strategies.length === 0) {
+                this.logger.warn(`⚠️ No mini attack strategies found for server ${serverId}`);
+                return;
+            }
+
+            this.logger.log(`📋 Found ${strategies.length} strategies for server ${serverId}`);
+
+            // Execute mini attacks for each strategy (village)
+            for (const strategy of strategies) {
+                this.logger.log(`🗡️ Executing mini attacks for village ${strategy.villageId} on server ${serverId}`);
+
+                try {
+                    await this.barbarianVillagesService.executeMiniAttacks(serverId, strategy.villageId);
+                    this.logger.log(`✅ Mini attacks completed for village ${strategy.villageId} on server ${serverId}`);
+                } catch (villageError) {
+                    this.logger.error(`❌ Error executing mini attacks for village ${strategy.villageId} on server ${serverId}:`, villageError);
+                    // Continue with next village instead of stopping
+                }
+            }
+
+            this.logger.log(`🎯 All mini attacks completed for server ${serverId}`);
+
+        } catch (error) {
+            this.logger.error(`❌ Error during mini attacks execution for server ${serverId}:`, error);
         }
-        await this.barbarianVillagesService.executeMiniAttacks(serverId, villageId.value);
     }
 
     /**
@@ -724,11 +751,141 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         try {
             await this.checkAndStartOrchestrator();
+            this.logDetailedTaskSchedule();
             this.logger.log('✅ Manual monitoring check completed');
         } catch (error) {
             this.logger.error('❌ Error during manual monitoring start:', error);
             throw error;
         }
+    }
+
+    /**
+     * Logs detailed information about all upcoming tasks and their execution times
+     */
+    private logDetailedTaskSchedule(): void {
+        // add yellow color to all text in the method
+        this.logger.warn('📋 ============== DETAILED TASK SCHEDULE ==============');
+
+        if (this.multiServerState.activeServers.length === 0) {
+            this.logger.log('⚠️ No active servers found');
+            return;
+        }
+
+        const now = new Date();
+        const allTasks: Array<{
+            serverCode: string;
+            serverName: string;
+            taskType: string;
+            enabled: boolean;
+            nextExecution: Date;
+            timeUntilExecution: number;
+            lastExecuted: Date | null;
+            errorCount: number;
+            inCooldown: boolean;
+        }> = [];
+
+        // Collect all tasks from all servers
+        for (const [serverId, plan] of this.multiServerState.serverPlans) {
+            const inCooldown = this.isServerInErrorCooldown(plan);
+
+            allTasks.push(
+                {
+                    serverCode: plan.serverCode,
+                    serverName: plan.serverName,
+                    taskType: 'Construction Queue',
+                    enabled: plan.constructionQueue.enabled,
+                    nextExecution: plan.constructionQueue.nextExecutionTime,
+                    timeUntilExecution: plan.constructionQueue.nextExecutionTime.getTime() - now.getTime(),
+                    lastExecuted: plan.constructionQueue.lastExecuted,
+                    errorCount: plan.errorCount,
+                    inCooldown
+                },
+                {
+                    serverCode: plan.serverCode,
+                    serverName: plan.serverName,
+                    taskType: 'Scavenging',
+                    enabled: plan.scavenging.enabled,
+                    nextExecution: plan.scavenging.nextExecutionTime,
+                    timeUntilExecution: plan.scavenging.nextExecutionTime.getTime() - now.getTime(),
+                    lastExecuted: plan.scavenging.lastExecuted,
+                    errorCount: plan.errorCount,
+                    inCooldown
+                },
+                {
+                    serverCode: plan.serverCode,
+                    serverName: plan.serverName,
+                    taskType: 'Mini Attacks',
+                    enabled: plan.miniAttacks.enabled,
+                    nextExecution: plan.miniAttacks.nextExecutionTime,
+                    timeUntilExecution: plan.miniAttacks.nextExecutionTime.getTime() - now.getTime(),
+                    lastExecuted: plan.miniAttacks.lastExecuted,
+                    errorCount: plan.errorCount,
+                    inCooldown
+                }
+            );
+        }
+
+        // Sort tasks by execution time
+        allTasks.sort((a, b) => a.timeUntilExecution - b.timeUntilExecution);
+
+        // Log enabled tasks first
+        const enabledTasks = allTasks.filter(task => task.enabled && !task.inCooldown);
+        if (enabledTasks.length > 0) {
+            this.logger.log('🟢 ENABLED TASKS (sorted by execution time):');
+            enabledTasks.forEach((task, index) => {
+                const timeUntil = Math.max(0, task.timeUntilExecution);
+                const minutes = Math.floor(timeUntil / 1000 / 60);
+                const seconds = Math.floor((timeUntil / 1000) % 60);
+                const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
+                const lastExecutedStr = task.lastExecuted
+                    ? `(last: ${task.lastExecuted.toLocaleTimeString()})`
+                    : '(never executed)';
+
+                this.logger.log(`  ${index + 1}. ${task.taskType} - ${task.serverCode} (${task.serverName})`);
+                this.logger.log(`     ⏰ Next execution: ${task.nextExecution.toLocaleString()} (in ${timeString})`);
+                this.logger.log(`     📅 ${lastExecutedStr}`);
+            });
+        } else {
+            this.logger.error('🔴 No enabled tasks found');
+        }
+
+        // Log disabled tasks
+        const disabledTasks = allTasks.filter(task => !task.enabled);
+        if (disabledTasks.length > 0) {
+            this.logger.log('⚪ DISABLED TASKS:');
+            disabledTasks.forEach(task => {
+                this.logger.log(`  - ${task.taskType} - ${task.serverCode} (${task.serverName})`);
+            });
+        }
+
+        // Log servers in cooldown
+        const cooldownTasks = allTasks.filter(task => task.inCooldown);
+        if (cooldownTasks.length > 0) {
+            this.logger.log('🔄 SERVERS IN ERROR COOLDOWN:');
+            const cooldownServers = new Set(cooldownTasks.map(task => task.serverCode));
+            cooldownServers.forEach(serverCode => {
+                const serverTasks = cooldownTasks.filter(task => task.serverCode === serverCode);
+                const errorCount = serverTasks[0]?.errorCount || 0;
+                this.logger.log(`  - ${serverCode}: ${errorCount} errors (cooldown active)`);
+            });
+        }
+
+        // Log next scheduled task
+        const nextTask = this.findNextTaskToExecute();
+        if (nextTask) {
+            const plan = this.multiServerState.serverPlans.get(nextTask.serverId)!;
+            const timeUntil = Math.max(0, nextTask.task.nextExecutionTime.getTime() - now.getTime());
+            const minutes = Math.floor(timeUntil / 1000 / 60);
+            const seconds = Math.floor((timeUntil / 1000) % 60);
+            const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
+            this.logger.log('🎯 NEXT SCHEDULED TASK:');
+            this.logger.log(`  ${nextTask.taskType} - ${plan.serverCode} (${plan.serverName})`);
+            this.logger.log(`  ⏰ Execution time: ${nextTask.task.nextExecutionTime.toLocaleString()} (in ${timeString})`);
+        }
+
+        this.logger.warn('📋 ============== END TASK SCHEDULE ==============');
     }
 
     /**

@@ -63,6 +63,11 @@ export class ServersService {
         return server?.serverName || '';
     }
 
+    async getServerCode(serverId: number): Promise<string> {
+        const server = await this.serverRepo.findOne({ where: { id: serverId } });
+        return server?.serverCode || '';
+    }
+
     /**
      * Pobiera serwer po kodzie (np. pl216)
      */

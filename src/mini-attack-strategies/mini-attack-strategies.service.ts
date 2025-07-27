@@ -38,6 +38,22 @@ export class MiniAttackStrategiesService {
     }
 
     /**
+     * Pobiera wszystkie strategie dla konkretnego serwera
+     */
+    async findAllByServer(serverId: number): Promise<MiniAttackStrategyResponseDto[]> {
+        this.logger.debug(`Finding all strategies for server ${serverId}`);
+
+        const strategies = await this.strategiesRepo.find({
+            where: { serverId },
+            order: { villageId: 'ASC' }
+        });
+
+        this.logger.debug(`Found ${strategies.length} strategies for server ${serverId}`);
+
+        return strategies.map(strategy => this.mapToResponseDto(strategy));
+    }
+
+    /**
      * Tworzy nową strategię
      */
     async create(createDto: CreateMiniAttackStrategyDto): Promise<MiniAttackStrategyResponseDto> {

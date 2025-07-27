@@ -136,8 +136,8 @@ export class CrawlerOrchestratorController {
             properties: {
                 success: { type: 'boolean', example: true },
                 message: { type: 'string', example: 'Monitoring check completed successfully' },
-                orchestratorStatus: { 
-                    type: 'string', 
+                orchestratorStatus: {
+                    type: 'string',
                     example: 'started',
                     description: 'Current orchestrator status after the check'
                 }
@@ -153,11 +153,11 @@ export class CrawlerOrchestratorController {
 
         try {
             await this.orchestratorService.startMonitoringManually();
-            
+
             // Get current status to show if orchestrator is now active
             const status = this.orchestratorService.getMultiServerStatus();
             const orchestratorStatus = status.schedulerActive ? 'started' : 'stopped';
-            
+
             return {
                 success: true,
                 message: 'Monitoring check completed successfully',
