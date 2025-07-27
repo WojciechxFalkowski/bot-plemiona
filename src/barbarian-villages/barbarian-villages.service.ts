@@ -166,7 +166,7 @@ export class BarbarianVillagesService {
     }
 
     async executeMiniAttacksForAllVillagesInServer(serverId: number): Promise<AttackResult[]> {
-        const { browser, page } = await createBrowserPage({ headless: false });
+        const { browser, page } = await createBrowserPage({ headless: true });
 
         try {
             const serverName = await this.serversService.getServerName(serverId);

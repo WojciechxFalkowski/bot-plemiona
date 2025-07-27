@@ -384,7 +384,7 @@ export class VillagesService {
 
 		// const villageData = await VillageUtils.extractVillageInformation(page);
 		const villageData = await this.getOverviewVillageInformation(serverId, {
-			headless: false,
+			headless: true,
 			timeoutPerPage: 15000,
 			saveToDatabase: true
 		});

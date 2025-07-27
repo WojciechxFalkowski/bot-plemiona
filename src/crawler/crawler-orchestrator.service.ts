@@ -460,27 +460,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Executes scavenging processing for a server
      */
     private async executeScavengingTask(serverId: number): Promise<void> {
-        const { browser, page } = await createBrowserPage({ headless: true });
-
-        try {
-            const plan = this.multiServerState.serverPlans.get(serverId)!;
-            const serverName = await this.serversService.getServerName(serverId);
-            const loginResult = await AuthUtils.loginAndSelectWorld(
-                page,
-                this.credentials,
-                this.plemionaCookiesService,
-                serverName
-            );
-
-            if (!loginResult.success || !loginResult.worldSelected) {
-                throw new Error(`Login failed for server ${plan.serverCode}: ${loginResult.error || 'Unknown error'}`);
-            }
-
-            await this.crawlerService.performScavenging(page, serverId);
-
-        } finally {
-            await browser.close();
-        }
+        this.logger.log(`🚀 Executing scavenging for server ${serverId}`);
+        await this.crawlerService.performScavenging(serverId);
     }
 
     /**
@@ -499,29 +480,30 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
             this.logger.log(`📋 Found ${strategies.length} strategies for server ${serverId}`);
 
+            const serverName = await this.serversService.getServerName(serverId);
+            const serverCode = await this.serversService.getServerCode(serverId);
+
+            // 1. Login and select world
+            const { browser, page } = await createBrowserPage({ headless: true });
+
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                this.credentials,
+                this.plemionaCookiesService,
+                serverName
+            );
+
+            if (!loginResult.success || !loginResult.worldSelected) {
+                throw new Error(`Login failed for server ${serverId}: ${loginResult.error || 'Unknown error'}`);
+            }
+
+            this.logger.log(`Successfully logged in for server ${serverId}, starting mini attacks...`);
+
             // Execute mini attacks for each strategy (village)
             for (const strategy of strategies) {
                 this.logger.log(`🗡️ Executing mini attacks for village ${strategy.villageId} on server ${serverId}`);
-                const { browser, page } = await createBrowserPage({ headless: false });
 
                 try {
-                    const serverName = await this.serversService.getServerName(serverId);
-                    const serverCode = await this.serversService.getServerCode(serverId);
-
-                    // 1. Login and select world
-                    const loginResult = await AuthUtils.loginAndSelectWorld(
-                        page,
-                        this.credentials,
-                        this.plemionaCookiesService,
-                        serverName
-                    );
-
-                    if (!loginResult.success || !loginResult.worldSelected) {
-                        throw new Error(`Login failed for server ${serverId}: ${loginResult.error || 'Unknown error'}`);
-                    }
-
-                    this.logger.log(`Successfully logged in for server ${serverId}, starting mini attacks...`);
-
                     await this.barbarianVillagesService.executeMiniAttacks(serverId, strategy.villageId, page, serverCode);
                     this.logger.log(`✅ Mini attacks completed for village ${strategy.villageId} on server ${serverId}`);
                 } catch (villageError) {
@@ -668,7 +650,13 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private async isScavengingEnabled(serverId: number): Promise<boolean> {
         try {
             const setting = await this.settingsService.getSetting<{ value: boolean }>(serverId, SettingsKey.AUTO_SCAVENGING_ENABLED);
-            return setting?.value === true;
+            const isEnabled = setting?.value === true;
+
+            if (!isEnabled) {
+                this.logger.warn(`⚠️ Scavenging is disabled for server ${serverId}. Skipping execution.`);
+            }
+
+            return isEnabled;
         } catch (error) {
             this.logger.error(`Failed to check scavenging setting for server ${serverId}:`, error);
             return false;

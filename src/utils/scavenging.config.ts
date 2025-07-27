@@ -81,13 +81,13 @@ export const levelPacks: Record<number, number> = {
 
 // Selektory do odczytu dostępnych jednostek - **POPRAWIONE**
 export const availableUnitSelectors: Record<ScavengingUnit, string> = {
-	spear: 'a.units-entry-all[data-unit="spear"]',
-	sword: 'a.units-entry-all[data-unit="sword"]',
-	axe: 'a.units-entry-all[data-unit="axe"]',
-	archer: 'a.units-entry-all[data-unit="archer"]',
-	light: 'a.units-entry-all[data-unit="light"]',
-	marcher: 'a.units-entry-all[data-unit="marcher"]',
-	heavy: 'a.units-entry-all[data-unit="heavy"]',
+	spear: 'a[data-unit="spear"]',
+	sword: 'a[data-unit="sword"]',
+	axe: 'a[data-unit="axe"]',
+	archer: 'a[data-unit="archer"]',
+	light: 'a[data-unit="light"]',
+	marcher: 'a[data-unit="marcher"]',
+	heavy: 'a[data-unit="heavy"]',
 };
 
 // Nazwy pól input dla jednostek

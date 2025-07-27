@@ -71,20 +71,28 @@ export class ScavengingUtils {
         const units: Partial<Record<ScavengingUnit, number>> = {};
         this.logger.debug('Reading available unit counts...');
 
+        const table = page.locator('.candidate-squad-widget');
+
+        // Znajdź drugi wiersz (z jednostkami)
+        const armyRow = table.locator('tbody tr:nth-child(2)');
+
+        // Iteruj przez wszystkie jednostki w unitOrder
         for (const unit of unitOrder) {
             try {
-                const selector = availableUnitSelectors[unit];
-                const unitElement = page.locator(selector);
+                // Znajdź link z data-unit dla tej jednostki
+                const unitLink = armyRow.locator(`a[data-unit="${unit}"]`);
 
-                // Sprawdź, czy element istnieje i jest widoczny, zanim spróbujesz odczytać tekst
-                if (await unitElement.isVisible({ timeout: 5000 })) { // Krótki timeout na sprawdzenie widoczności
-                    const countText = await unitElement.textContent(); // Odczytaj tekst np. "(203)"
-                    const match = countText?.match(/\((\d+)\)/); // Wyciągnij liczbę z nawiasów
+                if (await unitLink.isVisible({ timeout: 2000 })) {
+                    const countText = await unitLink.textContent();
+                    console.log(`Unit ${unit} text: "${countText}"`);
+
+                    // Wyciągnij liczbę z nawiasów np. "(29)" -> 29
+                    const match = countText?.match(/\((\d+)\)/);
                     units[unit] = match ? parseInt(match[1], 10) : 0;
                     this.logger.debug(`Found unit ${unit}: ${units[unit]}`);
                 } else {
-                    this.logger.debug(`Unit element not visible for: ${unit} using selector ${selector}`);
-                    units[unit] = 0; // Jeśli element niewidoczny, załóż 0
+                    this.logger.debug(`Unit link not visible for: ${unit}`);
+                    units[unit] = 0;
                 }
 
             } catch (error) {
@@ -97,6 +105,8 @@ export class ScavengingUtils {
                 units[unit] = 0;
             }
         }
+
+        console.log("Final units object:", units);
         return units;
     }
 
