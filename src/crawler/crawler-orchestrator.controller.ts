@@ -1,33 +1,31 @@
-import { Controller, Post, Get, Logger, InternalServerErrorException, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Post, Get, Logger, InternalServerErrorException, Param, ParseIntPipe, Body } from '@nestjs/common';
 import { CrawlerOrchestratorService } from './crawler-orchestrator.service';
-import { ApiOperation, ApiResponse, ApiTags, ApiParam } from '@nestjs/swagger';
+import { ApiTags } from '@nestjs/swagger';
+import { SettingsService } from '@/settings/settings.service';
+import { SettingsKey } from '@/settings/settings-keys.enum';
+import {
+    TriggerScavengingDecorator,
+    TriggerConstructionQueueDecorator,
+    TriggerMiniAttacksDecorator,
+    StartMonitoringDecorator,
+    UpdateConstructionQueueSettingDecorator,
+    UpdateMiniAttacksSettingDecorator,
+    UpdateScavengingSettingDecorator,
+    GetStatusDecorator
+} from './decorators';
 
 @ApiTags('Crawler Orchestrator')
 @Controller('crawler-orchestrator')
 export class CrawlerOrchestratorController {
     private readonly logger = new Logger(CrawlerOrchestratorController.name);
 
-    constructor(private readonly orchestratorService: CrawlerOrchestratorService) { }
+    constructor(
+        private readonly orchestratorService: CrawlerOrchestratorService,
+        private readonly settingsService: SettingsService
+    ) { }
 
     @Post(':serverId/trigger-scavenging')
-    @ApiOperation({
-        summary: 'Manually trigger scavenging process for a server',
-        description: 'Manually starts the scavenging process for a specific server'
-    })
-    @ApiParam({
-        name: 'serverId',
-        description: 'Server ID',
-        type: 'number',
-        example: 1
-    })
-    @ApiResponse({
-        status: 200,
-        description: 'Scavenging process triggered successfully'
-    })
-    @ApiResponse({
-        status: 500,
-        description: 'Internal server error during scavenging process'
-    })
+    @TriggerScavengingDecorator()
     async triggerScavenging(@Param('serverId', ParseIntPipe) serverId: number) {
         this.logger.log(`Manual scavenging trigger requested for server ${serverId}`);
 
@@ -44,24 +42,7 @@ export class CrawlerOrchestratorController {
     }
 
     @Post(':serverId/trigger-construction-queue')
-    @ApiOperation({
-        summary: 'Manually trigger construction queue processing for a server',
-        description: 'Manually starts the construction queue processing for a specific server'
-    })
-    @ApiParam({
-        name: 'serverId',
-        description: 'Server ID',
-        type: 'number',
-        example: 1
-    })
-    @ApiResponse({
-        status: 200,
-        description: 'Construction queue processing triggered successfully'
-    })
-    @ApiResponse({
-        status: 500,
-        description: 'Internal server error during construction queue processing'
-    })
+    @TriggerConstructionQueueDecorator()
     async triggerConstructionQueue(@Param('serverId', ParseIntPipe) serverId: number) {
         this.logger.log(`Manual construction queue trigger requested for server ${serverId}`);
 
@@ -78,24 +59,7 @@ export class CrawlerOrchestratorController {
     }
 
     @Post(':serverId/trigger-mini-attacks')
-    @ApiOperation({
-        summary: 'Manually trigger mini attacks for a server',
-        description: 'Manually starts the mini attacks process for a specific server'
-    })
-    @ApiParam({
-        name: 'serverId',
-        description: 'Server ID',
-        type: 'number',
-        example: 1
-    })
-    @ApiResponse({
-        status: 200,
-        description: 'Mini attacks triggered successfully'
-    })
-    @ApiResponse({
-        status: 500,
-        description: 'Internal server error during mini attacks'
-    })
+    @TriggerMiniAttacksDecorator()
     async triggerMiniAttacks(@Param('serverId', ParseIntPipe) serverId: number) {
         this.logger.log(`Manual mini attacks trigger requested for server ${serverId}`);
 
@@ -112,42 +76,7 @@ export class CrawlerOrchestratorController {
     }
 
     @Post('start-monitoring')
-    @ApiOperation({
-        summary: 'Manually start orchestrator monitoring',
-        description: `Manually triggers the orchestrator monitoring check. This is useful when:
-        
-        • The application starts with no servers having CRAWLER_ORCHESTRATOR_ENABLED=true
-        • Later, you enable the orchestrator for a server using settings API
-        • You need to force the orchestrator to detect the change immediately
-        
-        **Typical workflow:**
-        1. Application starts with orchestrator disabled
-        2. Enable orchestrator: \`POST /api/settings/{serverId}/CRAWLER_ORCHESTRATOR_ENABLED\` with \`{"value": true}\`
-        3. Call this endpoint to force monitoring check
-        4. Orchestrator will start if any server has it enabled
-        
-        **Note:** The monitoring runs automatically every 3 minutes, but this endpoint allows immediate response to setting changes.`
-    })
-    @ApiResponse({
-        status: 200,
-        description: 'Monitoring check completed successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: { type: 'boolean', example: true },
-                message: { type: 'string', example: 'Monitoring check completed successfully' },
-                orchestratorStatus: {
-                    type: 'string',
-                    example: 'started',
-                    description: 'Current orchestrator status after the check'
-                }
-            }
-        }
-    })
-    @ApiResponse({
-        status: 500,
-        description: 'Internal server error during monitoring check'
-    })
+    @StartMonitoringDecorator()
     async startMonitoring() {
         this.logger.log('Manual monitoring start requested');
 
@@ -171,15 +100,98 @@ export class CrawlerOrchestratorController {
         }
     }
 
+    @Post('settings/:serverId/construction-queue')
+    @UpdateConstructionQueueSettingDecorator()
+    async updateConstructionQueueSetting(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: { value: boolean }
+    ) {
+        this.logger.log(`Updating construction queue setting for server ${serverId}: value=${dto.value}`);
+
+        try {
+            // 1. Update setting
+            await this.settingsService.setSetting(serverId, SettingsKey.AUTO_CONSTRUCTION_QUEUE_ENABLED, { value: dto.value });
+            
+            // 2. Refresh task states immediately
+            await this.orchestratorService.updateServerTaskStates(serverId);
+            
+            return {
+                success: true,
+                message: `Construction queue setting updated to ${dto.value} for server ${serverId}`,
+                setting: {
+                    serverId,
+                    key: SettingsKey.AUTO_CONSTRUCTION_QUEUE_ENABLED,
+                    value: dto.value
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Error updating construction queue setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Failed to update construction queue setting: ${error.message}`);
+        }
+    }
+
+    @Post('settings/:serverId/mini-attacks')
+    @UpdateMiniAttacksSettingDecorator()
+    async updateMiniAttacksSetting(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: { value: boolean }
+    ) {
+        this.logger.log(`Updating mini attacks setting for server ${serverId}: value=${dto.value}`);
+
+        try {
+            // 1. Update setting
+            await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_ENABLED, { value: dto.value });
+            
+            // 2. Refresh task states immediately
+            await this.orchestratorService.updateServerTaskStates(serverId);
+            
+            return {
+                success: true,
+                message: `Mini attacks setting updated to ${dto.value} for server ${serverId}`,
+                setting: {
+                    serverId,
+                    key: SettingsKey.MINI_ATTACKS_ENABLED,
+                    value: dto.value
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Error updating mini attacks setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Failed to update mini attacks setting: ${error.message}`);
+        }
+    }
+
+    @Post('settings/:serverId/scavenging')
+    @UpdateScavengingSettingDecorator()
+    async updateScavengingSetting(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: { value: boolean }
+    ) {
+        this.logger.log(`Updating scavenging setting for server ${serverId}: value=${dto.value}`);
+
+        try {
+            // 1. Update setting
+            await this.settingsService.setSetting(serverId, SettingsKey.AUTO_SCAVENGING_ENABLED, { value: dto.value });
+            
+            // 2. Refresh task states immediately
+            await this.orchestratorService.updateServerTaskStates(serverId);
+            
+            return {
+                success: true,
+                message: `Scavenging setting updated to ${dto.value} for server ${serverId}`,
+                setting: {
+                    serverId,
+                    key: SettingsKey.AUTO_SCAVENGING_ENABLED,
+                    value: dto.value
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Error updating scavenging setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Failed to update scavenging setting: ${error.message}`);
+        }
+    }
+
     @Get('status')
-    @ApiOperation({
-        summary: 'Get multi-server orchestrator status',
-        description: 'Returns the current status of all servers in the multi-server orchestrator'
-    })
-    @ApiResponse({
-        status: 200,
-        description: 'Multi-server orchestrator status retrieved successfully'
-    })
+    @GetStatusDecorator()
     getStatus() {
         this.logger.log('Multi-server orchestrator status requested');
 

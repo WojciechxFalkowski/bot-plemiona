@@ -292,7 +292,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     /**
      * Updates task enabled states for a specific server
      */
-    private async updateServerTaskStates(serverId: number): Promise<void> {
+    public async updateServerTaskStates(serverId: number): Promise<void> {
         const plan = this.multiServerState.serverPlans.get(serverId);
         if (!plan) return;
 
@@ -302,7 +302,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
 
             this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}`);
-
+            this.logDetailedTaskSchedule();
         } catch (error) {
             this.logger.error(`❌ Error updating task states for server ${serverId}:`, error);
         }

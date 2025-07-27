@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CrawlerService } from './crawler.service';
 import { CrawlerController } from './crawler.controller';
-import { BuildingCrawlerService } from './building-crawler.service';
-import { BuildingCrawlerController } from './building-crawler.controller';
 import { CrawlerOrchestratorService } from './crawler-orchestrator.service';
 import { CrawlerOrchestratorController } from './crawler-orchestrator.controller';
 import { SettingsModule } from '../settings/settings.module';
@@ -15,8 +13,8 @@ import { MiniAttackStrategiesModule } from '@/mini-attack-strategies/mini-attack
 
 @Module({
   imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule],
-  controllers: [CrawlerController, BuildingCrawlerController, CrawlerOrchestratorController],
-  providers: [CrawlerService, BuildingCrawlerService, CrawlerOrchestratorService],
-  exports: [CrawlerService, BuildingCrawlerService, CrawlerOrchestratorService],
+  controllers: [CrawlerController, CrawlerOrchestratorController],
+  providers: [CrawlerService, CrawlerOrchestratorService],
+  exports: [CrawlerService, CrawlerOrchestratorService],
 })
 export class CrawlerModule { }
