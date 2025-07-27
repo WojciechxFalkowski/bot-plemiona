@@ -9,6 +9,9 @@ export class BarbarianVillageEntity {
     @Column({ type: 'int' })
     serverId: number;
 
+    @Column({ type: 'varchar', length: 255 })
+    villageId: string;
+
     @Column()
     name: string;
 

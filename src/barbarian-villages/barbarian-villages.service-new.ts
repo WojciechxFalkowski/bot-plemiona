@@ -283,6 +283,8 @@ export class BarbarianVillagesService {
     }
 
     private parseBarbarianVillageUrl(url: string): { target: string; x: number; y: number } | null {
+        console.log("parseBarbarianVillageUrl");
+        
         try {
             const urlObj = new URL(url);
             const target = urlObj.searchParams.get('target');

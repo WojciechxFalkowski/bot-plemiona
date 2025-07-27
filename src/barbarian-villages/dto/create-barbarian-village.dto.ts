@@ -16,6 +16,15 @@ export class CreateBarbarianVillageDto {
     target: string;
 
     @ApiProperty({
+        example: '32005',
+        description: 'Village ID in the game',
+        required: true
+    })
+    @IsString()
+    @IsNotEmpty()
+    villageId: string;
+
+    @ApiProperty({
         example: 'Wioska barbarzyńska',
         description: 'Name of the barbarian village',
         required: true

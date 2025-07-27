@@ -15,6 +15,7 @@ import { BarbarianVillagesModule } from './barbarian-villages/barbarian-villages
 import { BuildingsModule } from './buildings/buildings.module';
 import { ServersModule } from './servers/servers.module';
 import { PlemionaCookiesModule } from './plemiona-cookies';
+import { MiniAttackStrategiesModule } from './mini-attack-strategies';
 
 @Module({
   imports: [
@@ -30,7 +31,8 @@ import { PlemionaCookiesModule } from './plemiona-cookies';
     BarbarianVillagesModule,
     BuildingsModule,
     ServersModule,
-		PlemionaCookiesModule
+		PlemionaCookiesModule,
+    MiniAttackStrategiesModule
   ],
   controllers: [AppController],
   providers: [AppService],
