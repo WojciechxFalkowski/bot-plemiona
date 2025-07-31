@@ -12,8 +12,6 @@ export interface PlemionaCookie {
 // Interfejs dla danych uwierzytelniania
 export interface PlemionaCredentials {
     username: string;
-    password: string;
-    targetWorld: string;
 }
 
 // Interfejs dla opcji logowania

@@ -82,34 +82,17 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly barbarianVillagesService: BarbarianVillagesService,
         private readonly miniAttackStrategiesService: MiniAttackStrategiesService
     ) {
-        // Initialize credentials from environment variables
-        this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
-        this.validateCredentials();
-
         // Initialize multi-server state
         this.initializeMultiServerState();
     }
 
     async onModuleInit() {
         this.logger.log('🌐 Multi-Server CrawlerOrchestratorService initialized');
-        this.startMonitoring();
+        // this.startMonitoring();
     }
 
     async onModuleDestroy() {
         this.stopOrchestrator();
-    }
-
-    /**
-     * Validates the credentials
-     */
-    private async validateCredentials(): Promise<void> {
-        const serverName = await this.serversService.getServerName(1);
-        const validation = AuthUtils.validateCredentials(this.credentials);
-        if (!validation.isValid) {
-            this.logger.warn(`Invalid credentials: missing fields: ${validation.missingFields.join(', ')}, errors: ${validation.errors.join(', ')}. Fallback to cookies will be attempted.`);
-        } else {
-            this.logger.log('Plemiona credentials loaded from environment variables successfully.');
-        }
     }
 
     /**

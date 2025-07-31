@@ -10,5 +10,3 @@ Required environment variables:
 - `DATABASE_NAME`: Database name
 - `BACKEND_PORT`: Port for API server (default: 3000)
 - `PLEMIONA_USERNAME`: Game account username
-- `PLEMIONA_PASSWORD`: Game account password
-- `PLEMIONA_TARGET_WORLD`: Game world name (e.g., "Świat 214") 

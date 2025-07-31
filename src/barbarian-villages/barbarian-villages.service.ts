@@ -30,8 +30,6 @@ export class BarbarianVillagesService {
         private readonly serversService: ServersService,
         private readonly miniAttackStrategiesService: MiniAttackStrategiesService,
     ) {
-        // Initialize credentials from environment variables
-        this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
     }
 
     async findAll(serverId: number): Promise<BarbarianVillageEntity[]> {

@@ -49,8 +49,6 @@ An automated bot for the browser-based game "Plemiona" (Tribal Wars) that manage
 
    # Plemiona Game Credentials
    PLEMIONA_USERNAME=your_game_username
-   PLEMIONA_PASSWORD=your_game_password
-   PLEMIONA_TARGET_WORLD=Świat XX
    ```
 
 4. Run database migrations:
@@ -138,8 +136,6 @@ Game credentials are stored in environment variables:
 
 ```
 PLEMIONA_USERNAME=your_game_username
-PLEMIONA_PASSWORD=your_game_password
-PLEMIONA_TARGET_WORLD=Świat XX
 ```
 
 These are used as a fallback when cookie authentication fails. For security reasons, it's strongly recommended to use cookies for authentication whenever possible.

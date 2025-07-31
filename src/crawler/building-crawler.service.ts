@@ -54,8 +54,6 @@
 //         // Check for missing credentials
 //         const missingCredentials: string[] = [];
 //         if (!this.credentials.username) missingCredentials.push('PLEMIONA_USERNAME');
-//         if (!this.credentials.password) missingCredentials.push('PLEMIONA_PASSWORD');
-//         if (!this.credentials.targetWorld) missingCredentials.push('PLEMIONA_TARGET_WORLD');
 
 //         if (missingCredentials.length > 0) {
 //             this.logger.warn(`Missing environment variables: ${missingCredentials.join(', ')}. Fallback to cookies will be attempted.`);
@@ -102,10 +100,8 @@
 //             }
 
 //             // --- World Selection ---
-//             if (await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.credentials.targetWorld))) {
+//             if (await page.isVisible(this.PLEMIONA_WORLD_SELECTOR(this.credentials))) {
 //                 try {
-//                     await page.getByText(this.credentials.targetWorld).click();
-//                     this.logger.log(`Selected world: ${this.credentials.targetWorld}`);
 //                     await page.waitForLoadState('networkidle', { timeout: 15000 });
 //                     this.logger.log('World page loaded.');
 

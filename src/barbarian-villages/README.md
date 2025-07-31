@@ -126,7 +126,6 @@ Moduł wymaga następujących zależności:
 ```env
 # Credentials do gry Plemiona
 PLEMIONA_USERNAME=your_username
-PLEMIONA_PASSWORD=your_password
 PLEMIONA_WORLD=216
 
 # Konfiguracja wioski

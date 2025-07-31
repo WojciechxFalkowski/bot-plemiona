@@ -11,6 +11,7 @@
 **Cel:** Dodaje zapisane cookies Plemiona do kontekstu przeglądarki dla automatycznego logowania.
 
 **Przykład działania:**
+
 ```typescript
 // W CrawlerService
 try {
@@ -27,15 +28,15 @@ const cookiesFromDB = [
     value: 'abc123def456',
     domain: '.plemiona.pl',
     path: '/',
-    expires: 1705123456
+    expires: 1705123456,
   },
   {
     name: 'world',
     value: 'pl216',
-    domain: '.plemiona.pl', 
+    domain: '.plemiona.pl',
     path: '/',
-    expires: 1705123456
-  }
+    expires: 1705123456,
+  },
 ];
 
 // Po przetworzeniu przez AuthUtils:
@@ -48,13 +49,14 @@ const processedCookies = [
     expires: 1705123456,
     httpOnly: true,
     secure: true,
-    sameSite: 'Lax'
-  }
+    sameSite: 'Lax',
+  },
   // ... więcej cookies
 ];
 ```
 
 **Logika działania:**
+
 - Pobiera cookies z bazy danych przez `SettingsService`
 - Dodaje wymagane właściwości (`httpOnly`, `secure`, `sameSite`)
 - Aplikuje cookies do kontekstu przeglądarki
@@ -67,11 +69,10 @@ const processedCookies = [
 **Cel:** Wykonuje ręczne logowanie wypełniając formularz logowania.
 
 **Przykład działania:**
+
 ```typescript
 const credentials = {
   username: 'mojLogin',
-  password: 'mojeHaslo123',
-  targetWorld: 'Świat 214'
 };
 
 try {
@@ -83,23 +84,26 @@ try {
 ```
 
 **Sekwencja kroków:**
+
 1. Wypełnia pole "Nazwa gracza:" wartością `credentials.username`
-2. Wypełnia pole "Hasło:" wartością `credentials.password` 
+2. Wypełnia pole "Hasło:" wartością `credentials.password`
 3. Klika przycisk "Logowanie"
 4. Czeka 3 sekundy na przeładowanie strony
 
 **Obsługa błędów:**
+
 - Element nie znaleziony → rzuca wyjątek
-- Timeout → rzuca wyjątek 
+- Timeout → rzuca wyjątek
 - Network error → rzuca wyjątek
 
 ---
 
-### 3. `selectWorld(page: Page, targetWorld: string, timeout?: number)`
+### 3. `selectWorld(page: Page,  timeout?: number)`
 
 **Cel:** Wybiera docelowy świat po pomyślnym logowaniu.
 
 **Przykład działania:**
+
 ```typescript
 try {
   await AuthUtils.selectWorld(page, 'Świat 214', 15000);
@@ -110,12 +114,14 @@ try {
 ```
 
 **Logika działania:**
+
 - Sprawdza czy selektor świata jest widoczny
 - Klika na tekst zawierający nazwę świata
 - Czeka na załadowanie strony świata (`networkidle`)
 - Domyślny timeout: 15 sekund
 
 **Możliwe błędy:**
+
 - `World selector for "Świat 214" not visible` - selektor nie jest widoczny
 - Timeout podczas ładowania strony
 - Błąd sieci
@@ -127,11 +133,10 @@ try {
 **Cel:** Kompleksowa metoda łącząca cookies, ręczne logowanie i wybór świata.
 
 **Przykład działania:**
+
 ```typescript
 const credentials = {
   username: 'mojLogin',
-  password: 'mojeHaslo123', 
-  targetWorld: 'Świat 214'
 };
 
 const options = {
@@ -142,9 +147,9 @@ const options = {
 };
 
 const result = await AuthUtils.loginAndSelectWorld(
-  page, 
-  credentials, 
-  settingsService, 
+  page,
+  credentials,
+  settingsService,
   options
 );
 
@@ -159,7 +164,7 @@ const result = await AuthUtils.loginAndSelectWorld(
 // Sukces z manual login:
 {
   success: true,
-  method: 'manual', 
+  method: 'manual',
   worldSelected: true
 }
 
@@ -180,12 +185,15 @@ const result = await AuthUtils.loginAndSelectWorld(
 ```
 
 **Algorytm działania:**
+
 1. **Cookies (jeśli nie wyłączone):**
+
    - Próbuje dodać cookies
    - Nawiguje do strony logowania
    - Sprawdza czy selektor świata jest widoczny
 
 2. **Manual login (jeśli cookies nie działają):**
+
    - Wypełnia formularz logowania
    - Sprawdza ponownie selektor świata
 
@@ -194,6 +202,7 @@ const result = await AuthUtils.loginAndSelectWorld(
    - Czeka na załadowanie
 
 **Metody uwierzytelniania:**
+
 - `'cookies'` - pomyślne logowanie tylko przez cookies
 - `'manual'` - pomyślne logowanie tylko przez formularz
 - `'mixed'` - cookies dodane, ale wymagane było ręczne logowanie
@@ -205,12 +214,11 @@ const result = await AuthUtils.loginAndSelectWorld(
 **Cel:** Waliduje kompletność i poprawność danych logowania.
 
 **Przykład działania:**
+
 ```typescript
 // Poprawne credentials:
 const validCredentials = {
   username: 'mojLogin',
-  password: 'mojeHaslo123',
-  targetWorld: 'Świat 214'
 };
 
 const validation1 = AuthUtils.validateCredentials(validCredentials);
@@ -220,13 +228,6 @@ const validation1 = AuthUtils.validateCredentials(validCredentials);
   missingFields: [],
   errors: []
 }
-
-// Niepoprawne credentials:
-const invalidCredentials = {
-  username: 'ab',           // Za krótkie
-  password: '',             // Puste
-  targetWorld: 'World214'   // Zły format
-};
 
 const validation2 = AuthUtils.validateCredentials(invalidCredentials);
 // Wynik:
@@ -241,18 +242,15 @@ const validation2 = AuthUtils.validateCredentials(invalidCredentials);
 ```
 
 **Reguły walidacji:**
-- **Brakujące pola:** username, password, targetWorld nie mogą być puste
-- **Username:** Minimum 3 znaki
-- **Password:** Minimum 5 znaków
-- **TargetWorld:** Powinien zawierać "Świat"
 
 ---
 
-### 6. `isLoggedIn(page: Page, targetWorld?: string)`
+### 6. `isLoggedIn(page: Page)`
 
 **Cel:** Sprawdza aktualny status logowania i czy jesteśmy na poprawnym świecie.
 
 **Przykład działania:**
+
 ```typescript
 // Sprawdzenie ogólnego statusu:
 const status1 = await AuthUtils.isLoggedIn(page);
@@ -288,11 +286,13 @@ const status2 = await AuthUtils.isLoggedIn(page, 'Świat 214');
 ```
 
 **Logika sprawdzania:**
+
 - **isLoggedIn:** URL zawiera `/game.php` i nie ma tekstu "Wybierz świat"
 - **isOnCorrectWorld:** Numer świata w URL odpowiada oczekiwanemu
 - **currentUrl:** Aktualny adres strony
 
 **Rozpoznawanie świata z URL:**
+
 ```typescript
 // URL: https://pl216.plemiona.pl/game.php
 // Regex: /https:\/\/pl(\d+)\.plemiona\.pl/
@@ -307,6 +307,7 @@ const status2 = await AuthUtils.isLoggedIn(page, 'Świat 214');
 **Cel:** Wylogowuje użytkownika z gry.
 
 **Przykład działania:**
+
 ```typescript
 try {
   await AuthUtils.logout(page);
@@ -317,7 +318,9 @@ try {
 ```
 
 **Strategia wylogowania:**
+
 1. **Preferowana metoda - kliknięcie linku:**
+
    - Szuka link zawierający `action=logout`
    - Klika pierwszy znaleziony link
    - Czeka na załadowanie strony
@@ -327,6 +330,7 @@ try {
    - Nawiguje bezpośrednio do `/?action=logout`
 
 **Przykładowe URLe wylogowania:**
+
 ```typescript
 // Aktualne URL: https://pl216.plemiona.pl/game.php?village=12345&screen=overview
 // Logout URL:   https://pl216.plemiona.pl/?action=logout
@@ -339,43 +343,37 @@ try {
 
 ## Interfejsy
 
-### `PlemionaCredentials`
-```typescript
-interface PlemionaCredentials {
-  username: string;    // Login użytkownika
-  password: string;    // Hasło użytkownika  
-  targetWorld: string; // Nazwa świata (np. "Świat 214")
-}
-```
-
 ### `LoginOptions`
+
 ```typescript
 interface LoginOptions {
-  useManualLogin?: boolean;       // Wymuś ręczne logowanie (domyślnie false)
-  skipCookies?: boolean;          // Pomiń cookies (domyślnie false)
-  loginTimeout?: number;          // Timeout logowania w ms (domyślnie 15000)
+  useManualLogin?: boolean; // Wymuś ręczne logowanie (domyślnie false)
+  skipCookies?: boolean; // Pomiń cookies (domyślnie false)
+  loginTimeout?: number; // Timeout logowania w ms (domyślnie 15000)
   worldSelectionTimeout?: number; // Timeout wyboru świata w ms (domyślnie 15000)
 }
 ```
 
 ### `LoginResult`
+
 ```typescript
 interface LoginResult {
-  success: boolean;                        // Czy logowanie się udało
+  success: boolean; // Czy logowanie się udało
   method: 'cookies' | 'manual' | 'mixed'; // Metoda logowania
-  worldSelected: boolean;                  // Czy świat został wybrany
-  error?: string;                         // Opis błędu (jeśli wystąpił)
+  worldSelected: boolean; // Czy świat został wybrany
+  error?: string; // Opis błędu (jeśli wystąpił)
 }
 ```
 
 ### `PlemionaCookie`
+
 ```typescript
 interface PlemionaCookie {
-  name: string;     // Nazwa cookie
-  value: string;    // Wartość cookie
-  domain: string;   // Domena (np. ".plemiona.pl")
-  path: string;     // Ścieżka (np. "/")
-  expires: number;  // Data wygaśnięcia (timestamp)
+  name: string; // Nazwa cookie
+  value: string; // Wartość cookie
+  domain: string; // Domena (np. ".plemiona.pl")
+  path: string; // Ścieżka (np. "/")
+  expires: number; // Data wygaśnięcia (timestamp)
 }
 ```
 
@@ -392,25 +390,27 @@ Wszystkie metody obsługują błędy poprzez:
 
 ```typescript
 // Cookies nie dostępne:
-"No Plemiona cookies found in settings"
+'No Plemiona cookies found in settings';
 
 // Element nie znaleziony:
-"World selector for \"Świat 214\" not visible"
+"World selector for \"Świat 214\" not visible";
 
 // Timeout:
-"Error selecting world \"Świat 214\": TimeoutError: Timeout 15000ms exceeded"
+"Error selecting world \"Świat 214\": TimeoutError: Timeout 15000ms exceeded";
 
 // Logowanie nieudane:
-"Login and world selection failed: World selector not visible after manual login attempt"
+'Login and world selection failed: World selector not visible after manual login attempt';
 ```
 
 ## Zależności
 
 ### Zewnętrzne:
+
 - `playwright` - Page, BrowserContext
 - `@nestjs/common` - Logger
 
 ### Wewnętrzne:
+
 - `../../settings/settings.service` - SettingsService
 - `../../settings/settings-keys.enum` - SettingsKey
 - `./auth.interfaces` - Interfejsy TypeScript
@@ -420,7 +420,6 @@ Wszystkie metody obsługują błędy poprzez:
 ```typescript
 private static readonly PLEMIONA_LOGIN_URL = 'https://www.plemiona.pl/';
 private static readonly PLEMIONA_USERNAME_SELECTOR = 'textbox[name="Nazwa gracza:"]';
-private static readonly PLEMIONA_PASSWORD_SELECTOR = 'textbox[name="Hasło:"]';
 private static readonly PLEMIONA_LOGIN_BUTTON_SELECTOR = 'link[name="Logowanie"]';
 private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=${worldName}`;
 ```
@@ -430,6 +429,7 @@ private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=$
 ### Przykładowe scenariusze testowe:
 
 1. **Test logowania przez cookies:**
+
    ```typescript
    // Given: Ważne cookies w bazie danych
    // When: addPlemionaCookies() + nawigacja na stronę
@@ -437,6 +437,7 @@ private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=$
    ```
 
 2. **Test fallback na manual login:**
+
    ```typescript
    // Given: Brak cookies lub nieważne cookies
    // When: loginAndSelectWorld() z valid credentials
@@ -444,6 +445,7 @@ private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=$
    ```
 
 3. **Test walidacji credentials:**
+
    ```typescript
    // Given: Credentials z krótkimi polami
    // When: validateCredentials()
@@ -451,6 +453,7 @@ private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=$
    ```
 
 4. **Test sprawdzania statusu logowania:**
+
    ```typescript
    // Given: Strona game.php z pl216 w URL
    // When: isLoggedIn(page, 'Świat 214')
@@ -462,4 +465,4 @@ private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=$
    // Given: Zalogowany użytkownik na stronie gry
    // When: logout(page)
    // Then: Przekierowanie na stronę logowania
-   ``` 
+   ```

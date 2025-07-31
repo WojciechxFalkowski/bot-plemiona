@@ -20,21 +20,6 @@ export class TribalWarsPage {
   }
 
   /**
-   * Login to Tribal Wars
-   * @param username - User name
-   * @param password - User password
-   */
-  async login(username: string, password: string): Promise<void> {
-    await this.navigateToLogin();
-    await this.page.fill('input[name="username"]', username);
-    await this.page.fill('input[name="password"]', password);
-    await this.page.click('input[type="submit"]');
-    
-    // Wait for successful login by checking for village element
-    await this.page.waitForSelector('#menu_row');
-  }
-
-  /**
    * Navigate to a specific village
    * @param villageId - ID of the village
    */

@@ -21,8 +21,6 @@
 #           echo "DATABASE_NAME=${{ vars.DATABASE_NAME }}" >> .env
 #           echo "BACKEND_PORT=${{ vars.BACKEND_PORT }}" >> .env
 #           echo "PLEMIONA_USERNAME=${{ secrets.PLEMIONA_USERNAME }}" >> .env
-#           echo "PLEMIONA_PASSWORD=${{ secrets.PLEMIONA_PASSWORD }}" >> .env
-#           echo "PLEMIONA_TARGET_WORLD=${{ vars.PLEMIONA_TARGET_WORLD }}" >> .env
 
 #       - name: Debug working directory
 #         run: pwd && ls -la

@@ -47,23 +47,6 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         private configService: ConfigService,
         private serversService: ServersService
     ) {
-        // Initialize credentials from environment variables with default values if not set
-        this.credentials = AuthUtils.getCredentialsFromEnvironmentVariables(this.configService);
-        // Validate credentials
-        this.validateCredentials();
-    }
-
-    /**
- * Validates the credentials
- * @returns void
- */
-    public async validateCredentials() {
-        const validation = AuthUtils.validateCredentials(this.credentials);
-        if (!validation.isValid) {
-            this.logger.warn(`Invalid credentials: missing fields: ${validation.missingFields.join(', ')}, errors: ${validation.errors.join(', ')}. Fallback to cookies will be attempted.`);
-        } else {
-            this.logger.log('Plemiona credentials loaded from environment variables successfully.');
-        }
     }
 
     async onModuleInit() {
