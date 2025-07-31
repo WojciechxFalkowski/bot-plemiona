@@ -88,7 +88,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
     async onModuleInit() {
         this.logger.log('🌐 Multi-Server CrawlerOrchestratorService initialized');
-        // this.startMonitoring();
+        this.startMonitoring();
     }
 
     async onModuleDestroy() {
