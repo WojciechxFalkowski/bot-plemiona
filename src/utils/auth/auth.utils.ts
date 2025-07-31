@@ -17,7 +17,6 @@ export class AuthUtils {
     // Constants for Plemiona Login
     private static readonly PLEMIONA_LOGIN_URL = 'https://www.plemiona.pl/';
     private static readonly PLEMIONA_USERNAME_SELECTOR = 'textbox[name="Nazwa gracza:"]';
-    private static readonly PLEMIONA_PASSWORD_SELECTOR = 'textbox[name="Hasło:"]';
     private static readonly PLEMIONA_LOGIN_BUTTON_SELECTOR = 'link[name="Logowanie"]';
     private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=${worldName}`;
 
@@ -52,40 +51,8 @@ export class AuthUtils {
     }
 
     /**
-     * Performs manual login to Plemiona by filling credentials form.
-     * @param page - The Playwright Page object.
-     * @param credentials - User credentials for login
-     */
-    static async loginToPlemiona(page: Page, credentials: PlemionaCredentials): Promise<void> {
-        try {
-            this.logger.log('Starting manual login process...');
-
-            // Fill Username
-            await page.getByRole('textbox', { name: 'Nazwa gracza:' }).fill(credentials.username);
-            this.logger.log('Filled username for manual login.');
-
-            // Fill Password
-            await page.getByRole('textbox', { name: 'Hasło:' }).fill(credentials.password);
-            this.logger.log('Filled password for manual login.');
-
-            // Click Login
-            await page.getByRole('link', { name: 'Logowanie' }).click();
-            this.logger.log('Clicked login button for manual login.');
-
-            // Wait for potential page load/redirect after login click
-            await page.waitForTimeout(3000);
-            this.logger.log('Manual login process completed.');
-
-        } catch (error) {
-            this.logger.error('Error during manual login steps', error);
-            throw error;
-        }
-    }
-
-    /**
      * Selects the target world after successful login.
      * @param page - The Playwright Page object
-     * @param targetWorld - Name of the world to select (e.g., "Świat 214")
      * @param timeout - Timeout for world selection in milliseconds
      */
     static async selectWorld(page: Page, targetWorld: string, timeout: number = 15000): Promise<void> {
@@ -99,8 +66,9 @@ export class AuthUtils {
                 throw new Error(`World selector for "${targetWorld}" not visible`);
             }
 
+            const worldWrapper = page.locator('.worlds-container');
             // Click on the world
-            await page.getByText(targetWorld).click();
+            await worldWrapper.getByText(targetWorld).click();
             this.logger.log(`Selected world: ${targetWorld}`);
 
             // Wait for world page to load
@@ -164,30 +132,18 @@ export class AuthUtils {
             this.logger.log(`Navigated to ${this.PLEMIONA_LOGIN_URL}`);
 
             // Step 3: Check if world selector is visible (indicates successful cookie login)
-            const worldSelectorVisible = await page.isVisible(
-                this.PLEMIONA_WORLD_SELECTOR(serverName),
-                { timeout: 5000 }
-            );
+                        // Step 3: Check if world selector is visible (indicates successful cookie login)
+            const worldWrapper = page.locator('.worlds-container');
+
+            const worldSelector = worldWrapper.getByText(serverName);
+            const worldSelectorVisible = await worldSelector.isVisible();
 
             if (worldSelectorVisible && cookiesAdded && !useManualLogin) {
                 this.logger.log('Login via cookies appears successful (world selector visible).');
                 result.method = 'cookies';
             } else {
-                // Step 4: Perform manual login if cookies failed or manual login requested
-                this.logger.log('World selector not immediately visible or manual login requested, attempting manual login.');
-                await this.loginToPlemiona(page, credentials);
-                result.method = cookiesAdded ? 'mixed' : 'manual';
-
-                // Wait a bit and check again for world selector
-                await page.waitForTimeout(2000);
-                const worldSelectorVisibleAfterLogin = await page.isVisible(
-                    this.PLEMIONA_WORLD_SELECTOR(serverName),
-                    { timeout: 5000 }
-                );
-
-                if (!worldSelectorVisibleAfterLogin) {
-                    throw new Error('World selector not visible after manual login attempt');
-                }
+                this.logger.error('Login failed. World selector not visible after manual login attempt');
+                throw new Error('Login failed. World selector not visible after manual login attempt');
             }
 
             // Step 5: Select the target world
@@ -204,52 +160,6 @@ export class AuthUtils {
             result.error = errorMessage;
             return result;
         }
-    }
-
-    static getCredentialsFromEnvironmentVariables(configService: ConfigService): PlemionaCredentials {
-        return {
-            username: configService.get<string>('PLEMIONA_USERNAME') || '',
-            password: configService.get<string>('PLEMIONA_PASSWORD') || '',
-            targetWorld: configService.get<string>('PLEMIONA_TARGET_WORLD') || ''
-        };
-    }
-
-    /**
-     * Validates if the provided credentials are complete and valid.
-     * @param credentials - Credentials to validate
-     * @returns Object with validation result and missing fields
-     */
-    static validateCredentials(credentials: PlemionaCredentials): {
-        isValid: boolean;
-        missingFields: string[];
-        errors: string[];
-    } {
-        const missingFields: string[] = [];
-        const errors: string[] = [];
-
-        // Check for missing fields
-        if (!credentials.username || credentials.username.trim() === '') {
-            missingFields.push('username');
-        }
-        if (!credentials.password || credentials.password.trim() === '') {
-            missingFields.push('password');
-        }
-
-        // Additional validation rules
-        if (credentials.username && credentials.username.length < 3) {
-            errors.push('Username must be at least 3 characters long');
-        }
-        if (credentials.password && credentials.password.length < 5) {
-            errors.push('Password must be at least 5 characters long');
-        }
-
-        const isValid = missingFields.length === 0 && errors.length === 0;
-
-        return {
-            isValid,
-            missingFields,
-            errors
-        };
     }
 
     /**
