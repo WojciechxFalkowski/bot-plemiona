@@ -21,13 +21,31 @@ export class MiniAttackStrategiesService {
     ) { }
 
     /**
-     * Pobiera strategię dla konkretnego serwera i wioski
+     * Pobiera strategię po ID
+     */
+    async findById(id: number): Promise<MiniAttackStrategyResponseDto> {
+        this.logger.debug(`Finding strategy by ID ${id}`);
+
+        const strategy = await this.strategiesRepo.findOne({
+            where: { id }
+        });
+
+        if (!strategy) {
+            throw new NotFoundException(`Strategy not found with ID ${id}`);
+        }
+
+        return this.mapToResponseDto(strategy);
+    }
+
+    /**
+     * Pobiera strategię dla konkretnego serwera i wioski (pierwszą znalezioną)
      */
     async findByServerAndVillage(serverId: number, villageId: string): Promise<MiniAttackStrategyResponseDto> {
         this.logger.debug(`Finding strategy for server ${serverId}, village ${villageId}`);
 
         const strategy = await this.strategiesRepo.findOne({
-            where: { serverId, villageId }
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
         });
 
         if (!strategy) {
@@ -38,6 +56,22 @@ export class MiniAttackStrategiesService {
     }
 
     /**
+     * Pobiera wszystkie strategie dla konkretnego serwera i wioski
+     */
+    async findAllByServerAndVillage(serverId: number, villageId: string): Promise<MiniAttackStrategyResponseDto[]> {
+        this.logger.debug(`Finding all strategies for server ${serverId}, village ${villageId}`);
+
+        const strategies = await this.strategiesRepo.find({
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
+        });
+
+        this.logger.debug(`Found ${strategies.length} strategies for server ${serverId}, village ${villageId}`);
+
+        return strategies.map(strategy => this.mapToResponseDto(strategy));
+    }
+
+    /**
      * Pobiera wszystkie strategie dla konkretnego serwera
      */
     async findAllByServer(serverId: number): Promise<MiniAttackStrategyResponseDto[]> {
@@ -45,7 +79,7 @@ export class MiniAttackStrategiesService {
 
         const strategies = await this.strategiesRepo.find({
             where: { serverId },
-            order: { villageId: 'ASC' }
+            order: { villageId: 'ASC', id: 'ASC' }
         });
 
         this.logger.debug(`Found ${strategies.length} strategies for server ${serverId}`);
@@ -58,15 +92,6 @@ export class MiniAttackStrategiesService {
      */
     async create(createDto: CreateMiniAttackStrategyDto): Promise<MiniAttackStrategyResponseDto> {
         this.logger.log(`Creating strategy for server ${createDto.serverId}, village ${createDto.villageId}`);
-
-        // Sprawdź czy strategia już istnieje
-        const existingStrategy = await this.strategiesRepo.findOne({
-            where: { serverId: createDto.serverId, villageId: createDto.villageId }
-        });
-
-        if (existingStrategy) {
-            throw new ConflictException(`Strategy already exists for server ${createDto.serverId}, village ${createDto.villageId}`);
-        }
 
         const strategy = this.strategiesRepo.create({
             serverId: createDto.serverId,
@@ -86,19 +111,54 @@ export class MiniAttackStrategiesService {
         });
 
         const savedStrategy = await this.strategiesRepo.save(strategy);
-        this.logger.log(`Strategy created successfully for server ${createDto.serverId}, village ${createDto.villageId}`);
+        this.logger.log(`Strategy created successfully with ID ${savedStrategy.id} for server ${createDto.serverId}, village ${createDto.villageId}`);
 
         return this.mapToResponseDto(savedStrategy);
     }
 
     /**
-     * Aktualizuje istniejącą strategię
+     * Aktualizuje istniejącą strategię po ID
+     */
+    async updateById(id: number, updateDto: UpdateMiniAttackStrategyDto): Promise<MiniAttackStrategyResponseDto> {
+        this.logger.log(`Updating strategy with ID ${id}`);
+
+        const strategy = await this.strategiesRepo.findOne({
+            where: { id }
+        });
+
+        if (!strategy) {
+            throw new NotFoundException(`Strategy not found with ID ${id}`);
+        }
+
+        // Aktualizuj tylko podane pola
+        if (updateDto.spear !== undefined) strategy.spear = updateDto.spear;
+        if (updateDto.sword !== undefined) strategy.sword = updateDto.sword;
+        if (updateDto.axe !== undefined) strategy.axe = updateDto.axe;
+        if (updateDto.archer !== undefined) strategy.archer = updateDto.archer;
+        if (updateDto.spy !== undefined) strategy.spy = updateDto.spy;
+        if (updateDto.light !== undefined) strategy.light = updateDto.light;
+        if (updateDto.marcher !== undefined) strategy.marcher = updateDto.marcher;
+        if (updateDto.heavy !== undefined) strategy.heavy = updateDto.heavy;
+        if (updateDto.ram !== undefined) strategy.ram = updateDto.ram;
+        if (updateDto.catapult !== undefined) strategy.catapult = updateDto.catapult;
+        if (updateDto.knight !== undefined) strategy.knight = updateDto.knight;
+        if (updateDto.snob !== undefined) strategy.snob = updateDto.snob;
+
+        const savedStrategy = await this.strategiesRepo.save(strategy);
+        this.logger.log(`Strategy updated successfully with ID ${id}`);
+
+        return this.mapToResponseDto(savedStrategy);
+    }
+
+    /**
+     * Aktualizuje istniejącą strategię (pierwszą znalezioną dla serverId/villageId)
      */
     async update(serverId: number, villageId: string, updateDto: UpdateMiniAttackStrategyDto): Promise<MiniAttackStrategyResponseDto> {
         this.logger.log(`Updating strategy for server ${serverId}, village ${villageId}`);
 
         const strategy = await this.strategiesRepo.findOne({
-            where: { serverId, villageId }
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
         });
 
         if (!strategy) {
@@ -126,13 +186,32 @@ export class MiniAttackStrategiesService {
     }
 
     /**
-     * Usuwa strategię
+     * Usuwa strategię po ID
+     */
+    async deleteById(id: number): Promise<void> {
+        this.logger.log(`Deleting strategy with ID ${id}`);
+
+        const strategy = await this.strategiesRepo.findOne({
+            where: { id }
+        });
+
+        if (!strategy) {
+            throw new NotFoundException(`Strategy not found with ID ${id}`);
+        }
+
+        await this.strategiesRepo.remove(strategy);
+        this.logger.log(`Strategy deleted successfully with ID ${id}`);
+    }
+
+    /**
+     * Usuwa strategię (pierwszą znalezioną dla serverId/villageId)
      */
     async delete(serverId: number, villageId: string): Promise<void> {
         this.logger.log(`Deleting strategy for server ${serverId}, village ${villageId}`);
 
         const strategy = await this.strategiesRepo.findOne({
-            where: { serverId, villageId }
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
         });
 
         if (!strategy) {
@@ -141,6 +220,24 @@ export class MiniAttackStrategiesService {
 
         await this.strategiesRepo.remove(strategy);
         this.logger.log(`Strategy deleted successfully for server ${serverId}, village ${villageId}`);
+    }
+
+    /**
+     * Usuwa wszystkie strategie dla konkretnego serwera i wioski
+     */
+    async deleteAllByServerAndVillage(serverId: number, villageId: string): Promise<void> {
+        this.logger.log(`Deleting all strategies for server ${serverId}, village ${villageId}`);
+
+        const strategies = await this.strategiesRepo.find({
+            where: { serverId, villageId }
+        });
+
+        if (strategies.length === 0) {
+            throw new NotFoundException(`No strategies found for server ${serverId}, village ${villageId}`);
+        }
+
+        await this.strategiesRepo.remove(strategies);
+        this.logger.log(`Deleted ${strategies.length} strategies for server ${serverId}, village ${villageId}`);
     }
 
     /**
@@ -153,9 +250,10 @@ export class MiniAttackStrategiesService {
     ): Promise<CalculateAttacksResponseDto> {
         this.logger.debug(`Calculating max attacks for server ${serverId}, village ${villageId}`);
 
-        // Pobierz strategię
+        // Pobierz strategię (pierwszą znalezioną)
         const strategy = await this.strategiesRepo.findOne({
-            where: { serverId, villageId }
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
         });
 
         if (!strategy) {
@@ -217,7 +315,8 @@ export class MiniAttackStrategiesService {
      */
     async getActiveUnits(serverId: number, villageId: string): Promise<Record<string, number>> {
         const strategy = await this.strategiesRepo.findOne({
-            where: { serverId, villageId }
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
         });
 
         if (!strategy) {
@@ -243,6 +342,7 @@ export class MiniAttackStrategiesService {
      */
     private mapToResponseDto(strategy: MiniAttackStrategyEntity): MiniAttackStrategyResponseDto {
         return {
+            id: strategy.id,
             serverId: strategy.serverId,
             villageId: strategy.villageId,
             spear: strategy.spear,

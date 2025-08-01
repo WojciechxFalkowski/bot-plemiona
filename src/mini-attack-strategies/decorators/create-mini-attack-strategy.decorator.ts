@@ -5,7 +5,7 @@ import { CreateMiniAttackStrategyDto, MiniAttackStrategyResponseDto } from '../d
 export const CreateMiniAttackStrategyDecorator = () => applyDecorators(
     ApiOperation({
         summary: 'Utwórz nową strategię mini ataków',
-        description: 'Tworzy nową strategię mini ataków dla konkretnego serwera i wioski. Każda strategia definiuje skład jednostek używanych w pojedynczym mini ataku. Dla jednej wioski na serwerze może istnieć tylko jedna strategia.'
+        description: 'Tworzy nową strategię mini ataków dla konkretnego serwera i wioski. Każda strategia definiuje skład jednostek używanych w pojedynczym mini ataku. Dla jednej wioski na serwerze może istnieć wiele strategii.'
     }),
     ApiBody({
         type: CreateMiniAttackStrategyDto,
@@ -51,6 +51,7 @@ export const CreateMiniAttackStrategyDecorator = () => applyDecorators(
         content: {
             'application/json': {
                 example: {
+                    id: 1,
                     serverId: 217,
                     villageId: '32005',
                     spear: 2,
@@ -89,14 +90,18 @@ export const CreateMiniAttackStrategyDecorator = () => applyDecorators(
         }
     }),
     ApiResponse({
-        status: 409,
-        description: 'Strategia już istnieje dla tego serwera i wioski',
+        status: 400,
+        description: 'Nieprawidłowe dane wejściowe - błędy walidacji',
         content: {
             'application/json': {
                 example: {
-                    statusCode: 409,
-                    message: 'Strategy already exists for server 217, village 32005',
-                    error: 'Conflict'
+                    statusCode: 400,
+                    message: [
+                        'serverId must be an integer number',
+                        'villageId must be a string',
+                        'spear must not be less than 0'
+                    ],
+                    error: 'Bad Request'
                 }
             }
         }

@@ -2,6 +2,12 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class MiniAttackStrategyResponseDto {
     @ApiProperty({
+        description: 'Unikalny identyfikator strategii',
+        example: 1
+    })
+    id: number;
+
+    @ApiProperty({
         description: 'ID serwera',
         example: 217
     })

@@ -1,12 +1,17 @@
-import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, PrimaryColumn } from 'typeorm';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, PrimaryGeneratedColumn, Index } from 'typeorm';
 import { ServerEntity } from '@/servers/entities/server.entity';
 
 @Entity('mini_attack_strategies')
+@Index(['serverId', 'villageId'])
+@Index(['serverId'])
 export class MiniAttackStrategyEntity {
-    @PrimaryColumn({ type: 'int' })
+    @PrimaryGeneratedColumn()
+    id: number;
+
+    @Column({ type: 'int' })
     serverId: number;
 
-    @PrimaryColumn({ type: 'varchar', length: 255 })
+    @Column({ type: 'varchar', length: 255 })
     villageId: string;
 
     // Jednostki piechoty

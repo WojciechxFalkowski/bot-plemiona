@@ -64,6 +64,7 @@ export const UpdateMiniAttackStrategyDecorator = () => applyDecorators(
         content: {
             'application/json': {
                 example: {
+                    id: 1,
                     serverId: 217,
                     villageId: '32005',
                     spear: 3,
