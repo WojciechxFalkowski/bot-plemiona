@@ -286,6 +286,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
             this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}`);
             this.logDetailedTaskSchedule();
+            this.scheduleNextExecution();
         } catch (error) {
             this.logger.error(`❌ Error updating task states for server ${serverId}:`, error);
         }

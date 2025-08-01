@@ -111,10 +111,10 @@ export class CrawlerOrchestratorController {
         try {
             // 1. Update setting
             await this.settingsService.setSetting(serverId, SettingsKey.AUTO_CONSTRUCTION_QUEUE_ENABLED, { value: dto.value });
-            
+
             // 2. Refresh task states immediately
             await this.orchestratorService.updateServerTaskStates(serverId);
-            
+
             return {
                 success: true,
                 message: `Construction queue setting updated to ${dto.value} for server ${serverId}`,
@@ -141,10 +141,10 @@ export class CrawlerOrchestratorController {
         try {
             // 1. Update setting
             await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_ENABLED, { value: dto.value });
-            
+
             // 2. Refresh task states immediately
             await this.orchestratorService.updateServerTaskStates(serverId);
-            
+
             return {
                 success: true,
                 message: `Mini attacks setting updated to ${dto.value} for server ${serverId}`,
@@ -171,10 +171,10 @@ export class CrawlerOrchestratorController {
         try {
             // 1. Update setting
             await this.settingsService.setSetting(serverId, SettingsKey.AUTO_SCAVENGING_ENABLED, { value: dto.value });
-            
+
             // 2. Refresh task states immediately
             await this.orchestratorService.updateServerTaskStates(serverId);
-            
+
             return {
                 success: true,
                 message: `Scavenging setting updated to ${dto.value} for server ${serverId}`,
