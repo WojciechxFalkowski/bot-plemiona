@@ -207,10 +207,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const now = new Date();
         const constructionDelay = this.getInitialConstructionInterval();
         const miniAttackDelay = this.getInitialMiniAttackInterval();
-        if (server.id == 216 || server.id == 217 || server.id == 29) {
-            console.log("No initialize server plan", server.id);
-            return
-        }
         const serverPlan: ServerCrawlerPlan = {
             serverId: server.id,
             serverCode: server.serverCode,
