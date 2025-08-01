@@ -15,6 +15,7 @@ import { createBrowserPage } from '@/utils/browser.utils';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { ServersService } from '@/servers';
 import { MiniAttackStrategiesService } from '@/mini-attack-strategies';
+import { MiniAttackStrategyResponseDto } from '@/mini-attack-strategies/dto';
 
 @Injectable()
 export class BarbarianVillagesService {
@@ -187,7 +188,7 @@ export class BarbarianVillagesService {
             const strategies = await this.miniAttackStrategiesService.findAllByServer(serverId);
             const attackResults: AttackResult[] = [];
             for (const strategy of strategies) {
-                const results = await this.executeMiniAttacks(serverId, strategy.villageId, page, serverCode);
+                const results = await this.executeMiniAttacks(serverId, strategy.villageId, page, serverCode, strategy);
                 attackResults.push(...results);
             }
 
@@ -198,7 +199,7 @@ export class BarbarianVillagesService {
         }
     }
 
-    async executeMiniAttacks(serverId: number, villageId: string, page: Page, serverCode: string): Promise<AttackResult[]> {
+    async executeMiniAttacks(serverId: number, villageId: string, page: Page, serverCode: string, strategy?: MiniAttackStrategyResponseDto): Promise<AttackResult[]> {
         this.logger.log(`Starting mini attacks execution for server ${serverId}, village ${villageId}`);
         const attackableVillages: BarbarianVillageEntity[] = await this.findAttackableVillages(serverId, villageId);
 
@@ -212,14 +213,19 @@ export class BarbarianVillagesService {
         try {
             // 1. Get army data
             const armyData = await ArmyUtils.getArmyData(page, villageId, serverCode);
-
             // 2. Check if there's a strategy and calculate max attacks
             let maxPossibleAttacks = 0;
             let attackStrategy: any = null;
 
             try {
-                attackStrategy = await this.miniAttackStrategiesService.findByServerAndVillage(serverId, villageId);
-                this.logger.log(`Found strategy for village ${villageId}: spear=${attackStrategy.spear}, sword=${attackStrategy.sword}, light=${attackStrategy.light}`);
+                // Use provided strategy or find one
+                if (strategy) {
+                    attackStrategy = strategy;
+                    this.logger.log(`Using provided strategy for village ${villageId}: spear=${attackStrategy.spear}, sword=${attackStrategy.sword}, light=${attackStrategy.light}`);
+                } else {
+                    attackStrategy = await this.miniAttackStrategiesService.findByServerAndVillage(serverId, villageId);
+                    this.logger.log(`Found strategy for village ${villageId}: spear=${attackStrategy.spear}, sword=${attackStrategy.sword}, light=${attackStrategy.light}`);
+                }
 
                 // Calculate max attacks based on strategy
                 if (attackStrategy.spear > 0 && attackStrategy.sword > 0) {
@@ -228,6 +234,7 @@ export class BarbarianVillagesService {
                     const maxAttacksFromSpear = spearUnit ? Math.floor(spearUnit.inVillage / attackStrategy.spear) : 0;
                     const maxAttacksFromSword = swordUnit ? Math.floor(swordUnit.inVillage / attackStrategy.sword) : 0;
                     maxPossibleAttacks = Math.min(maxAttacksFromSpear, maxAttacksFromSword);
+
                     this.logger.log(`Strategy calculation: spear ${spearUnit?.inVillage || 0}/${attackStrategy.spear}=${maxAttacksFromSpear}, sword ${swordUnit?.inVillage || 0}/${attackStrategy.sword}=${maxAttacksFromSword} → ${maxPossibleAttacks} attacks`);
                 } else if (attackStrategy.light > 0) {
                     const lightUnit = armyData.units.find(u => u.dataUnit === 'light');
@@ -312,7 +319,7 @@ export class BarbarianVillagesService {
                     this.logger.debug(`✅ Last attack check passed: ${lastAttackCheck.reason}`);
 
                     // Execute attack on current village
-                    const attackResult = await this.executeAttackOnVillage(page, targetVillage, armyData, villageId, serverCode);
+                    const attackResult = await this.executeAttackOnVillage(page, targetVillage, armyData, villageId, serverCode, attackStrategy);
                     attackResults.push(attackResult);
 
                     if (attackResult.success) {
@@ -492,7 +499,7 @@ export class BarbarianVillagesService {
         }
     }
 
-    private async executeAttackOnVillage(page: Page, village: BarbarianVillageEntity, armyData: ArmyData, villageId: string, serverCode: string): Promise<AttackResult> {
+    private async executeAttackOnVillage(page: Page, village: BarbarianVillageEntity, armyData: ArmyData, villageId: string, serverCode: string, strategy?: MiniAttackStrategyResponseDto): Promise<AttackResult> {
         this.logger.log(`Executing attack on village ${village.name} (${village.coordinateX}|${village.coordinateY})`);
 
         try {
@@ -510,19 +517,26 @@ export class BarbarianVillagesService {
             // Check if there's a custom strategy for this server and village
             let attackResult: AttackResult;
             try {
-                this.logger.debug(`Checking for strategy: serverId=${village.serverId}, villageId=${villageId} (type: ${typeof villageId})`);
-                const strategy = await this.miniAttackStrategiesService.findByServerAndVillage(village.serverId, villageId);
-                this.logger.log(`Found custom strategy for village ${villageId}: spear=${strategy.spear}, sword=${strategy.sword}, light=${strategy.light}`);
+                let attackStrategy: any;
+                
+                if (strategy) {
+                    attackStrategy = strategy;
+                    this.logger.log(`Using provided strategy for village ${villageId}: spear=${attackStrategy.spear}, sword=${attackStrategy.sword}, light=${attackStrategy.light}`);
+                } else {
+                    this.logger.debug(`Checking for strategy: serverId=${village.serverId}, villageId=${villageId} (type: ${typeof villageId})`);
+                    attackStrategy = await this.miniAttackStrategiesService.findByServerAndVillage(village.serverId, villageId);
+                    this.logger.log(`Found custom strategy for village ${villageId}: spear=${attackStrategy.spear}, sword=${attackStrategy.sword}, light=${attackStrategy.light}`);
+                }
 
                 // If strategy has spear and sword units, use performMiniAttackSpearSword
-                if (strategy.spear > 0 && strategy.sword > 0) {
-                    this.logger.log(`Using spear & sword attack strategy (${strategy.spear} spear, ${strategy.sword} sword)`);
-                    attackResult = await AttackUtils.performMiniAttackSpearSword(page, barbarianVillage, villageId, serverCode, strategy.spear, strategy.sword);
+                if (attackStrategy.spear > 0 && attackStrategy.sword > 0) {
+                    this.logger.log(`Using spear & sword attack strategy (${attackStrategy.spear} spear, ${attackStrategy.sword} sword)`);
+                    attackResult = await AttackUtils.performMiniAttackSpearSword(page, barbarianVillage, villageId, serverCode, attackStrategy.spear, attackStrategy.sword);
                 }
                 // If strategy has only light cavalry, use performMiniAttack
-                else if (strategy.light > 0) {
-                    this.logger.log(`Using light cavalry attack strategy (${strategy.light} light)`);
-                    attackResult = await AttackUtils.performMiniAttack(page, barbarianVillage, villageId, serverCode, strategy.light);
+                else if (attackStrategy.light > 0) {
+                    this.logger.log(`Using light cavalry attack strategy (${attackStrategy.light} light)`);
+                    attackResult = await AttackUtils.performMiniAttack(page, barbarianVillage, villageId, serverCode, attackStrategy.light);
                 }
                 // If strategy has other units, log error and return failure
                 else {

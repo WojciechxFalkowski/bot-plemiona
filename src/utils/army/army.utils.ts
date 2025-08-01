@@ -41,6 +41,7 @@ export class ArmyUtils {
             .replace('{villageId}', villageId);
 
         this.logger.log(`Navigating to training page: ${trainingUrl}`);
+
         await page.goto(trainingUrl, { waitUntil: 'networkidle', timeout: 15000 });
 
         // Parse army data from the training table
@@ -66,7 +67,6 @@ export class ArmyUtils {
         try {
             // Find the training form table
             const trainingTable = page.locator('#train_form table.vis');
-
             if (!(await trainingTable.isVisible({ timeout: 5000 }))) {
                 this.logger.warn('Training table not found or not visible');
                 return {

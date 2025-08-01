@@ -454,6 +454,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private async executeMiniAttacksTask(serverId: number): Promise<void> {
         this.logger.log(`🚀 Executing mini attacks for server ${serverId}`);
 
+        let browser: any = null;
+
         try {
             // Get all strategies for this server
             const strategies = await this.miniAttackStrategiesService.findAllByServer(serverId);
@@ -468,7 +470,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             const serverCode = await this.serversService.getServerCode(serverId);
 
             // 1. Login and select world
-            const { browser, page } = await createBrowserPage({ headless: true });
+            const browserPage = await createBrowserPage({ headless: true });
+            browser = browserPage.browser;
+            const { page } = browserPage;
 
             const loginResult = await AuthUtils.loginAndSelectWorld(
                 page,
@@ -485,16 +489,15 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
             // Execute mini attacks for each strategy (village)
             for (const strategy of strategies) {
+
                 this.logger.log(`🗡️ Executing mini attacks for village ${strategy.villageId} on server ${serverId}`);
 
                 try {
-                    await this.barbarianVillagesService.executeMiniAttacks(serverId, strategy.villageId, page, serverCode);
+                    await this.barbarianVillagesService.executeMiniAttacks(serverId, strategy.villageId, page, serverCode, strategy);
                     this.logger.log(`✅ Mini attacks completed for village ${strategy.villageId} on server ${serverId}`);
                 } catch (villageError) {
                     this.logger.error(`❌ Error executing mini attacks for village ${strategy.villageId} on server ${serverId}:`, villageError);
                     // Continue with next village instead of stopping
-                } finally {
-                    await browser.close();
                 }
             }
 
@@ -502,6 +505,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         } catch (error) {
             this.logger.error(`❌ Error during mini attacks execution for server ${serverId}:`, error);
+        } finally {
+            if (browser) {
+                await browser.close();
+            }
         }
     }
 
