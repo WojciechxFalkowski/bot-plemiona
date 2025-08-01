@@ -211,7 +211,7 @@ export class BarbarianVillagesService {
 
         try {
             // 1. Get army data
-            const armyData = await ArmyUtils.getArmyData(page, villageId, serverId.toString());
+            const armyData = await ArmyUtils.getArmyData(page, villageId, serverCode);
 
             // 2. Check if there's a strategy and calculate max attacks
             let maxPossibleAttacks = 0;

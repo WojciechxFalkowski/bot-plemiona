@@ -614,12 +614,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Gets minimum mini attack interval from settings
      */
     private async getMiniAttackMinInterval(serverId: number): Promise<number> {
-        console.log("getMiniAttackMinInterval v1", serverId);
         try {
             const setting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.MINI_ATTACKS_MIN_INTERVAL);
             // Convert minutes to milliseconds
             const minutes = setting?.value || 10; // Default 10 minutes
-            console.log("getMiniAttackMinInterval v2", minutes);
             return minutes * 60 * 1000;
         } catch (error) {
             this.logger.error(`Failed to get mini attack min interval for server ${serverId}:`, error);

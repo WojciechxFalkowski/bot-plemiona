@@ -29,7 +29,7 @@ export class BarbarianVillagesController {
     return await this.barbarianVillagesService.findAll(serverId);
   }
 
-  @Get(':serverId/attackable')
+  @Get(':serverId/attackable/:villageId')
   @ApiOperation({
     summary: 'Get attackable barbarian villages',
     description: 'Retrieves all barbarian villages that can be attacked for a specific server'
@@ -38,7 +38,13 @@ export class BarbarianVillagesController {
     name: 'serverId',
     description: 'Server ID',
     type: 'number',
-    example: 217
+    example: 29
+  })
+  @ApiParam({
+    name: 'villageId',
+    description: 'Village ID',
+    type: 'string',
+    example: '9919'
   })
   async findAttackable(@Param('serverId', ParseIntPipe) serverId: number, @Param('villageId') villageId: string) {
     return await this.barbarianVillagesService.findAttackableVillages(serverId, villageId);

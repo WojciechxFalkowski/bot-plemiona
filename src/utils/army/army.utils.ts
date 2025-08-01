@@ -13,7 +13,7 @@ export interface UnitData {
 // Interface for army data
 export interface ArmyData {
     villageId: string;
-    worldNumber: string;
+    serverCode: string;
     units: UnitData[];
     totalUnitsInVillage: number;
     totalUnitsOverall: number;
@@ -23,28 +23,28 @@ export class ArmyUtils {
     private static logger = new Logger(ArmyUtils.name);
 
     // URL template constants
-    private static readonly TRAIN_URL_TEMPLATE = 'https://pl{world}.plemiona.pl/game.php?village={villageId}&screen=train';
+    private static readonly TRAIN_URL_TEMPLATE = 'https://{serverCode}.plemiona.pl/game.php?village={villageId}&screen=train';
 
     /**
      * Pobiera dane o wojsku z wioski ze strony treningu jednostek
      * @param page - Instancja strony Playwright
      * @param villageId - ID wioski
-     * @param worldNumber - Numer świata
+     * @param serverCode - Kod serwera
      * @returns Promise z danymi o wojsku
      */
-    static async getArmyData(page: Page, villageId: string, worldNumber: string): Promise<ArmyData> {
-        this.logger.log(`Getting army data for village ${villageId} on world ${worldNumber}`);
+    static async getArmyData(page: Page, villageId: string, serverCode: string): Promise<ArmyData> {
+        this.logger.log(`Getting army data for village ${villageId} on world ${serverCode}`);
 
         // Navigate to training page
         const trainingUrl = this.TRAIN_URL_TEMPLATE
-            .replace('{world}', worldNumber)
+            .replace('{serverCode}', serverCode)
             .replace('{villageId}', villageId);
 
         this.logger.log(`Navigating to training page: ${trainingUrl}`);
         await page.goto(trainingUrl, { waitUntil: 'networkidle', timeout: 15000 });
 
         // Parse army data from the training table
-        const armyData = await this.parseArmyFromTrainingTable(page, villageId, worldNumber);
+        const armyData = await this.parseArmyFromTrainingTable(page, villageId, serverCode);
 
         // Log collected data
         this.logArmyData(armyData);
@@ -60,7 +60,7 @@ export class ArmyUtils {
      * @param worldNumber - Numer świata
      * @returns Promise z danymi o wojsku
      */
-    private static async parseArmyFromTrainingTable(page: Page, villageId: string, worldNumber: string): Promise<ArmyData> {
+    private static async parseArmyFromTrainingTable(page: Page, villageId: string, serverCode: string): Promise<ArmyData> {
         const units: UnitData[] = [];
 
         try {
@@ -71,7 +71,7 @@ export class ArmyUtils {
                 this.logger.warn('Training table not found or not visible');
                 return {
                     villageId,
-                    worldNumber,
+                    serverCode,
                     units: [],
                     totalUnitsInVillage: 0,
                     totalUnitsOverall: 0
@@ -161,7 +161,7 @@ export class ArmyUtils {
 
         return {
             villageId,
-            worldNumber,
+            serverCode,
             units,
             totalUnitsInVillage,
             totalUnitsOverall
@@ -174,7 +174,7 @@ export class ArmyUtils {
      */
     private static logArmyData(armyData: ArmyData): void {
         this.logger.log('=== ARMY DATA ===');
-        this.logger.log(`Village: ${armyData.villageId} (World: ${armyData.worldNumber})`);
+        this.logger.log(`Village: ${armyData.villageId} (Server: ${armyData.serverCode})`);
         this.logger.log(`Total units in village: ${armyData.totalUnitsInVillage}`);
         this.logger.log(`Total units overall: ${armyData.totalUnitsOverall}`);
         this.logger.log('--- Unit Details ---');
