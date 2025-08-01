@@ -397,7 +397,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     break;
                 case 'Mini Attacks':
                     await this.executeMiniAttacksTask(serverId);
-                    this.updateNextMiniAttackTime(plan);
+                    await this.updateNextMiniAttackTime(plan);
                     break;
                 default:
                     this.logger.error(`❌ Unknown task type: ${taskType}`);
@@ -550,8 +550,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     /**
      * Updates next mini attacks execution time
      */
-    private updateNextMiniAttackTime(plan: ServerCrawlerPlan): void {
-        const delay = this.getRandomMiniAttackInterval();
+    private async updateNextMiniAttackTime(plan: ServerCrawlerPlan): Promise<void> {
+        const delay = await this.getRandomMiniAttackInterval(plan.serverId);
         plan.miniAttacks.nextExecutionTime = new Date(Date.now() + delay);
         plan.miniAttacks.lastExecuted = new Date();
         plan.miniAttacks.lastAttackTime = new Date();
@@ -594,10 +594,51 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
-     * Generates random interval for mini attacks
+     * Generates random interval for mini attacks based on database settings
      */
-    private getRandomMiniAttackInterval(): number {
-        return Math.floor(Math.random() * (this.MAX_MINI_ATTACK_INTERVAL - this.MIN_MINI_ATTACK_INTERVAL + 1)) + this.MIN_MINI_ATTACK_INTERVAL;
+    private async getRandomMiniAttackInterval(serverId: number): Promise<number> {
+        try {
+            const minInterval = await this.getMiniAttackMinInterval(serverId);
+            const maxInterval = await this.getMiniAttackMaxInterval(serverId);
+
+            return Math.floor(Math.random() * (maxInterval - minInterval + 1)) + minInterval;
+        } catch (error) {
+            this.logger.error(`Error getting mini attack interval for server ${serverId}:`, error);
+            // Fallback to default values
+            return Math.floor(Math.random() * (this.MAX_MINI_ATTACK_INTERVAL - this.MIN_MINI_ATTACK_INTERVAL + 1)) + this.MIN_MINI_ATTACK_INTERVAL;
+        }
+    }
+
+    /**
+     * Gets minimum mini attack interval from settings
+     */
+    private async getMiniAttackMinInterval(serverId: number): Promise<number> {
+        console.log("getMiniAttackMinInterval v1", serverId);
+        try {
+            const setting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.MINI_ATTACKS_MIN_INTERVAL);
+            // Convert minutes to milliseconds
+            const minutes = setting?.value || 10; // Default 10 minutes
+            console.log("getMiniAttackMinInterval v2", minutes);
+            return minutes * 60 * 1000;
+        } catch (error) {
+            this.logger.error(`Failed to get mini attack min interval for server ${serverId}:`, error);
+            return this.MIN_MINI_ATTACK_INTERVAL;
+        }
+    }
+
+    /**
+     * Gets maximum mini attack interval from settings
+     */
+    private async getMiniAttackMaxInterval(serverId: number): Promise<number> {
+        try {
+            const setting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.MINI_ATTACKS_MAX_INTERVAL);
+            // Convert minutes to milliseconds
+            const minutes = setting?.value || 15; // Default 15 minutes
+            return minutes * 60 * 1000;
+        } catch (error) {
+            this.logger.error(`Failed to get mini attack max interval for server ${serverId}:`, error);
+            return this.MAX_MINI_ATTACK_INTERVAL;
+        }
     }
 
     /**

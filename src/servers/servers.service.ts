@@ -251,6 +251,8 @@ export class ServersService {
             { key: SettingsKey.MINI_ATTACKS_ENABLED, value: { value: false } },
             { key: SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, value: { value: 0 } },
             { key: SettingsKey.MINI_ATTACKS_VILLAGE_ID, value: { value: null } },
+            { key: SettingsKey.MINI_ATTACKS_MIN_INTERVAL, value: { value: 10 } }, // 10 minutes
+            { key: SettingsKey.MINI_ATTACKS_MAX_INTERVAL, value: { value: 15 } }, // 15 minutes
         ];
 
         // Tworzenie ustawień równolegle dla lepszej wydajności
