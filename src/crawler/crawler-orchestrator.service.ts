@@ -13,6 +13,7 @@ import { BarbarianVillagesService } from '@/barbarian-villages/barbarian-village
 import { ServerResponseDto } from '@/servers/dto';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { MiniAttackStrategiesService } from '@/mini-attack-strategies/mini-attack-strategies.service';
+import { ArmyTrainingService } from '@/army-training/army-training.service';
 
 interface CrawlerTask {
     nextExecutionTime: Date;
@@ -33,6 +34,9 @@ interface ServerCrawlerPlan {
     miniAttacks: CrawlerTask & {
         nextTargetIndex: number;
         lastAttackTime: Date | null;
+    };
+    armyTraining: CrawlerTask & {
+        villageId: string | null;
     };
     lastError: string | null;
     errorCount: number;
@@ -68,6 +72,11 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private readonly MIN_MINI_ATTACK_INTERVAL = 1000 * 60 * 10; // 10 minutes
     private readonly MAX_MINI_ATTACK_INTERVAL = 1000 * 60 * 15; // 15 minutes
 
+    // Army training configuration - will be loaded from settings with defaults
+    private readonly DEFAULT_MIN_ARMY_TRAINING_INTERVAL = 1000 * 60 * 10; // 10 minutes
+    private readonly DEFAULT_MAX_ARMY_TRAINING_INTERVAL = 1000 * 60 * 15; // 15 minutes
+    private readonly VILLAGE_ID_FOR_ARMY_TRAINING = '9919'; // TODO: fix it
+
     // Error handling configuration
     private readonly MAX_ERROR_COUNT = 3; // Max errors before skipping server temporarily
     private readonly ERROR_COOLDOWN = 1000 * 60 * 15; // 15 minutes cooldown after max errors
@@ -80,7 +89,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly crawlerService: CrawlerService,
         private readonly constructionQueueService: VillageConstructionQueueService,
         private readonly barbarianVillagesService: BarbarianVillagesService,
-        private readonly miniAttackStrategiesService: MiniAttackStrategiesService
+        private readonly miniAttackStrategiesService: MiniAttackStrategiesService,
+        private readonly armyTrainingService: ArmyTrainingService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -207,6 +217,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const now = new Date();
         const constructionDelay = this.getInitialConstructionInterval();
         const miniAttackDelay = this.getInitialMiniAttackInterval();
+        const armyTrainingDelay = this.getInitialArmyTrainingInterval();
+
         const serverPlan: ServerCrawlerPlan = {
             serverId: server.id,
             serverCode: server.serverCode,
@@ -232,6 +244,13 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 name: 'Mini Attacks',
                 nextTargetIndex: 0,
                 lastAttackTime: null
+            },
+            armyTraining: {
+                nextExecutionTime: new Date(now.getTime() + armyTrainingDelay),
+                enabled: false,
+                lastExecuted: null,
+                name: 'Army Training',
+                villageId: null
             },
             lastError: null,
             errorCount: 0,
@@ -283,8 +302,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             plan.constructionQueue.enabled = await this.isConstructionQueueEnabled(serverId);
             plan.scavenging.enabled = await this.isScavengingEnabled(serverId);
             plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
+            plan.armyTraining.enabled = await this.isArmyTrainingEnabled(serverId);
 
-            this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}`);
+            this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}`);
             this.logDetailedTaskSchedule();
             this.scheduleNextExecution();
         } catch (error) {
@@ -340,7 +360,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             const tasks = [
                 { task: plan.constructionQueue, type: 'Construction Queue' },
                 { task: plan.scavenging, type: 'Scavenging' },
-                { task: plan.miniAttacks, type: 'Mini Attacks' }
+                { task: plan.miniAttacks, type: 'Mini Attacks' },
+                { task: plan.armyTraining, type: 'Army Training' }
             ];
 
             for (const { task, type } of tasks) {
@@ -399,6 +420,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 case 'Mini Attacks':
                     await this.executeMiniAttacksTask(serverId);
                     await this.updateNextMiniAttackTime(plan);
+                    break;
+                case 'Army Training':
+                    await this.executeArmyTrainingTask(serverId);
+                    await this.updateNextArmyTrainingTime(plan);
                     break;
                 default:
                     this.logger.error(`❌ Unknown task type: ${taskType}`);
@@ -513,6 +538,34 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Executes army training for a server
+     */
+    private async executeArmyTrainingTask(serverId: number): Promise<void> {
+        this.logger.log(`🚀 Executing army training for server ${serverId}`);
+
+        try {
+            // Get the village ID for army training from settings
+            const villageId = this.VILLAGE_ID_FOR_ARMY_TRAINING;
+
+            if (!villageId) {
+                this.logger.warn(`⚠️ No village ID configured for army training on server ${serverId}`);
+                return;
+            }
+
+            this.logger.log(`⚔️ Starting army training for village ${villageId} on server ${serverId}`);
+
+            // Execute army training
+            await this.armyTrainingService.startTrainingLight(villageId, serverId);
+
+            this.logger.log(`✅ Army training completed for village ${villageId} on server ${serverId}`);
+
+        } catch (error) {
+            this.logger.error(`❌ Error during army training execution for server ${serverId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Updates next construction queue execution time
      */
     private updateNextConstructionTime(plan: ServerCrawlerPlan): void {
@@ -569,6 +622,18 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Updates next army training execution time
+     */
+    private async updateNextArmyTrainingTime(plan: ServerCrawlerPlan): Promise<void> {
+        const delay = await this.getRandomArmyTrainingInterval(plan.serverId);
+        plan.armyTraining.nextExecutionTime = new Date(Date.now() + delay);
+        plan.armyTraining.lastExecuted = new Date();
+
+        const delayMinutes = Math.round(delay / 1000 / 60);
+        this.logger.debug(`📅 Next army training for ${plan.serverCode}: ${plan.armyTraining.nextExecutionTime.toLocaleString()} (in ${delayMinutes} minutes)`);
+    }
+
+    /**
      * Stops the main scheduler
      */
     private stopScheduler(): void {
@@ -618,6 +683,24 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Generates random interval for army training based on settings
+     */
+    private async getRandomArmyTrainingInterval(serverId: number): Promise<number> {
+        try {
+            const minIntervalSetting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.ARMY_TRAINING_MIN_INTERVAL);
+            const maxIntervalSetting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.ARMY_TRAINING_MAX_INTERVAL);
+
+            const minInterval = minIntervalSetting?.value || this.DEFAULT_MIN_ARMY_TRAINING_INTERVAL;
+            const maxInterval = maxIntervalSetting?.value || this.DEFAULT_MAX_ARMY_TRAINING_INTERVAL;
+
+            return Math.floor(Math.random() * (maxInterval - minInterval + 1)) + minInterval;
+        } catch (error) {
+            this.logger.error(`Failed to get army training interval settings for server ${serverId}:`, error);
+            return Math.floor(Math.random() * (this.DEFAULT_MAX_ARMY_TRAINING_INTERVAL - this.DEFAULT_MIN_ARMY_TRAINING_INTERVAL + 1)) + this.DEFAULT_MIN_ARMY_TRAINING_INTERVAL;
+        }
+    }
+
+    /**
      * Gets minimum mini attack interval from settings
      */
     private async getMiniAttackMinInterval(serverId: number): Promise<number> {
@@ -659,6 +742,13 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      */
     private getInitialMiniAttackInterval(): number {
         return 20000;
+    }
+
+    /**
+     * Generates initial 30 seconds interval for army training
+     */
+    private getInitialArmyTrainingInterval(): number {
+        return 30000;
     }
 
     /**
@@ -720,6 +810,19 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Checks if army training is enabled for a server
+     */
+    private async isArmyTrainingEnabled(serverId: number): Promise<boolean> {
+        try {
+            const setting = await this.settingsService.getSetting<{ value: boolean }>(serverId, SettingsKey.AUTO_ARMY_TRAINING_LIGHT_ENABLED);
+            return setting?.value === true;
+        } catch (error) {
+            this.logger.error(`Failed to check army training setting for server ${serverId}:`, error);
+            return false;
+        }
+    }
+
+    /**
      * Public method to manually trigger scavenging for a specific server
      */
     public async triggerScavenging(serverId: number): Promise<void> {
@@ -775,6 +878,26 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             this.logger.log(`✅ Manual mini attacks completed successfully for server ${plan.serverCode}`);
         } catch (error) {
             this.logger.error(`❌ Error during manual mini attacks for server ${plan.serverCode}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Public method to manually trigger army training for a specific server
+     */
+    public async triggerArmyTraining(serverId: number): Promise<void> {
+        const plan = this.multiServerState.serverPlans.get(serverId);
+        if (!plan) {
+            throw new Error(`Server ${serverId} not found`);
+        }
+
+        this.logger.log(`🔧 Manually triggering army training for server ${plan.serverCode}...`);
+
+        try {
+            await this.executeArmyTrainingTask(serverId);
+            this.logger.log(`✅ Manual army training completed successfully for server ${plan.serverCode}`);
+        } catch (error) {
+            this.logger.error(`❌ Error during manual army training for server ${plan.serverCode}:`, error);
             throw error;
         }
     }
@@ -857,6 +980,17 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     nextExecution: plan.miniAttacks.nextExecutionTime,
                     timeUntilExecution: plan.miniAttacks.nextExecutionTime.getTime() - now.getTime(),
                     lastExecuted: plan.miniAttacks.lastExecuted,
+                    errorCount: plan.errorCount,
+                    inCooldown
+                },
+                {
+                    serverCode: plan.serverCode,
+                    serverName: plan.serverName,
+                    taskType: 'Army Training',
+                    enabled: plan.armyTraining.enabled,
+                    nextExecution: plan.armyTraining.nextExecutionTime,
+                    timeUntilExecution: plan.armyTraining.nextExecutionTime.getTime() - now.getTime(),
+                    lastExecuted: plan.armyTraining.lastExecuted,
                     errorCount: plan.errorCount,
                     inCooldown
                 }
@@ -955,6 +1089,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     nextExecution: plan.miniAttacks.nextExecutionTime,
                     lastExecuted: plan.miniAttacks.lastExecuted,
                     lastAttackTime: plan.miniAttacks.lastAttackTime
+                },
+                armyTraining: {
+                    enabled: plan.armyTraining.enabled,
+                    nextExecution: plan.armyTraining.nextExecutionTime,
+                    lastExecuted: plan.armyTraining.lastExecuted,
+                    villageId: plan.armyTraining.villageId
                 }
             }
         }));

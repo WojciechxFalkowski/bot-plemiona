@@ -7,10 +7,12 @@ import {
     TriggerScavengingDecorator,
     TriggerConstructionQueueDecorator,
     TriggerMiniAttacksDecorator,
+    TriggerArmyTrainingDecorator,
     StartMonitoringDecorator,
     UpdateConstructionQueueSettingDecorator,
     UpdateMiniAttacksSettingDecorator,
     UpdateScavengingSettingDecorator,
+    UpdateArmyTrainingSettingDecorator,
     GetStatusDecorator
 } from './decorators';
 
@@ -72,6 +74,23 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error during manual mini attacks trigger for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Mini attacks failed: ${error.message}`);
+        }
+    }
+
+    @Post(':serverId/trigger-army-training')
+    @TriggerArmyTrainingDecorator()
+    async triggerArmyTraining(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Manual army training trigger requested for server ${serverId}`);
+
+        try {
+            await this.orchestratorService.triggerArmyTraining(serverId);
+            return {
+                success: true,
+                message: `Army training completed successfully for server ${serverId}`
+            };
+        } catch (error) {
+            this.logger.error(`Error during manual army training trigger for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Army training failed: ${error.message}`);
         }
     }
 
@@ -187,6 +206,36 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error updating scavenging setting for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Failed to update scavenging setting: ${error.message}`);
+        }
+    }
+
+    @Post('settings/:serverId/army-training')
+    @UpdateArmyTrainingSettingDecorator()
+    async updateArmyTrainingSetting(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: { value: boolean }
+    ) {
+        this.logger.log(`Updating army training setting for server ${serverId}: value=${dto.value}`);
+
+        try {
+            // 1. Update setting
+            await this.settingsService.setSetting(serverId, SettingsKey.AUTO_ARMY_TRAINING_LIGHT_ENABLED, { value: dto.value });
+
+            // 2. Refresh task states immediately
+            await this.orchestratorService.updateServerTaskStates(serverId);
+
+            return {
+                success: true,
+                message: `Army training setting updated to ${dto.value} for server ${serverId}`,
+                setting: {
+                    serverId,
+                    key: SettingsKey.AUTO_ARMY_TRAINING_LIGHT_ENABLED,
+                    value: dto.value
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Error updating army training setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Failed to update army training setting: ${error.message}`);
         }
     }
 
