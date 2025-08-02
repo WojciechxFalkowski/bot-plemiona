@@ -10,9 +10,10 @@ import { VillageConstructionQueueModule } from '../village-construction-queue/vi
 import { BarbarianVillagesModule } from '../barbarian-villages/barbarian-villages.module';
 import { PlemionaCookiesModule } from '../plemiona-cookies';
 import { MiniAttackStrategiesModule } from '@/mini-attack-strategies/mini-attack-strategies.module';
+import { ArmyTrainingModule } from '@/army-training/army-training.module';
 
 @Module({
-  imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule],
+  imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule],
   controllers: [CrawlerController, CrawlerOrchestratorController],
   providers: [CrawlerService, CrawlerOrchestratorService],
   exports: [CrawlerService, CrawlerOrchestratorService],

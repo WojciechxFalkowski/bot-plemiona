@@ -16,6 +16,7 @@ import { BuildingsModule } from './buildings/buildings.module';
 import { ServersModule } from './servers/servers.module';
 import { PlemionaCookiesModule } from './plemiona-cookies';
 import { MiniAttackStrategiesModule } from './mini-attack-strategies';
+import { ArmyTrainingModule } from './army-training/army-training.module';
 
 @Module({
   imports: [
@@ -32,7 +33,8 @@ import { MiniAttackStrategiesModule } from './mini-attack-strategies';
     BuildingsModule,
     ServersModule,
 		PlemionaCookiesModule,
-    MiniAttackStrategiesModule
+    MiniAttackStrategiesModule,
+    ArmyTrainingModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -189,4 +189,21 @@ export class ArmyUtils {
 
         this.logger.log('==================');
     }
+
+    static async startTrainingLight(page: Page, villageId: string, serverCode: string, light: UnitData, maxRecruitment: number) {
+        const trainingUrl = this.TRAIN_URL_TEMPLATE
+            .replace('{serverCode}', serverCode)
+            .replace('{villageId}', villageId);
+
+        await page.goto(trainingUrl, { waitUntil: 'networkidle', timeout: 15000 });
+        const trainingForm = page.locator('#train_form');
+        const input = trainingForm.locator(`input[name="${light.dataUnit}"]`);
+        await input.fill(maxRecruitment.toString());
+
+        const submitButton = trainingForm.locator('input[class="btn btn-recruit"]');
+        await submitButton.click();
+        return {
+            success: true,
+        }
+    }
 } 
