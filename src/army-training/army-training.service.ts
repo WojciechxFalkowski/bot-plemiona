@@ -1,7 +1,8 @@
 import { CrawlerService } from '@/crawler/crawler.service';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { ServersService } from '@/servers';
-import { ArmyData, ArmyUtils } from '@/utils/army/army.utils';
+import { ArmyData, ArmyUtils, UnitData } from '@/utils/army/army.utils';
+import { ArmyPage } from '@/utils/army/armyPage/armyPage';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { AuthUtils } from '@/utils/auth/auth.utils';
 import { createBrowserPage } from '@/utils/browser.utils';
@@ -11,6 +12,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 export class ArmyTrainingService {
     private readonly logger = new Logger(ArmyTrainingService.name);
     private readonly credentials: PlemionaCredentials;
+    private readonly MAX_IN_QUEUE_LIGHT = 10;
 
     constructor(
         private readonly serversService: ServersService,
@@ -37,21 +39,28 @@ export class ArmyTrainingService {
         const { page } = await this.createBrowserSession(serverId);
         try {
             const serverCode = await this.serversService.getServerCode(serverId);
-            const armyData = await ArmyUtils.getArmyData(page, villageId, serverCode);
-
-            const light = armyData.units.find(unit => unit.dataUnit === 'light');
-            if (!light) {
-                throw new BadRequestException('Light unit not found');
+            const armyPage = new ArmyPage(page);
+            await armyPage.goToBuilding(serverCode, villageId, "train");
+            const unitsInProduction = await armyPage.getRecruitableUnitsStatus();
+            const light = unitsInProduction.find(unit => unit.staticData.dataUnit === 'light');
+            if (!light || !light.dynamicData.canRecruit) {
+                this.logger.error('❌Light unit not found');
             }
-            if (light.canRecruit < MAX_RECRUITMENT_LIGHT) {
-                throw new BadRequestException(`Light unit cannot recruit more than ${MAX_RECRUITMENT_LIGHT - 1}`);
+            else if (light.dynamicData.producibleCount && light.dynamicData.producibleCount < MAX_RECRUITMENT_LIGHT) {
+                this.logger.error(`❌Light unit cannot recruit more than ${MAX_RECRUITMENT_LIGHT - 1}`);
+            }
+            else if (light.dynamicData.unitsInQueue && light.dynamicData.unitsInQueue > this.MAX_IN_QUEUE_LIGHT) {
+                this.logger.error(`❌Light unit cannot recruit more than ${this.MAX_IN_QUEUE_LIGHT} units in queue`);
             }
 
-            const trainingResult = await ArmyUtils.startTrainingLight(page, villageId, serverCode, light, MAX_RECRUITMENT_LIGHT);
+            else {
+                this.logger.log(`Starting training light: ${light.staticData.name} producible: ${light.dynamicData.producibleCount} queue: ${light.dynamicData.unitsInQueue}`);
+                const trainingResult = await ArmyUtils.startTrainingLight(page, villageId, serverCode, light.staticData.dataUnit, MAX_RECRUITMENT_LIGHT);
+                return trainingResult;
+            }
 
-            return trainingResult;
         } catch (error) {
-            this.logger.error(`Error starting training light: ${error}`);
+            this.logger.error(`❌Error starting training light: ${error}`);
             throw new BadRequestException(`Error starting training light: ${error}`);
         } finally {
             await page.close();
@@ -81,5 +90,22 @@ export class ArmyTrainingService {
         }
 
         return { browser, context, page };
+    }
+
+    public async getUnitsInProduction(villageId: string, serverId: number) {
+        const { page } = await this.createBrowserSession(serverId);
+        try {
+            const armyPage = new ArmyPage(page);
+            const serverCode = await this.serversService.getServerCode(serverId);
+            await armyPage.goToBuilding(serverCode, villageId, "train");
+            const unitsInProduction = await armyPage.getRecruitableUnitsStatus();
+
+            return unitsInProduction;
+        } catch (error) {
+
+        }
+        finally {
+            await page.close();
+        }
     }
 }
