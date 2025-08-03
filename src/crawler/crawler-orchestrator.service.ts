@@ -38,8 +38,6 @@ interface ServerCrawlerPlan {
     armyTraining: CrawlerTask & {
         villageId: string | null;
     };
-    lastError: string | null;
-    errorCount: number;
     lastSuccessfulExecution: Date | null;
 }
 
@@ -77,9 +75,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private readonly DEFAULT_MAX_ARMY_TRAINING_INTERVAL = 1000 * 60 * 15; // 15 minutes
     private readonly VILLAGE_ID_FOR_ARMY_TRAINING = '9919'; // TODO: fix it
 
-    // Error handling configuration
-    private readonly MAX_ERROR_COUNT = 3; // Max errors before skipping server temporarily
-    private readonly ERROR_COOLDOWN = 1000 * 60 * 15; // 15 minutes cooldown after max errors
+
 
     constructor(
         private readonly settingsService: SettingsService,
@@ -218,6 +214,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const constructionDelay = this.getInitialConstructionInterval();
         const miniAttackDelay = this.getInitialMiniAttackInterval();
         const armyTrainingDelay = this.getInitialArmyTrainingInterval();
+        // if (server.id == 216 || server.id == 217 || server.id == 29) {
+        //     console.log("No initialize server plan", server.id);
+        //     return
+        // }
 
         const serverPlan: ServerCrawlerPlan = {
             serverId: server.id,
@@ -252,8 +252,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 name: 'Army Training',
                 villageId: null
             },
-            lastError: null,
-            errorCount: 0,
             lastSuccessfulExecution: null
         };
 
@@ -351,12 +349,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         let earliestTime = Number.MAX_SAFE_INTEGER;
 
         for (const [serverId, plan] of this.multiServerState.serverPlans) {
-            // Skip servers with too many errors
-            if (this.isServerInErrorCooldown(plan)) {
-                this.logger.log(`🔄 Server ${plan.serverCode} is in error cooldown: ${plan.errorCount} < ${this.MAX_ERROR_COUNT}`);
-                continue;
-            }
-
             const tasks = [
                 { task: plan.constructionQueue, type: 'Construction Queue' },
                 { task: plan.scavenging, type: 'Scavenging' },
@@ -375,24 +367,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         return earliestTask;
     }
 
-    /**
-     * Checks if server is in error cooldown
-     */
-    private isServerInErrorCooldown(plan: ServerCrawlerPlan): boolean {
-        if (plan.errorCount < this.MAX_ERROR_COUNT) {
-            return false;
-        }
 
-        if (!plan.lastError) {
-            return false;
-        }
-
-        // Parse the timestamp from lastError or use current time
-        const lastErrorTime = plan.lastSuccessfulExecution || new Date();
-        const cooldownEndTime = lastErrorTime.getTime() + this.ERROR_COOLDOWN;
-
-        return Date.now() < cooldownEndTime;
-    }
 
     /**
      * Executes a task for a specific server
@@ -431,31 +406,44 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
             // Mark as successful
             plan.lastSuccessfulExecution = new Date();
-            plan.errorCount = 0;
-            plan.lastError = null;
 
             this.logger.log(`✅ ${taskType} completed successfully for server ${plan.serverCode}`);
 
         } catch (error) {
-            this.handleServerTaskError(plan, taskType, error);
+            this.logger.error(`❌ Error executing ${taskType} for server ${plan.serverCode}:`, error);
+
+            // Update next execution time for the failed task to prevent immediate retry
+            this.updateNextExecutionTimeForFailedTask(plan, taskType);
         }
 
         // Schedule next execution
         this.scheduleNextExecution();
     }
 
+
+
     /**
-     * Handles error during server task execution
+     * Updates next execution time for a failed task to prevent immediate retry
      */
-    private handleServerTaskError(plan: ServerCrawlerPlan, taskType: string, error: any): void {
-        plan.errorCount++;
-        plan.lastError = `${taskType}: ${error.message || error}`;
+    private updateNextExecutionTimeForFailedTask(plan: ServerCrawlerPlan, taskType: string): void {
+        const retryDelay = 5 * 60 * 1000; // 5 minutes
 
-        this.logger.error(`❌ Error executing ${taskType} for server ${plan.serverCode} (error ${plan.errorCount}/${this.MAX_ERROR_COUNT}):`, error);
-
-        if (plan.errorCount >= this.MAX_ERROR_COUNT) {
-            this.logger.warn(`⚠️ Server ${plan.serverCode} reached max error count. Entering cooldown for ${this.ERROR_COOLDOWN / 1000 / 60} minutes.`);
+        switch (taskType) {
+            case 'Construction Queue':
+                plan.constructionQueue.nextExecutionTime = new Date(Date.now() + retryDelay);
+                break;
+            case 'Scavenging':
+                plan.scavenging.nextExecutionTime = new Date(Date.now() + retryDelay);
+                break;
+            case 'Mini Attacks':
+                plan.miniAttacks.nextExecutionTime = new Date(Date.now() + retryDelay);
+                break;
+            case 'Army Training':
+                plan.armyTraining.nextExecutionTime = new Date(Date.now() + retryDelay);
+                break;
         }
+
+        this.logger.log(`⏰ Updated next execution time for failed ${taskType} on server ${plan.serverCode} to ${new Date(Date.now() + retryDelay).toLocaleString()}`);
     }
 
     /**
@@ -941,14 +929,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             nextExecution: Date;
             timeUntilExecution: number;
             lastExecuted: Date | null;
-            errorCount: number;
-            inCooldown: boolean;
         }> = [];
 
         // Collect all tasks from all servers
         for (const [serverId, plan] of this.multiServerState.serverPlans) {
-            const inCooldown = this.isServerInErrorCooldown(plan);
-
             allTasks.push(
                 {
                     serverCode: plan.serverCode,
@@ -957,9 +941,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     enabled: plan.constructionQueue.enabled,
                     nextExecution: plan.constructionQueue.nextExecutionTime,
                     timeUntilExecution: plan.constructionQueue.nextExecutionTime.getTime() - now.getTime(),
-                    lastExecuted: plan.constructionQueue.lastExecuted,
-                    errorCount: plan.errorCount,
-                    inCooldown
+                    lastExecuted: plan.constructionQueue.lastExecuted
                 },
                 {
                     serverCode: plan.serverCode,
@@ -968,9 +950,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     enabled: plan.scavenging.enabled,
                     nextExecution: plan.scavenging.nextExecutionTime,
                     timeUntilExecution: plan.scavenging.nextExecutionTime.getTime() - now.getTime(),
-                    lastExecuted: plan.scavenging.lastExecuted,
-                    errorCount: plan.errorCount,
-                    inCooldown
+                    lastExecuted: plan.scavenging.lastExecuted
                 },
                 {
                     serverCode: plan.serverCode,
@@ -979,9 +959,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     enabled: plan.miniAttacks.enabled,
                     nextExecution: plan.miniAttacks.nextExecutionTime,
                     timeUntilExecution: plan.miniAttacks.nextExecutionTime.getTime() - now.getTime(),
-                    lastExecuted: plan.miniAttacks.lastExecuted,
-                    errorCount: plan.errorCount,
-                    inCooldown
+                    lastExecuted: plan.miniAttacks.lastExecuted
                 },
                 {
                     serverCode: plan.serverCode,
@@ -990,9 +968,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     enabled: plan.armyTraining.enabled,
                     nextExecution: plan.armyTraining.nextExecutionTime,
                     timeUntilExecution: plan.armyTraining.nextExecutionTime.getTime() - now.getTime(),
-                    lastExecuted: plan.armyTraining.lastExecuted,
-                    errorCount: plan.errorCount,
-                    inCooldown
+                    lastExecuted: plan.armyTraining.lastExecuted
                 }
             );
         }
@@ -1001,7 +977,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         allTasks.sort((a, b) => a.timeUntilExecution - b.timeUntilExecution);
 
         // Log enabled tasks first
-        const enabledTasks = allTasks.filter(task => task.enabled && !task.inCooldown);
+        const enabledTasks = allTasks.filter(task => task.enabled);
         if (enabledTasks.length > 0) {
             this.logger.log('🟢 ENABLED TASKS (sorted by execution time):');
             enabledTasks.forEach((task, index) => {
@@ -1031,17 +1007,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             });
         }
 
-        // Log servers in cooldown
-        const cooldownTasks = allTasks.filter(task => task.inCooldown);
-        if (cooldownTasks.length > 0) {
-            this.logger.log('🔄 SERVERS IN ERROR COOLDOWN:');
-            const cooldownServers = new Set(cooldownTasks.map(task => task.serverCode));
-            cooldownServers.forEach(serverCode => {
-                const serverTasks = cooldownTasks.filter(task => task.serverCode === serverCode);
-                const errorCount = serverTasks[0]?.errorCount || 0;
-                this.logger.log(`  - ${serverCode}: ${errorCount} errors (cooldown active)`);
-            });
-        }
+
 
         // Log next scheduled task
         const nextTask = this.findNextTaskToExecute();
@@ -1069,8 +1035,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             serverCode: plan.serverCode,
             serverName: plan.serverName,
             isActive: plan.isActive,
-            errorCount: plan.errorCount,
-            lastError: plan.lastError,
             lastSuccessfulExecution: plan.lastSuccessfulExecution,
             tasks: {
                 constructionQueue: {

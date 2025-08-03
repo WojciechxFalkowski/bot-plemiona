@@ -54,17 +54,21 @@ export interface LastAttackCheckResult {
     hasReportTable?: boolean;
 }
 
+export const ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND = 'Attack button not found or not visible';
+export const ERROR_MESSAGE_ATTACK_FORM_NOT_FOUND = 'Attack form not found on page';
+
 export class AttackUtils {
     private static readonly logger = new Logger(AttackUtils.name);
 
     // Stałe dla mini ataków z lekką kawalerią
     private static readonly LIGHT_PER_ATTACK = 2;
-    
+
     // Stałe dla mini ataków z pikami i mieczami
     private static readonly SPEAR_PER_ATTACK = 2;
     private static readonly SWORD_PER_ATTACK = 2;
-    
+
     private static readonly SOURCE_VILLAGE_ID = '2197';
+
 
     /**
      * Ładuje listę wiosek barbarzyńskich z pliku JSON
@@ -363,7 +367,7 @@ export class AttackUtils {
             // Sprawdź czy strona się załadowała poprawnie
             const formExists = await page.locator('#command-data-form').isVisible({ timeout: 5000 });
             if (!formExists) {
-                throw new Error('Attack form not found on page');
+                throw new Error(ERROR_MESSAGE_ATTACK_FORM_NOT_FOUND);
             }
 
             this.logger.debug('Attack page loaded successfully');
@@ -423,22 +427,12 @@ export class AttackUtils {
                 }
 
             } else {
-                throw new Error('Attack button not found or not visible');
+                throw new Error(ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND);
             }
 
         } catch (error) {
             this.logger.error(`❌ Mini attack failed on ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY}):`, error);
-
-            // Zrób screenshot w przypadku błędu
-            try {
-                await page.screenshot({
-                    path: `mini_attack_error_${targetVillage.target}_${Date.now()}.png`,
-                    fullPage: true
-                });
-            } catch (screenshotError) {
-                this.logger.error('Failed to take error screenshot:', screenshotError);
-            }
-
+            // throw new Error(this.ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND);
             return {
                 success: false,
                 targetVillage,
@@ -481,7 +475,8 @@ export class AttackUtils {
             // Sprawdź czy strona się załadowała poprawnie
             const formExists = await page.locator('#command-data-form').isVisible({ timeout: 5000 });
             if (!formExists) {
-                throw new Error('Attack form not found on page');
+                // handle recapcha
+                throw new Error(ERROR_MESSAGE_ATTACK_FORM_NOT_FOUND);
             }
 
             this.logger.debug('Attack page loaded successfully');
@@ -504,12 +499,14 @@ export class AttackUtils {
             this.logger.debug(`Filling spear field with ${spearCount} units...`);
             const spearInput = page.locator('#unit_input_spear');
             await spearInput.fill(spearCount.toString());
+            this.logger.debug('⏳ Waiting 0.5 second');
             await page.waitForTimeout(500);
 
             // Wypełnij pole sword (customowa liczba jednostek)
             this.logger.debug(`Filling sword field with ${swordCount} units...`);
             const swordInput = page.locator('#unit_input_sword');
             await swordInput.fill(swordCount.toString());
+            this.logger.debug('⏳ Waiting 0.5 second');
             await page.waitForTimeout(500);
 
             // Kliknij przycisk ataku
@@ -521,7 +518,8 @@ export class AttackUtils {
 
                 // Poczekaj na załadowanie strony potwierdzenia
                 await page.waitForLoadState('networkidle', { timeout: 10000 });
-                await page.waitForTimeout(1000);
+                this.logger.debug('⏳ Waiting 0.5 second');
+                await page.waitForTimeout(500);
                 this.logger.debug('Confirmation page loaded');
 
                 // Kliknij przycisk potwierdzenia
@@ -532,7 +530,8 @@ export class AttackUtils {
                     this.logger.debug('Confirmation button clicked successfully');
 
                     // Poczekaj na finalizację
-                    await page.waitForTimeout(1000);
+                    this.logger.debug('⏳ Waiting 0.5 second');
+                    await page.waitForTimeout(500);
 
                     this.logger.log(`✅ Mini attack with spear & sword completed successfully: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 
@@ -547,28 +546,20 @@ export class AttackUtils {
                 }
 
             } else {
-                throw new Error('Attack button not found or not visible');
+                throw new Error(ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND);
             }
 
         } catch (error) {
             this.logger.error(`❌ Mini attack with spear & sword failed on ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY}):`, error);
 
-            // Zrób screenshot w przypadku błędu
-            try {
-                await page.screenshot({
-                    path: `mini_attack_spear_sword_error_${targetVillage.target}_${Date.now()}.png`,
-                    fullPage: true
-                });
-            } catch (screenshotError) {
-                this.logger.error('Failed to take error screenshot:', screenshotError);
-            }
+            throw new Error(ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND);
 
-            return {
-                success: false,
-                targetVillage,
-                error: error.message,
-                attackUrl: `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`
-            };
+            // return {
+            //     success: false,
+            //     targetVillage,
+            //     error: error.message,
+            //     attackUrl: `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`
+            // };
         }
     }
 

@@ -6,7 +6,7 @@ import { BarbarianVillageEntity } from './entities/barbarian-village.entity';
 import { BARBARIAN_VILLAGES_ENTITY_REPOSITORY } from './barbarian-villages.service.contracts';
 import { CreateBarbarianVillageDto, CreateBarbarianVillageFromUrlDto, UpdateBarbarianVillageDto } from './dto';
 import { ArmyData, ArmyUtils } from '@/utils/army/army.utils';
-import { AttackUtils, AttackResult, AttackCalculationResult, BarbarianVillage, LastAttackCheckResult } from '@/utils/army/attack.utils';
+import { AttackUtils, AttackResult, AttackCalculationResult, BarbarianVillage, LastAttackCheckResult, ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND, ERROR_MESSAGE_ATTACK_FORM_NOT_FOUND } from '@/utils/army/attack.utils';
 import { AuthUtils } from '@/utils/auth/auth.utils';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
@@ -327,6 +327,10 @@ export class BarbarianVillagesService {
                         this.logger.log(`✅ Attack ${i + 1} successful: ${targetVillage.name}`);
                     } else {
                         this.logger.warn(`❌ Attack ${i + 1} failed: ${targetVillage.name} - ${attackResult.error}`);
+                        if (attackResult.error === ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND || attackResult.error === ERROR_MESSAGE_ATTACK_FORM_NOT_FOUND) {
+                            this.logger.error(`❌ Attack button not found or not visible, stopping attacks for this server`);
+                            break;
+                        }
                     }
 
                     // Update canAttack to false if error text contains "Village is no longer barbarian"
@@ -343,8 +347,8 @@ export class BarbarianVillagesService {
 
                     // Delay between attacks to avoid overwhelming the server
                     if (i < maxPossibleAttacks - 1) {
-                        this.logger.debug('⏳ Waiting 2 seconds before next attack...');
-                        await page.waitForTimeout(2000);
+                        this.logger.debug('⏳ Waiting 0.5 seconds before next attack...');
+                        await page.waitForTimeout(500);
                     }
 
                 } catch (attackError) {
@@ -518,7 +522,7 @@ export class BarbarianVillagesService {
             let attackResult: AttackResult;
             try {
                 let attackStrategy: any;
-                
+
                 if (strategy) {
                     attackStrategy = strategy;
                     this.logger.log(`Using provided strategy for village ${villageId}: spear=${attackStrategy.spear}, sword=${attackStrategy.sword}, light=${attackStrategy.light}`);
@@ -545,6 +549,14 @@ export class BarbarianVillagesService {
                         success: false,
                         targetVillage: barbarianVillage,
                         error: 'Strategy has unsupported units - no attack performed'
+                    };
+                }
+
+                if (attackResult.error === ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND || attackResult.error === ERROR_MESSAGE_ATTACK_FORM_NOT_FOUND) {
+                    return {
+                        success: false,
+                        targetVillage: barbarianVillage,
+                        error: ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND
                     };
                 }
 
