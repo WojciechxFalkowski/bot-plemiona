@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { createBrowserPage } from '../utils/browser.utils';
 import { Page, BrowserContext, Locator } from 'playwright';
 import {
@@ -38,7 +38,7 @@ interface AttackConfig {
 }
 
 @Injectable()
-export class CrawlerService implements OnModuleInit {
+export class CrawlerService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(CrawlerService.name);
 
     // Game credentials from environment variables
@@ -103,6 +103,19 @@ export class CrawlerService implements OnModuleInit {
 
         // Schedule all configured attacks
         // this.scheduleAllAttacks();
+    }
+
+    /**
+     * Cleanup when module is destroyed
+     */
+    async onModuleDestroy() {
+        this.logger.log('CrawlerService is being destroyed - cleaning up resources...');
+        // Reset scavenging time data to free memory
+        this.scavengingTimeData = {
+            lastCollected: new Date(),
+            villages: []
+        };
+        this.logger.log('CrawlerService cleanup completed');
     }
 
     /**
@@ -223,9 +236,10 @@ export class CrawlerService implements OnModuleInit {
             this.logger.error(`Error during Plemiona bot operation`, error);
             await page.screenshot({ path: `error_screenshot_${Date.now()}.png`, fullPage: true }).catch(e => this.logger.error('Failed to take screenshot', e));
         } finally {
-            // Zamknięcie przeglądarki jest teraz obsługiwane przez logikę planowania w performScavenging
-            // lub w przypadku błędu przed jej uruchomieniem.
-            // await browser.close(); // Usunięte - zamykamy po zakończeniu cyklu zbieractwa
+            // Zawsze zamykaj przeglądarkę
+            if (browser) {
+                await browser.close();
+            }
             this.logger.log('Plemiona Scavenging Bot run finished.');
         }
     }
@@ -236,6 +250,8 @@ export class CrawlerService implements OnModuleInit {
      * @param page Instancja strony Playwright.
      */
     public async performScavenging(serverId: number): Promise<void> {
+        let browser: any = null;
+        
         try {
             this.logger.log('Starting scavenging process for villages with auto-scavenging enabled...');
 
@@ -272,7 +288,9 @@ export class CrawlerService implements OnModuleInit {
             }
 
             // 3. Teraz dopiero otwórz przeglądarkę i zaloguj użytkownika
-            const { browser, page } = await createBrowserPage({ headless: true });
+            const browserPage = await createBrowserPage({ headless: true });
+            browser = browserPage.browser;
+            const { page } = browserPage;
 
             try {
                 const serverName = await this.serversService.getServerName(serverId);
@@ -537,13 +555,13 @@ export class CrawlerService implements OnModuleInit {
 
                 // Scavenging completed - orchestrator will handle scheduling
 
-            } finally {
-                await browser.close();
-            }
-
         } catch (error) {
             this.logger.error('Error during scavenging process:', error);
             throw error; // Let orchestrator handle the error
+        } finally {
+            if (browser) {
+                await browser.close();
+            }
         }
     }
 

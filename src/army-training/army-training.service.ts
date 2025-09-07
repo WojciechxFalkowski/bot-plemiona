@@ -21,7 +21,7 @@ export class ArmyTrainingService {
     }
 
     public async getArmyData(villageId: string, serverId: number): Promise<ArmyData> {
-        const { page } = await this.createBrowserSession(serverId);
+        const { browser, page } = await this.createBrowserSession(serverId);
         try {
             const serverCode = await this.serversService.getServerCode(serverId);
             const armyData = await ArmyUtils.getArmyData(page, villageId, serverCode);
@@ -30,13 +30,15 @@ export class ArmyTrainingService {
             this.logger.error(`Error getting army data: ${error}`);
             throw new BadRequestException(`Error getting army data: ${error}`);
         } finally {
-            await page.close();
+            if (browser) {
+                await browser.close();
+            }
         }
     }
 
     public async startTrainingLight(villageId: string, serverId: number) {
         const MAX_RECRUITMENT_LIGHT = 4;
-        const { page } = await this.createBrowserSession(serverId);
+        const { browser, page } = await this.createBrowserSession(serverId);
         try {
             const serverCode = await this.serversService.getServerCode(serverId);
             const armyPage = new ArmyPage(page);
@@ -63,7 +65,9 @@ export class ArmyTrainingService {
             this.logger.error(`❌Error starting training light: ${error}`);
             throw new BadRequestException(`Error starting training light: ${error}`);
         } finally {
-            await page.close();
+            if (browser) {
+                await browser.close();
+            }
         }
     }
 
@@ -93,7 +97,7 @@ export class ArmyTrainingService {
     }
 
     public async getUnitsInProduction(villageId: string, serverId: number) {
-        const { page } = await this.createBrowserSession(serverId);
+        const { browser, page } = await this.createBrowserSession(serverId);
         try {
             const armyPage = new ArmyPage(page);
             const serverCode = await this.serversService.getServerCode(serverId);
@@ -102,10 +106,12 @@ export class ArmyTrainingService {
 
             return unitsInProduction;
         } catch (error) {
-
-        }
-        finally {
-            await page.close();
+            this.logger.error(`Error getting units in production: ${error}`);
+            throw new BadRequestException(`Error getting units in production: ${error}`);
+        } finally {
+            if (browser) {
+                await browser.close();
+            }
         }
     }
 }
