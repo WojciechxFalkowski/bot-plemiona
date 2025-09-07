@@ -57,6 +57,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private multiServerState: MultiServerState;
     private mainTimer: NodeJS.Timeout | null = null;
     private monitoringTimer: NodeJS.Timeout | null = null;
+    private memoryMonitoringTimer: NodeJS.Timeout | null = null;
 
     // Configuration constants
     private readonly MIN_CONSTRUCTION_INTERVAL = 1000 * 60 * 5; // 5 minutes
@@ -95,6 +96,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     async onModuleInit() {
         this.logger.log('🌐 Multi-Server CrawlerOrchestratorService initialized');
         this.startMonitoring();
+        this.startMemoryMonitoring();
     }
 
     async onModuleDestroy() {
@@ -214,10 +216,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const constructionDelay = this.getInitialConstructionInterval();
         const miniAttackDelay = this.getInitialMiniAttackInterval();
         const armyTrainingDelay = this.getInitialArmyTrainingInterval();
-        // if (server.id == 216 || server.id == 217 || server.id == 29) {
-        //     console.log("No initialize server plan", server.id);
-        //     return
-        // }
+        if (server.id == 216 || server.id == 217 || server.id == 29) {
+            console.log("No initialize server plan", server.id);
+            return
+        }
 
         const serverPlan: ServerCrawlerPlan = {
             serverId: server.id,
@@ -632,6 +634,27 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Starts memory monitoring
+     */
+    private startMemoryMonitoring(): void {
+        this.logger.log('📊 Starting memory monitoring...');
+        
+        this.memoryMonitoringTimer = setInterval(() => {
+            const memUsage = process.memoryUsage();
+            const formatBytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+            
+            this.logger.log('📊 Memory Usage:', {
+                rss: `${formatBytes(memUsage.rss)} MB`,
+                heapUsed: `${formatBytes(memUsage.heapUsed)} MB`,
+                heapTotal: `${formatBytes(memUsage.heapTotal)} MB`,
+                external: `${formatBytes(memUsage.external)} MB`,
+                arrayBuffers: `${formatBytes(memUsage.arrayBuffers)} MB`,
+                timestamp: new Date().toISOString()
+            });
+        }, 5 * 60 * 1000); // Every 5 minutes
+    }
+
+    /**
      * Stops the crawler orchestrator
      */
     private stopOrchestrator(): void {
@@ -642,6 +665,11 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         if (this.monitoringTimer) {
             clearInterval(this.monitoringTimer);
             this.monitoringTimer = null;
+        }
+
+        if (this.memoryMonitoringTimer) {
+            clearInterval(this.memoryMonitoringTimer);
+            this.memoryMonitoringTimer = null;
         }
 
         this.logger.log('🛑 Multi-server crawler orchestrator stopped');
