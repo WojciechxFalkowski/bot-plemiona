@@ -555,6 +555,10 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
                 // Scavenging completed - orchestrator will handle scheduling
 
+            } catch (error) {
+                this.logger.error('Error during scavenging process:', error);
+                throw error; // Let orchestrator handle the error
+            }
         } catch (error) {
             this.logger.error('Error during scavenging process:', error);
             throw error; // Let orchestrator handle the error
