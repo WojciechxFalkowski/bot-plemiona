@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Logger, Get, Param, Delete, ParseIntPipe, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Logger, Get, Param, Delete, ParseIntPipe, NotFoundException, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { VillageConstructionQueueService } from './village-construction-queue.service';
 import { CreateConstructionQueueDto } from './dto/create-construction-queue.dto';
@@ -52,7 +52,7 @@ export class VillageConstructionQueueController {
             };
 
             const result = await this.constructionQueueService.addToQueue(serviceDto);
-            this.logger.log(`Successfully processed request for building ${createDto.buildingId} level ${createDto.targetLevel} in village "${createDto.villageName}" (ID: ${village.id})`);
+            this.logger.log(`Successfully processed request for server ${createDto.serverId} building ${createDto.buildingId} level ${createDto.targetLevel} in village "${createDto.villageName}" (ID: ${village.id})`);
             return result;
         } catch (error) {
             this.logger.error(`Failed to add building to queue: ${error.message}`, error.stack);
@@ -90,15 +90,30 @@ export class VillageConstructionQueueController {
     @Get('all')
     @HttpCode(HttpStatus.OK)
     @GetAllVillagesQueueDecorators()
-    async getAllVillagesQueue(): Promise<VillageConstructionQueueEntity[]> {
-        this.logger.log('Request to get construction queue for all villages');
+    async getAllVillagesQueue(
+        @Query('serverId') serverId?: string
+    ): Promise<VillageConstructionQueueEntity[]> {
+        const serverIdNumber = serverId ? parseInt(serverId, 10) : undefined;
+        const logMessage = serverIdNumber 
+            ? `Request to get construction queue for server ${serverIdNumber}`
+            : 'Request to get construction queue for all villages';
+
+        this.logger.log(logMessage);
 
         try {
-            const result = await this.constructionQueueService.getAllQueues();
-            this.logger.log(`Successfully retrieved ${result.length} total queue items for all villages`);
+            const result = await this.constructionQueueService.getAllQueues(serverIdNumber);
+            const successMessage = serverIdNumber 
+                ? `Successfully retrieved ${result.length} total queue items for server ${serverIdNumber}`
+                : `Successfully retrieved ${result.length} total queue items for all villages`;
+            
+            this.logger.log(successMessage);
             return result;
         } catch (error) {
-            this.logger.error(`Failed to get queue for all villages: ${error.message}`, error.stack);
+            const errorMessage = serverIdNumber 
+                ? `Failed to get queue for server ${serverIdNumber}: ${error.message}`
+                : `Failed to get queue for all villages: ${error.message}`;
+            
+            this.logger.error(errorMessage, error.stack);
             throw error;
         }
     }

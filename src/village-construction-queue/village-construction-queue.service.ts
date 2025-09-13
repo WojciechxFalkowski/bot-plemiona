@@ -678,11 +678,12 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
             buildingId: dto.buildingId,
             buildingName: buildingConfig.name,
             targetLevel: dto.targetLevel,
-            village: village
+            village: village,
+            serverId: dto.serverId
         });
 
         const savedItem = await this.queueRepository.save(queueItem);
-        this.logger.log(`Successfully added ${buildingConfig.name} level ${dto.targetLevel} to queue for village ${dto.villageId}`);
+        this.logger.log(`Successfully added for server ${dto.serverId} building: ${buildingConfig.name} level ${dto.targetLevel} to queue for village ${dto.villageId}`);
 
         return savedItem;
     }
@@ -709,15 +710,23 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
     /**
      * Pobiera całą kolejkę budowy dla wszystkich wiosek
-     * @returns Lista wszystkich budynków w kolejce dla wszystkich wiosek
+     * @param serverId Opcjonalny ID serwera do filtrowania
+     * @returns Lista wszystkich budynków w kolejce dla wszystkich wiosek lub filtrowana według serwera
      */
-    async getAllQueues(): Promise<VillageConstructionQueueEntity[]> {
+    async getAllQueues(serverId?: number): Promise<VillageConstructionQueueEntity[]> {
+        const whereCondition = serverId ? { serverId } : {};
+
         const queueItems = await this.queueRepository.find({
+            where: whereCondition,
             order: { createdAt: 'ASC' }, // FIFO - First In, First Out
             relations: ['village']
         });
 
-        this.logger.log(`Retrieved ${queueItems.length} total queue items for all villages`);
+        const logMessage = serverId
+            ? `Retrieved ${queueItems.length} total queue items for server ${serverId}`
+            : `Retrieved ${queueItems.length} total queue items for all villages`;
+
+        this.logger.log(logMessage);
         return queueItems;
     }
 
