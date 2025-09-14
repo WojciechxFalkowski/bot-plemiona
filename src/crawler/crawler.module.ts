@@ -11,9 +11,10 @@ import { BarbarianVillagesModule } from '../barbarian-villages/barbarian-village
 import { PlemionaCookiesModule } from '../plemiona-cookies';
 import { MiniAttackStrategiesModule } from '@/mini-attack-strategies/mini-attack-strategies.module';
 import { ArmyTrainingModule } from '@/army-training/army-training.module';
+import { PlayerVillagesModule } from '@/player-villages/player-villages.module';
 
 @Module({
-  imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule],
+  imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule],
   controllers: [CrawlerController, CrawlerOrchestratorController],
   providers: [CrawlerService, CrawlerOrchestratorService],
   exports: [CrawlerService, CrawlerOrchestratorService],

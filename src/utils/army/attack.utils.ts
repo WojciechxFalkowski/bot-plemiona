@@ -15,6 +15,48 @@ export interface BarbarianVillage {
     updatedAt: Date;
 }
 
+// Interfejs dla wioski gracza
+export interface PlayerVillage {
+    id: number;
+    target: string;
+    serverId: number;
+    villageId: string;
+    name: string;
+    coordinateX: number;
+    coordinateY: number;
+    owner: string;
+    ownerId?: string;
+    tribe?: string;
+    tribeId?: string;
+    points: number;
+    population: number;
+    canAttack: boolean;
+    lastVerified?: Date;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+// Interfejs dla strategii ataku na wioski graczy
+export interface PlayerVillageAttackStrategy {
+    id: number;
+    serverId: number;
+    villageId: string;
+    spear: number;
+    sword: number;
+    axe: number;
+    archer: number;
+    spy: number;
+    light: number;
+    marcher: number;
+    heavy: number;
+    ram: number;
+    catapult: number;
+    knight: number;
+    snob: number;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 // Interfejs dla wyniku obliczenia dostępnych ataków
 export interface AttackCalculationResult {
     maxAttacks: number;
@@ -38,10 +80,30 @@ export interface VillageOwnerVerification {
     error?: string;
 }
 
+// Interfejs dla wyniku weryfikacji właściciela wioski gracza
+export interface PlayerVillageOwnerVerification {
+    isValid: boolean;
+    owner: string;
+    ownerId?: string;
+    tribe?: string;
+    tribeId?: string;
+    points: number;
+    population: number;
+    error?: string;
+}
+
 // Interfejs dla wyniku ataku
 export interface AttackResult {
     success: boolean;
     targetVillage: BarbarianVillage;
+    error?: string;
+    attackUrl?: string;
+}
+
+// Interfejs dla wyniku ataku na wioski graczy
+export interface PlayerVillageAttackResult {
+    success: boolean;
+    targetVillage: PlayerVillage;
     error?: string;
     attackUrl?: string;
 }
@@ -630,5 +692,195 @@ export class AttackUtils {
         this.logger.debug(`Troops check (spear & sword): ${hasEnough ? 'sufficient' : 'insufficient'} troops for attack`);
 
         return hasEnough;
+    }
+
+    /**
+     * Weryfikuje czy wioska gracza nadal należy do tego samego właściciela
+     * @param page Instancja strony Playwright
+     * @param targetVillage Wioska gracza do weryfikacji
+     * @returns Wynik weryfikacji właściciela wioski gracza
+     */
+    public static async verifyPlayerVillageOwner(page: Page, targetVillage: PlayerVillage): Promise<PlayerVillageOwnerVerification> {
+        this.logger.debug(`Verifying owner of player village: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+        try {
+            const infoUrl = `https://${targetVillage.serverId}.plemiona.pl/game.php?village=${targetVillage.villageId}&screen=info_village&id=${targetVillage.target}`;
+            await page.goto(infoUrl);
+            await page.waitForTimeout(1000);
+
+            const villageData = await page.evaluate(() => {
+                function getValueElementByKey(keyText: string): Element | null {
+                    const keyCells = document.querySelectorAll("table.vis td:first-child");
+                    for (const cell of keyCells) {
+                        if (cell.textContent?.trim() === keyText) {
+                            return cell.nextElementSibling;
+                        }
+                    }
+                    return null;
+                }
+
+                const coordinatesCell = getValueElementByKey("Współrzędne:");
+                const pointsCell = getValueElementByKey("Punkty:");
+                const playerCell = getValueElementByKey("Gracz:");
+                const tribeCell = getValueElementByKey("Plemię:");
+
+                const coordinates = coordinatesCell?.textContent?.trim() || '';
+                const points = pointsCell?.textContent?.trim() || '0';
+                const playerLink = playerCell?.querySelector("a");
+                const tribeLink = tribeCell?.querySelector("a");
+
+                const [x, y] = coordinates.split('|').map(coord => parseInt(coord.trim()));
+
+                return {
+                    coordinateX: x || 0,
+                    coordinateY: y || 0,
+                    points: parseInt(points) || 0,
+                    owner: playerLink?.textContent?.trim() || '',
+                    ownerId: playerLink?.getAttribute('href')?.match(/player\/(\d+)/)?.[1] || undefined,
+                    tribe: tribeLink?.textContent?.trim() || undefined,
+                    tribeId: tribeLink?.getAttribute('href')?.match(/tribe\/(\d+)/)?.[1] || undefined,
+                };
+            });
+
+            // Sprawdź czy właściciel się zmienił
+            const ownerChanged = villageData.owner !== targetVillage.owner;
+
+            if (ownerChanged) {
+                this.logger.warn(`Player village owner changed: ${targetVillage.owner} -> ${villageData.owner}`);
+                return {
+                    isValid: false,
+                    owner: villageData.owner,
+                    ownerId: villageData.ownerId,
+                    tribe: villageData.tribe,
+                    tribeId: villageData.tribeId,
+                    points: villageData.points,
+                    population: 0, // Populacja nie jest dostępna z tej strony
+                    error: `Owner changed from ${targetVillage.owner} to ${villageData.owner}`,
+                };
+            }
+
+            return {
+                isValid: true,
+                owner: villageData.owner,
+                ownerId: villageData.ownerId,
+                tribe: villageData.tribe,
+                tribeId: villageData.tribeId,
+                points: villageData.points,
+                population: 0, // Populacja nie jest dostępna z tej strony
+            };
+        } catch (error) {
+            this.logger.error(`Error verifying player village owner: ${error.message}`);
+            return {
+                isValid: false,
+                owner: '',
+                points: 0,
+                population: 0,
+                error: error.message,
+            };
+        }
+    }
+
+    /**
+     * Wykonuje atak na wioskę gracza używając określonej strategii
+     * @param page Instancja strony Playwright
+     * @param targetVillage Wioska gracza do ataku
+     * @param sourceVillageId ID wioski źródłowej
+     * @param serverCode Kod serwera
+     * @param attackStrategy Strategia ataku
+     * @returns Wynik ataku na wioskę gracza
+     */
+    public static async performPlayerVillageAttack(
+        page: Page,
+        targetVillage: PlayerVillage,
+        sourceVillageId: string,
+        serverCode: string,
+        attackStrategy: PlayerVillageAttackStrategy
+    ): Promise<PlayerVillageAttackResult> {
+        this.logger.debug(`Performing attack on player village: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
+
+        try {
+            // Weryfikacja właściciela wioski przed atakiem
+            const ownerVerification = await this.verifyPlayerVillageOwner(page, targetVillage);
+
+            if (!ownerVerification.isValid) {
+                return {
+                    success: false,
+                    targetVillage,
+                    error: `Owner verification failed: ${ownerVerification.error}`,
+                };
+            }
+
+            // Przejdź do strony ataku
+            const attackUrl = `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`;
+            await page.goto(attackUrl);
+            await page.waitForTimeout(2000);
+
+            // Sprawdź czy strona ataku się załadowała
+            const attackForm = page.locator('#attack_form');
+            if (!(await attackForm.isVisible())) {
+                return {
+                    success: false,
+                    targetVillage,
+                    error: 'Attack form not visible',
+                    attackUrl,
+                };
+            }
+
+            // Wypełnij formularz ataku zgodnie ze strategią
+            await this.fillAttackFormWithStrategy(page, attackStrategy);
+
+            // Wyślij atak
+            const sendButton = page.locator('#attack_confirm_go');
+            if (await sendButton.isVisible()) {
+                await sendButton.click();
+                await page.waitForTimeout(1000);
+            }
+
+            this.logger.debug(`Attack sent to player village: ${targetVillage.name}`);
+            return {
+                success: true,
+                targetVillage,
+                attackUrl,
+            };
+        } catch (error) {
+            this.logger.error(`Error performing attack on player village: ${error.message}`);
+            return {
+                success: false,
+                targetVillage,
+                error: error.message,
+                attackUrl: `https://${serverCode}.plemiona.pl/game.php?village=${sourceVillageId}&screen=place&target=${targetVillage.target}`,
+            };
+        }
+    }
+
+    /**
+     * Wypełnia formularz ataku zgodnie ze strategią
+     * @param page Instancja strony Playwright
+     * @param attackStrategy Strategia ataku
+     */
+    private static async fillAttackFormWithStrategy(page: Page, attackStrategy: PlayerVillageAttackStrategy): Promise<void> {
+        const unitFields = {
+            'spear': attackStrategy.spear,
+            'sword': attackStrategy.sword,
+            'axe': attackStrategy.axe,
+            'archer': attackStrategy.archer,
+            'spy': attackStrategy.spy,
+            'light': attackStrategy.light,
+            'marcher': attackStrategy.marcher,
+            'heavy': attackStrategy.heavy,
+            'ram': attackStrategy.ram,
+            'catapult': attackStrategy.catapult,
+            'knight': attackStrategy.knight,
+            'snob': attackStrategy.snob,
+        };
+
+        for (const [unitType, count] of Object.entries(unitFields)) {
+            if (count > 0) {
+                const input = page.locator(`input[name="${unitType}"]`);
+                if (await input.isVisible()) {
+                    await input.fill(count.toString());
+                }
+            }
+        }
     }
 } 

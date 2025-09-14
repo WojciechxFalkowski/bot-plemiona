@@ -14,6 +14,9 @@ import { ServerResponseDto } from '@/servers/dto';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { MiniAttackStrategiesService } from '@/mini-attack-strategies/mini-attack-strategies.service';
 import { ArmyTrainingService } from '@/army-training/army-training.service';
+import { PlayerVillagesService } from '@/player-villages/player-villages.service';
+import { PlayerVillageAttackStrategiesService } from '@/player-villages/player-village-attack-strategies.service';
+import * as ghostCursor from 'ghost-cursor-playwright';
 
 interface CrawlerTask {
     nextExecutionTime: Date;
@@ -32,6 +35,10 @@ interface ServerCrawlerPlan {
         optimalDelay: number | null;
     };
     miniAttacks: CrawlerTask & {
+        nextTargetIndex: number;
+        lastAttackTime: Date | null;
+    };
+    playerVillageAttacks: CrawlerTask & {
         nextTargetIndex: number;
         lastAttackTime: Date | null;
     };
@@ -87,7 +94,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly constructionQueueService: VillageConstructionQueueService,
         private readonly barbarianVillagesService: BarbarianVillagesService,
         private readonly miniAttackStrategiesService: MiniAttackStrategiesService,
-        private readonly armyTrainingService: ArmyTrainingService
+        private readonly armyTrainingService: ArmyTrainingService,
+        private readonly playerVillagesService: PlayerVillagesService,
+        private readonly playerVillageAttackStrategiesService: PlayerVillageAttackStrategiesService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -247,6 +256,14 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 nextTargetIndex: 0,
                 lastAttackTime: null
             },
+            playerVillageAttacks: {
+                nextExecutionTime: new Date(now.getTime() + miniAttackDelay), // Use same delay as mini attacks initially
+                enabled: false,
+                lastExecuted: null,
+                name: 'Player Village Attacks',
+                nextTargetIndex: 0,
+                lastAttackTime: null
+            },
             armyTraining: {
                 nextExecutionTime: new Date(now.getTime() + armyTrainingDelay),
                 enabled: false,
@@ -369,7 +386,226 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         return earliestTask;
     }
 
+    public async resolveRepatch(serverId: number, headless: boolean): Promise<void> {
+        this.logger.log(`🔧 Starting captcha resolution for server ${serverId}...`);
 
+        let browser: any = null;
+
+        try {
+            // 1. Login and select world
+            const browserPage = await createBrowserPage({ headless: headless });
+            browser = browserPage.browser;
+            const { page } = browserPage;
+            const serverName = await this.serversService.getServerName(serverId);
+
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                this.credentials,
+                this.plemionaCookiesService,
+                serverName
+            );
+
+            if (!loginResult.success || !loginResult.worldSelected) {
+                throw new Error(`Login failed for server ${serverId}: ${loginResult.error || 'Unknown error'}`);
+            }
+
+            this.logger.log(`✅ Successfully logged in for server ${serverId}, starting captcha resolution...`);
+
+            // 2. Click on bot protection quest element
+            await this.clickBotProtectionQuest(page);
+
+            // 3. Click on the captcha button to open hCaptcha
+            await this.clickCaptchaButton(page);
+
+            // 4. Resolve the captcha using ghost-cursor-playwright
+            await this.resolveCaptcha(page);
+
+            this.logger.log(`✅ Captcha resolution completed successfully for server ${serverId}`);
+
+        } catch (error) {
+            this.logger.error(`❌ Error during captcha resolution for server ${serverId}:`, error);
+            throw error;
+        } finally {
+            if (browser) {
+                await browser.close();
+            }
+        }
+    }
+
+    /**
+     * Clicks on the bot protection quest element
+     */
+    private async clickBotProtectionQuest(page: any): Promise<void> {
+        this.logger.log('🔍 Looking for bot protection quest element...');
+
+        try {
+            await page.evaluate(() => {
+                const element = document.querySelector("td.botprotection_quest");
+                if (element) {
+                    (element as HTMLElement).click();
+                } else {
+                    throw new Error('Bot protection quest element not found');
+                }
+            });
+
+            this.logger.log('✅ Bot protection quest element clicked');
+
+            // Wait a bit for any animations or page updates
+            await page.waitForTimeout(1000);
+
+        } catch (error) {
+            this.logger.error('❌ Error clicking bot protection quest element:', error);
+        }
+    }
+
+    /**
+     * Clicks on the captcha button to open hCaptcha
+     */
+    private async clickCaptchaButton(page: any): Promise<void> {
+        this.logger.log('🔍 Looking for captcha button...');
+
+        try {
+            await page.evaluate(() => {
+                const element = document.querySelector("td.bot-protection-row a.btn.btn-default");
+                if (element) {
+                    (element as HTMLElement).click();
+                } else {
+                    throw new Error('Captcha button not found');
+                }
+            });
+
+            this.logger.log('✅ Captcha button clicked');
+
+            // Wait for the captcha iframe to load
+            await page.waitForTimeout(2000);
+
+        } catch (error) {
+            this.logger.error('❌ Error clicking captcha button:', error);
+        }
+    }
+
+    /**
+     * Resolves the hCaptcha using ghost-cursor-playwright
+     */
+    private async resolveCaptcha(page: any): Promise<void> {
+        this.logger.log('🤖 Starting captcha resolution with ghost-cursor...');
+
+        try {
+            // Create ghost cursor instance
+            console.log("v1");
+            const cursor = await ghostCursor.createCursor(page);
+            console.log("v2");
+            const vector = await cursor.getActualPosOfMouse();
+            console.log("vector of mouse");
+            console.log(vector);
+            
+
+            // Wait for the hCaptcha iframe to be available
+            const captchaFrame = await page.waitForSelector('iframe[title*="hCaptcha"]', { timeout: 10000 });
+            // cursor.actions.move(captchaFrame);
+            if (!captchaFrame) {
+                throw new Error('hCaptcha iframe not found');
+            }
+
+            this.logger.log('✅ hCaptcha iframe found, starting resolution...');
+
+            // Switch to the captcha frame
+            const frame = await captchaFrame.contentFrame();
+
+            if (!frame) {
+                throw new Error('Could not access hCaptcha iframe content');
+            }
+
+            // Wait for the checkbox to be available
+            await frame.waitForSelector('.checkbox', { timeout: 10000 });
+
+            // Click the checkbox using ghost cursor
+            const checkbox = await frame.$('.checkbox');
+            if (checkbox) {
+                // Try different cursor API approaches
+                try {
+                    await (cursor as any).click(checkbox);
+                } catch (error) {
+                    // Fallback to regular click if ghost cursor fails
+                    await checkbox.click();
+                }
+                this.logger.log('✅ Captcha checkbox clicked');
+            } else {
+                throw new Error('Captcha checkbox not found');
+            }
+
+            // Wait for potential challenge to appear
+            await page.waitForTimeout(3000);
+
+            // Check if a challenge appeared
+            const challengeFrame = await page.$('iframe[src*="hcaptcha.html#frame=challenge"]');
+
+            if (challengeFrame) {
+                this.logger.log('🧩 Challenge detected, attempting to solve...');
+                await this.solveCaptchaChallenge(page, cursor);
+            } else {
+                this.logger.log('✅ No challenge appeared, captcha might be solved automatically');
+            }
+
+            // Wait a bit more to ensure captcha is processed
+            await page.waitForTimeout(2000);
+
+            this.logger.log('✅ Captcha resolution completed');
+
+        } catch (error) {
+            this.logger.error('❌ Error resolving captcha:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Solves hCaptcha challenge if it appears
+     */
+    private async solveCaptchaChallenge(page: any, cursor: any): Promise<void> {
+        this.logger.log('🧩 Attempting to solve captcha challenge...');
+
+        try {
+            // Wait for challenge frame
+            const challengeFrame = await page.waitForSelector('iframe[src*="hcaptcha.html#frame=challenge"]', { timeout: 5000 });
+
+            if (!challengeFrame) {
+                this.logger.log('✅ No challenge frame found, captcha might already be solved');
+                return;
+            }
+
+            const frame = await challengeFrame.contentFrame();
+            if (!frame) {
+                throw new Error('Could not access challenge frame');
+            }
+
+            // Wait for the challenge content to load
+            await frame.waitForTimeout(2000);
+
+            // Try to find and click the "Verify" button
+            const verifyButton = await frame.$('.verify-button');
+            if (verifyButton) {
+                try {
+                    await (cursor as any).click(verifyButton);
+                } catch (error) {
+                    // Fallback to regular click if ghost cursor fails
+                    await verifyButton.click();
+                }
+                this.logger.log('✅ Verify button clicked');
+            } else {
+                this.logger.log('⚠️ Verify button not found, challenge might be different type');
+            }
+
+            // Wait for challenge completion
+            await page.waitForTimeout(3000);
+
+            this.logger.log('✅ Challenge resolution attempted');
+
+        } catch (error) {
+            this.logger.error('❌ Error solving captcha challenge:', error);
+            // Don't throw here, as the challenge might not always appear
+            this.logger.log('⚠️ Continuing despite challenge resolution error');
+        }
+    }
 
     /**
      * Executes a task for a specific server
@@ -397,6 +633,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 case 'Mini Attacks':
                     await this.executeMiniAttacksTask(serverId);
                     await this.updateNextMiniAttackTime(plan);
+                    break;
+                case 'Player Village Attacks':
+                    await this.executePlayerVillageAttacksTask(serverId);
+                    await this.updateNextPlayerVillageAttackTime(plan);
                     break;
                 case 'Army Training':
                     await this.executeArmyTrainingTask(serverId);
@@ -439,6 +679,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 break;
             case 'Mini Attacks':
                 plan.miniAttacks.nextExecutionTime = new Date(Date.now() + retryDelay);
+                break;
+            case 'Player Village Attacks':
+                plan.playerVillageAttacks.nextExecutionTime = new Date(Date.now() + retryDelay);
                 break;
             case 'Army Training':
                 plan.armyTraining.nextExecutionTime = new Date(Date.now() + retryDelay);
@@ -612,6 +855,104 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Executes player village attacks for a server
+     */
+    private async executePlayerVillageAttacksTask(serverId: number): Promise<void> {
+        this.logger.log(`🚀 Executing player village attacks for server ${serverId}`);
+
+        let browser: any = null;
+
+        try {
+            // Get all attackable player villages for this server
+            const villages = await this.playerVillagesService.findAttackableVillages(serverId);
+            if (villages.length === 0) {
+                this.logger.warn(`⚠️ No attackable player villages found for server ${serverId}`);
+                return;
+            }
+
+            this.logger.log(`📋 Found ${villages.length} attackable player villages for server ${serverId}`);
+
+            const serverName = await this.serversService.getServerName(serverId);
+            const serverCode = await this.serversService.getServerCode(serverId);
+
+            // 1. Login and select world
+            const browserPage = await createBrowserPage({ headless: true });
+            browser = browserPage.browser;
+            const page = browserPage.page;
+
+            // 2. Login to the server
+            const credentials = {
+                username: process.env.PLEMINA_USERNAME || '',
+                password: process.env.PLEMINA_PASSWORD || ''
+            };
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                credentials,
+                this.plemionaCookiesService,
+                serverName
+            );
+
+            // 3. Process each village
+            for (const village of villages) {
+                try {
+                    // Get attack strategy for this village
+                    const attackStrategy = await this.playerVillageAttackStrategiesService.findByVillageId(serverId, village.villageId);
+                    
+                    // Import AttackUtils at the top of the file
+                    const { AttackUtils } = await import('@/utils/army/attack.utils');
+                    
+                    // Perform the attack
+                    const result = await AttackUtils.performPlayerVillageAttack(
+                        page,
+                        village,
+                        village.villageId, // source village ID
+                        serverCode,
+                        attackStrategy
+                    );
+
+                    if (result.success) {
+                        this.logger.log(`✅ Successfully attacked player village: ${village.name} (${village.coordinateX}|${village.coordinateY})`);
+                    } else {
+                        this.logger.warn(`⚠️ Failed to attack player village: ${village.name} - ${result.error}`);
+                        
+                        // If owner verification failed, update village status
+                        if (result.error?.includes('Owner verification failed')) {
+                            await this.playerVillagesService.update(village.id, { canAttack: false });
+                        }
+                    }
+
+                    // Add delay between attacks
+                    await page.waitForTimeout(2000);
+
+                } catch (error) {
+                    this.logger.error(`❌ Error attacking player village ${village.name}:`, error);
+                }
+            }
+
+        } catch (error) {
+            this.logger.error(`❌ Error executing player village attacks for server ${serverId}:`, error);
+            throw error;
+        } finally {
+            if (browser) {
+                await browser.close();
+            }
+        }
+    }
+
+    /**
+     * Updates next player village attacks execution time
+     */
+    private async updateNextPlayerVillageAttackTime(plan: ServerCrawlerPlan): Promise<void> {
+        const delay = await this.getRandomMiniAttackInterval(plan.serverId); // Use same delay as mini attacks
+        plan.playerVillageAttacks.nextExecutionTime = new Date(Date.now() + delay);
+        plan.playerVillageAttacks.lastExecuted = new Date();
+        plan.playerVillageAttacks.lastAttackTime = new Date();
+
+        const delayMinutes = Math.round(delay / 1000 / 60);
+        this.logger.debug(`📅 Next player village attack for ${plan.serverCode}: ${plan.playerVillageAttacks.nextExecutionTime.toLocaleString()} (in ${delayMinutes} minutes)`);
+    }
+
+    /**
      * Updates next army training execution time
      */
     private async updateNextArmyTrainingTime(plan: ServerCrawlerPlan): Promise<void> {
@@ -638,11 +979,11 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      */
     private startMemoryMonitoring(): void {
         this.logger.log('📊 Starting memory monitoring...');
-        
+
         this.memoryMonitoringTimer = setInterval(() => {
             const memUsage = process.memoryUsage();
             const formatBytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
-            
+
             this.logger.log('📊 Memory Usage:', {
                 rss: `${formatBytes(memUsage.rss)} MB`,
                 heapUsed: `${formatBytes(memUsage.heapUsed)} MB`,
@@ -988,6 +1329,15 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     nextExecution: plan.miniAttacks.nextExecutionTime,
                     timeUntilExecution: plan.miniAttacks.nextExecutionTime.getTime() - now.getTime(),
                     lastExecuted: plan.miniAttacks.lastExecuted
+                },
+                {
+                    serverCode: plan.serverCode,
+                    serverName: plan.serverName,
+                    taskType: 'Player Village Attacks',
+                    enabled: plan.playerVillageAttacks.enabled,
+                    nextExecution: plan.playerVillageAttacks.nextExecutionTime,
+                    timeUntilExecution: plan.playerVillageAttacks.nextExecutionTime.getTime() - now.getTime(),
+                    lastExecuted: plan.playerVillageAttacks.lastExecuted
                 },
                 {
                     serverCode: plan.serverCode,
