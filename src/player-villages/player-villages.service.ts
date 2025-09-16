@@ -6,13 +6,17 @@ import { CreatePlayerVillageFromUrlDto } from './dto/create-player-village-from-
 import { UpdatePlayerVillageDto } from './dto/update-player-village.dto';
 import { PlayerVillagesServiceContracts, PLAYER_VILLAGES_ENTITY_REPOSITORY } from './player-villages.service.contracts';
 import { ServersService } from '@/servers/servers.service';
-import { Page } from 'playwright';
+import { Browser, Page } from 'playwright';
 import { AuthUtils } from '@/utils/auth/auth.utils';
 import { createBrowserPage } from '@/utils/browser.utils';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
 import { SettingsKey } from '@/settings/settings-keys.enum';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
+import { VillageInfoPage } from '@/models/tribal-wars/village-info-page';
+import { TroopDispatchPage } from '@/models/tribal-wars/troop-dispatch-page';
+import { PlayerVillageAttackStrategiesService } from './player-village-attack-strategies.service';
+import { PlayerVillageAttackStrategyEntity } from './entities/player-village-attack-strategy.entity';
 
 @Injectable()
 export class PlayerVillagesService extends PlayerVillagesServiceContracts {
@@ -23,6 +27,7 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
         @Inject(PLAYER_VILLAGES_ENTITY_REPOSITORY)
         private playerVillagesRepository: Repository<PlayerVillageEntity>,
         private serversService: ServersService,
+        private playerVillageAttackStrategiesService: PlayerVillageAttackStrategiesService,
         private settingsService: SettingsService,
         private plemionaCookiesService: PlemionaCookiesService,
     ) {
@@ -144,8 +149,32 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
                 canAttack: true,
             },
             relations: ['server'],
-            order: { createdAt: 'DESC' },
+            order: { villageId: 'ASC' },
         });
+    }
+
+    /**
+ * Tworzy sesję przeglądarki z zalogowaniem do gry
+ * @returns Obiekt z przeglądarką, kontekstem i stroną
+ * @throws BadRequestException jeśli logowanie się nie powiodło
+ */
+    private async createBrowserSession(serverId: number, headless: boolean) {
+        const { browser, context, page } = await createBrowserPage({ headless: headless });
+        const serverName = await this.serversService.getServerName(serverId);
+        const loginResult = await AuthUtils.loginAndSelectWorld(
+            page,
+            this.credentials,
+            this.plemionaCookiesService,
+            serverName
+        );
+
+        if (!loginResult.success || !loginResult.worldSelected) {
+            await browser.close();
+            this.logger.error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+            throw new BadRequestException(`Login failed: ${loginResult.error || 'Unknown error'}`);
+        }
+
+        return { browser, context, page };
     }
 
     async verifyVillageOwner(id: number, serverCode: string): Promise<any> {
@@ -293,6 +322,68 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
                 throw error;
             }
             throw new BadRequestException(`Invalid URL format: ${error.message}`);
+        }
+    }
+
+    public async executeAttacks(serverId: number): Promise<void> {
+        const villages = await this.findAttackableVillages(serverId);
+        for (const village of villages) {
+            await this.executeAttackForVillage(village, serverId);
+        }
+    }
+
+    private async executeAttackForVillage(village: PlayerVillageEntity, serverId: number): Promise<void> {
+        const { browser, page } = await this.createBrowserSession(serverId, true);
+        const serverCode = await this.serversService.getServerCode(serverId);
+        try {
+            await this.checkVillageOwnerAndUpdate(page, village, serverCode);
+            const strategy = await this.playerVillageAttackStrategiesService.findByVillageId(serverId, village.villageId);
+            await this.executeAttack(page, village, serverCode, serverId, browser, strategy);
+        } catch (error) {
+            this.logger.error(`Error executing attack for village ${village.name}: ${error.message}`);
+            throw new Error(`Error executing attack for village ${village.name}: ${error.message}`);
+        } finally {
+            await browser.close();
+        }
+    }
+
+    private async executeAttack(page: Page, village: PlayerVillageEntity, serverCode: string, serverId: number, browser: Browser, strategy: PlayerVillageAttackStrategyEntity): Promise<void> {
+        const troopDispatch = new TroopDispatchPage(page, serverCode);
+        await troopDispatch.navigateToTroopDispatch(village.villageId, village.target);
+        // find strategy for this village from database player_village_attack_strategies
+        await troopDispatch.fillAttackFormWithStrategy(strategy);
+        // confirm attack sequence
+        await troopDispatch.confirmAttackSequence();
+    }
+
+    private async checkVillageOwnerAndUpdate(page: Page, village: PlayerVillageEntity, serverCode: string): Promise<void> {
+        const villageInfo = new VillageInfoPage(page, serverCode);
+        await villageInfo.navigateToVillageInfo(village.villageId, village.target);
+        const villageInfoData = await villageInfo.getVillageData();
+
+        if (village.owner !== villageInfoData.owner && villageInfoData.owner !== "") {
+            await this.update(village.id, { canAttack: false });
+            this.logger.log(`Village owner changed from ${village.owner} to ${villageInfoData.owner}`);
+        }
+        else {
+            this.logger.log(`Village owner is the same in database as it is in VillageInfoData`);
+        }
+
+        const lastAttackCheck = await villageInfo.checkLastAttackResult(page, {
+            name: village.name,
+            coordinateX: village.coordinateX,
+            coordinateY: village.coordinateY,
+            target: village.target,
+            canAttack: village.canAttack,
+            createdAt: village.createdAt,
+            updatedAt: village.updatedAt
+        }, village.villageId, serverCode);
+        if (!lastAttackCheck.canAttack) {
+            await this.update(village.id, { canAttack: false });
+            this.logger.log(`Village can not be attacked: ${lastAttackCheck.reason}`);
+        }
+        else {
+            this.logger.log(`Village can be attacked: ${lastAttackCheck.reason}`);
         }
     }
 }

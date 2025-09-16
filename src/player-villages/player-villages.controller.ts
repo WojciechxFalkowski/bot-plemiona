@@ -113,6 +113,6 @@ export class PlayerVillagesController {
     executeAttacks(@Param('serverId') serverId: number) {
         // This endpoint would trigger the attack execution process
         // Implementation would be handled by CrawlerOrchestratorService
-        throw new Error('This endpoint requires CrawlerOrchestratorService integration');
+        return this.playerVillagesService.executeAttacks(serverId);
     }
 }

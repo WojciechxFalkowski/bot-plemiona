@@ -224,11 +224,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const now = new Date();
         const constructionDelay = this.getInitialConstructionInterval();
         const miniAttackDelay = this.getInitialMiniAttackInterval();
+        const playerVillageAttackDelay = this.getInitialPlayerVillageAttackInterval();
         const armyTrainingDelay = this.getInitialArmyTrainingInterval();
-        if (server.id == 216 || server.id == 217 || server.id == 29) {
-            console.log("No initialize server plan", server.id);
-            return
-        }
+        // if (server.id == 216 || server.id == 217 || server.id == 29) {
+        //     console.log("No initialize server plan", server.id);
+        //     return
+        // }
 
         const serverPlan: ServerCrawlerPlan = {
             serverId: server.id,
@@ -257,7 +258,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 lastAttackTime: null
             },
             playerVillageAttacks: {
-                nextExecutionTime: new Date(now.getTime() + miniAttackDelay), // Use same delay as mini attacks initially
+                nextExecutionTime: new Date(now.getTime() + playerVillageAttackDelay), // Use same delay as mini attacks initially
                 enabled: false,
                 lastExecuted: null,
                 name: 'Player Village Attacks',
@@ -319,9 +320,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             plan.constructionQueue.enabled = await this.isConstructionQueueEnabled(serverId);
             plan.scavenging.enabled = await this.isScavengingEnabled(serverId);
             plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
+            plan.playerVillageAttacks.enabled = await this.isPlayerVillageAttacksEnabled(serverId);
             plan.armyTraining.enabled = await this.isArmyTrainingEnabled(serverId);
 
-            this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}`);
+            this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}`);
             this.logDetailedTaskSchedule();
             this.scheduleNextExecution();
         } catch (error) {
@@ -372,6 +374,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 { task: plan.constructionQueue, type: 'Construction Queue' },
                 { task: plan.scavenging, type: 'Scavenging' },
                 { task: plan.miniAttacks, type: 'Mini Attacks' },
+                { task: plan.playerVillageAttacks, type: 'Player Village Attacks' },
                 { task: plan.armyTraining, type: 'Army Training' }
             ];
 
@@ -498,7 +501,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             const vector = await cursor.getActualPosOfMouse();
             console.log("vector of mouse");
             console.log(vector);
-            
+
 
             // Wait for the hCaptcha iframe to be available
             const captchaFrame = await page.waitForSelector('iframe[title*="hCaptcha"]', { timeout: 10000 });
@@ -860,82 +863,13 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private async executePlayerVillageAttacksTask(serverId: number): Promise<void> {
         this.logger.log(`🚀 Executing player village attacks for server ${serverId}`);
 
-        let browser: any = null;
-
         try {
-            // Get all attackable player villages for this server
-            const villages = await this.playerVillagesService.findAttackableVillages(serverId);
-            if (villages.length === 0) {
-                this.logger.warn(`⚠️ No attackable player villages found for server ${serverId}`);
-                return;
-            }
-
-            this.logger.log(`📋 Found ${villages.length} attackable player villages for server ${serverId}`);
-
-            const serverName = await this.serversService.getServerName(serverId);
-            const serverCode = await this.serversService.getServerCode(serverId);
-
-            // 1. Login and select world
-            const browserPage = await createBrowserPage({ headless: true });
-            browser = browserPage.browser;
-            const page = browserPage.page;
-
-            // 2. Login to the server
-            const credentials = {
-                username: process.env.PLEMINA_USERNAME || '',
-                password: process.env.PLEMINA_PASSWORD || ''
-            };
-            const loginResult = await AuthUtils.loginAndSelectWorld(
-                page,
-                credentials,
-                this.plemionaCookiesService,
-                serverName
-            );
-
-            // 3. Process each village
-            for (const village of villages) {
-                try {
-                    // Get attack strategy for this village
-                    const attackStrategy = await this.playerVillageAttackStrategiesService.findByVillageId(serverId, village.villageId);
-                    
-                    // Import AttackUtils at the top of the file
-                    const { AttackUtils } = await import('@/utils/army/attack.utils');
-                    
-                    // Perform the attack
-                    const result = await AttackUtils.performPlayerVillageAttack(
-                        page,
-                        village,
-                        village.villageId, // source village ID
-                        serverCode,
-                        attackStrategy
-                    );
-
-                    if (result.success) {
-                        this.logger.log(`✅ Successfully attacked player village: ${village.name} (${village.coordinateX}|${village.coordinateY})`);
-                    } else {
-                        this.logger.warn(`⚠️ Failed to attack player village: ${village.name} - ${result.error}`);
-                        
-                        // If owner verification failed, update village status
-                        if (result.error?.includes('Owner verification failed')) {
-                            await this.playerVillagesService.update(village.id, { canAttack: false });
-                        }
-                    }
-
-                    // Add delay between attacks
-                    await page.waitForTimeout(2000);
-
-                } catch (error) {
-                    this.logger.error(`❌ Error attacking player village ${village.name}:`, error);
-                }
-            }
-
+            // Use the PlayerVillagesService.executeAttacks method
+            await this.playerVillagesService.executeAttacks(serverId);
+            this.logger.log(`✅ Player village attacks completed successfully for server ${serverId}`);
         } catch (error) {
             this.logger.error(`❌ Error executing player village attacks for server ${serverId}:`, error);
             throw error;
-        } finally {
-            if (browser) {
-                await browser.close();
-            }
         }
     }
 
@@ -1101,6 +1035,14 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         return 20000;
     }
 
+
+    /**
+     * Generates initial 10 seconds interval for player village attacks
+     */
+    private getInitialPlayerVillageAttackInterval(): number {
+        return 50000;
+    }
+
     /**
      * Generates initial 30 seconds interval for army training
      */
@@ -1175,6 +1117,19 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             return setting?.value === true;
         } catch (error) {
             this.logger.error(`Failed to check army training setting for server ${serverId}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Checks if player village attacks are enabled for a server
+     */
+    private async isPlayerVillageAttacksEnabled(serverId: number): Promise<boolean> {
+        try {
+            const setting = await this.settingsService.getSetting<{ value: boolean }>(serverId, SettingsKey.PLAYER_VILLAGE_ATTACKS_ENABLED);
+            return setting?.value === true;
+        } catch (error) {
+            this.logger.error(`Failed to check player village attacks setting for server ${serverId}:`, error);
             return false;
         }
     }
@@ -1255,6 +1210,26 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             this.logger.log(`✅ Manual army training completed successfully for server ${plan.serverCode}`);
         } catch (error) {
             this.logger.error(`❌ Error during manual army training for server ${plan.serverCode}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Public method to manually trigger player village attacks for a specific server
+     */
+    public async triggerPlayerVillageAttacks(serverId: number): Promise<void> {
+        const plan = this.multiServerState.serverPlans.get(serverId);
+        if (!plan) {
+            throw new Error(`Server ${serverId} not found`);
+        }
+
+        this.logger.log(`🔧 Manually triggering player village attacks for server ${plan.serverCode}...`);
+
+        try {
+            await this.executePlayerVillageAttacksTask(serverId);
+            this.logger.log(`✅ Manual player village attacks completed successfully for server ${plan.serverCode}`);
+        } catch (error) {
+            this.logger.error(`❌ Error during manual player village attacks for server ${plan.serverCode}:`, error);
             throw error;
         }
     }
@@ -1431,6 +1406,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                     nextExecution: plan.miniAttacks.nextExecutionTime,
                     lastExecuted: plan.miniAttacks.lastExecuted,
                     lastAttackTime: plan.miniAttacks.lastAttackTime
+                },
+                playerVillageAttacks: {
+                    enabled: plan.playerVillageAttacks.enabled,
+                    nextExecution: plan.playerVillageAttacks.nextExecutionTime,
+                    lastExecuted: plan.playerVillageAttacks.lastExecuted,
+                    lastAttackTime: plan.playerVillageAttacks.lastAttackTime
                 },
                 armyTraining: {
                     enabled: plan.armyTraining.enabled,
