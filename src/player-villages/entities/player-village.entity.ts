@@ -30,20 +30,14 @@ export class PlayerVillageEntity {
     @Column({ type: 'varchar', length: 255 })
     owner: string;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
-    ownerId?: string;
+    @Column({ type: 'varchar', length: 255 })
+    ownerId: string;
 
     @Column({ type: 'varchar', length: 255, nullable: true })
     tribe?: string;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
-    tribeId?: string;
-
     @Column({ type: 'int' })
     points: number;
-
-    @Column({ type: 'int' })
-    population: number;
 
     @Column({ default: true })
     canAttack: boolean;

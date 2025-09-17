@@ -104,6 +104,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
     async onModuleInit() {
         this.logger.log('🌐 Multi-Server CrawlerOrchestratorService initialized');
+        // this.resolveRepatch(219, false);
         this.startMonitoring();
         this.startMemoryMonitoring();
     }
@@ -317,11 +318,11 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         if (!plan) return;
 
         try {
-            plan.constructionQueue.enabled = await this.isConstructionQueueEnabled(serverId);
-            plan.scavenging.enabled = await this.isScavengingEnabled(serverId);
-            plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
-            plan.playerVillageAttacks.enabled = await this.isPlayerVillageAttacksEnabled(serverId);
-            plan.armyTraining.enabled = await this.isArmyTrainingEnabled(serverId);
+            // plan.constructionQueue.enabled = await this.isConstructionQueueEnabled(serverId);
+            // plan.scavenging.enabled = await this.isScavengingEnabled(serverId);
+            // plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
+            // plan.playerVillageAttacks.enabled = await this.isPlayerVillageAttacksEnabled(serverId);
+            // plan.armyTraining.enabled = await this.isArmyTrainingEnabled(serverId);
 
             this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}`);
             this.logDetailedTaskSchedule();
@@ -1040,7 +1041,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Generates initial 10 seconds interval for player village attacks
      */
     private getInitialPlayerVillageAttackInterval(): number {
-        return 50000;
+        return 5000;
     }
 
     /**

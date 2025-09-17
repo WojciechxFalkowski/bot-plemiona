@@ -351,7 +351,7 @@ export class VillageUtils {
         // Loguj surowce
         if (includeResources && village.resources) {
             this.logger.log(`Resources: Wood=${village.resources.wood.toLocaleString()}, Clay=${village.resources.clay.toLocaleString()}, Iron=${village.resources.iron.toLocaleString()}`);
-            this.logger.log(`Storage: ${village.storage.toLocaleString()}, Population: ${village.population.current}/${village.population.max}`);
+            this.logger.log(`Storage: ${village.storage.toLocaleString()}`);
         }
 
         // Loguj poziomy budynków
@@ -426,15 +426,6 @@ export class VillageUtils {
         }
 
         // Sprawdź populację
-        if (village.population.current < 0 || village.population.max < 0) {
-            issues.push({ field: 'population', issue: 'Population values cannot be negative', severity: 'error' });
-        }
-        if (village.population.current > village.population.max) {
-            issues.push({ field: 'population', issue: 'Current population exceeds maximum', severity: 'warning' });
-        }
-        if (village.population.current === village.population.max) {
-            issues.push({ field: 'population', issue: 'Village has no free farm space', severity: 'info' });
-        }
 
         // Sprawdź surowce
         if (village.resources.wood < 0 || village.resources.clay < 0 || village.resources.iron < 0) {
@@ -476,14 +467,7 @@ export class VillageUtils {
             if (criteria.maxPoints !== undefined && village.points > criteria.maxPoints) return false;
 
             // Filtr populacji
-            if (criteria.minPopulation !== undefined && village.population.current < criteria.minPopulation) return false;
-            if (criteria.maxPopulation !== undefined && village.population.current > criteria.maxPopulation) return false;
 
-            // Filtr wolnej farmy
-            if (criteria.hasFreeFarm !== undefined) {
-                const hasFreeFarm = village.population.current < village.population.max;
-                if (criteria.hasFreeFarm !== hasFreeFarm) return false;
-            }
 
             // Filtr surowców
             if (criteria.hasResources !== undefined) {
@@ -532,9 +516,6 @@ export class VillageUtils {
                     valueA = a.points;
                     valueB = b.points;
                     break;
-                case 'population':
-                    valueA = a.population.current;
-                    valueB = b.population.current;
                     break;
                 case 'resources':
                     valueA = a.resources.wood + a.resources.clay + a.resources.iron;
@@ -566,18 +547,14 @@ export class VillageUtils {
                 totalVillages: 0,
                 totalPoints: 0,
                 averagePoints: 0,
-                totalPopulation: 0,
-                averagePopulation: 0,
                 totalResources: { wood: 0, clay: 0, iron: 0 },
                 averageResources: { wood: 0, clay: 0, iron: 0 },
-                villagesWithFreeFarm: 0,
                 villagesWithFullStorage: 0
             };
         }
 
         const totalVillages = villages.length;
         const totalPoints = villages.reduce((sum, v) => sum + v.points, 0);
-        const totalPopulation = villages.reduce((sum, v) => sum + v.population.current, 0);
 
         const totalResources = villages.reduce((total, v) => ({
             wood: total.wood + v.resources.wood,
@@ -585,7 +562,6 @@ export class VillageUtils {
             iron: total.iron + v.resources.iron
         }), { wood: 0, clay: 0, iron: 0 });
 
-        const villagesWithFreeFarm = villages.filter(v => v.population.current < v.population.max).length;
         const villagesWithFullStorage = villages.filter(v => {
             const totalRes = v.resources.wood + v.resources.clay + v.resources.iron;
             return totalRes >= v.storage * 2.7; // 90% wypełnienia dla 3 surowców
@@ -595,15 +571,12 @@ export class VillageUtils {
             totalVillages,
             totalPoints,
             averagePoints: totalPoints / totalVillages,
-            totalPopulation,
-            averagePopulation: totalPopulation / totalVillages,
             totalResources,
             averageResources: {
                 wood: totalResources.wood / totalVillages,
                 clay: totalResources.clay / totalVillages,
                 iron: totalResources.iron / totalVillages
             },
-            villagesWithFreeFarm,
             villagesWithFullStorage
         };
     }
@@ -621,7 +594,6 @@ export class VillageUtils {
             case 'scavenging':
                 // Najlepsze do zbieractwa: dużo jednostek, wolna farma
                 sortedVillages = villages
-                    .filter(v => v.population.current < v.population.max) // Wolna farma
                     .sort((a, b) => b.points - a.points); // Sortuj według punktów
                 break;
 
@@ -668,7 +640,6 @@ export class VillageUtils {
                 points: village.points,
                 resources: village.resources,
                 storage: village.storage,
-                population: village.population
             };
 
             if (includeDetailedData) {

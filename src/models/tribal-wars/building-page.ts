@@ -8,7 +8,6 @@ export interface Resources {
     wood: number;
     stone: number;
     iron: number;
-    population: { current: number; max: number };
 }
 
 /**
@@ -23,7 +22,6 @@ export interface BuildingInfo {
     stone: number;
     iron: number;
     buildTime: string;
-    population: number;
     canBuild: boolean;
     inQueue: boolean;
     available: boolean;
@@ -190,7 +188,6 @@ export class BuildingPage extends TribalWarsPage {
                     level,
                     nextLevel: level, // Same as current level since it's maxed
                     buildTime: '',
-                    population: 0,
                     canBuild: false,
                     inQueue: false,
                     available: true,
@@ -210,18 +207,10 @@ export class BuildingPage extends TribalWarsPage {
             const stoneCell = row.locator('td.cost_stone');
             const ironCell = row.locator('td.cost_iron');
             const timeCell = row.locator('td:has(.icon.header.time)');
-            const popCell = row.locator('td:has(.icon.header.population)');
-
             const wood = parseInt((await woodCell.textContent() || '0').replace(/[^0-9]/g, ''), 10);
             const stone = parseInt((await stoneCell.textContent() || '0').replace(/[^0-9]/g, ''), 10);
             const iron = parseInt((await ironCell.textContent() || '0').replace(/[^0-9]/g, ''), 10);
             const buildTime = await timeCell.textContent() || '';
-
-            // Check if population cell exists before trying to read it
-            let population = 0;
-            if (await popCell.count() > 0) {
-                population = parseInt((await popCell.textContent() || '0').replace(/[^0-9]/g, ''), 10);
-            }
 
             // Check if building can be built
             const inactiveText = await row.locator('td.build_options span.inactive').textContent() || '';
@@ -247,7 +236,6 @@ export class BuildingPage extends TribalWarsPage {
                 stone,
                 iron,
                 buildTime,
-                population,
                 canBuild,
                 inQueue,
                 available: true,
@@ -305,7 +293,6 @@ export class BuildingPage extends TribalWarsPage {
         //         stone: 0,
         //         iron: 0,
         //         buildTime: '',
-        //         population: 0,
         //         canBuild: false,
         //         inQueue: false,
         //         available: false,
@@ -345,11 +332,7 @@ export class BuildingPage extends TribalWarsPage {
         return {
             wood,
             stone,
-            iron,
-            population: {
-                current: popCurrent,
-                max: popMax
-            }
+            iron
         };
     }
 
@@ -360,7 +343,7 @@ export class BuildingPage extends TribalWarsPage {
      */
     async hasEnoughResources(buildingInfo: BuildingInfo): Promise<{
         hasEnough: boolean;
-        missing: { wood: number; stone: number; iron: number; population: number }
+        missing: { wood: number; stone: number; iron: number }
     }> {
         const currentResources = await this.getCurrentResources();
 
@@ -368,20 +351,15 @@ export class BuildingPage extends TribalWarsPage {
         const missingStone = Math.max(0, buildingInfo.stone - currentResources.stone);
         const missingIron = Math.max(0, buildingInfo.iron - currentResources.iron);
 
-        // Check population only if the building has a population cost
-        const missingPopulation = buildingInfo.population > 0 ?
-            Math.max(0, buildingInfo.population - (currentResources.population.max - currentResources.population.current)) :
-            0;
 
-        const hasEnough = missingWood === 0 && missingStone === 0 && missingIron === 0 && missingPopulation === 0;
+        const hasEnough = missingWood === 0 && missingStone === 0 && missingIron === 0;
 
         return {
             hasEnough,
             missing: {
                 wood: missingWood,
                 stone: missingStone,
-                iron: missingIron,
-                population: missingPopulation
+                iron: missingIron
             }
         };
     }
@@ -418,9 +396,6 @@ export class BuildingPage extends TribalWarsPage {
             }
             if (resourceCheck.missing.iron > 0) {
                 missingResourcesMsg += `iron(${resourceCheck.missing.iron}) `;
-            }
-            if (resourceCheck.missing.population > 0) {
-                missingResourcesMsg += `population(${resourceCheck.missing.population})`;
             }
 
             return { success: false, message: missingResourcesMsg.trim() };

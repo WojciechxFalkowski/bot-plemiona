@@ -72,7 +72,6 @@ const villages = await VillageUtils.collectVillageOverviewData(page);
     points: 8234,
     resources: { wood: 15000, clay: 12000, iron: 8000 },
     storage: 24000,
-    population: { current: 7800, max: 8000 },
   },
   {
     id: '12346',
@@ -81,7 +80,6 @@ const villages = await VillageUtils.collectVillageOverviewData(page);
     points: 12456,
     resources: { wood: 20000, clay: 18000, iron: 15000 },
     storage: 24000,
-    population: { current: 7950, max: 8000 },
   },
 ];
 ```
@@ -177,7 +175,6 @@ const validVillage = {
   points: 8234,
   resources: { wood: 15000, clay: 12000, iron: 8000 },
   storage: 24000,
-  population: { current: 7800, max: 8000 }
 };
 
 const validation1 = VillageUtils.validateVillageData(validVillage);
@@ -196,7 +193,6 @@ const invalidVillage = {
   points: -100,                     // Ujemne punkty
   resources: { wood: -500, clay: 12000, iron: 8000 }, // Ujemne surowce
   storage: 24000,
-  population: { current: 8100, max: 8000 } // Przekroczona populacja
 };
 
 const validation2 = VillageUtils.validateVillageData(invalidVillage);
@@ -209,7 +205,6 @@ const validation2 = VillageUtils.validateVillageData(invalidVillage);
     { field: "coordinates", issue: "Invalid coordinate format (should be XXX|YYY)", severity: "warning" },
     { field: "points", issue: "Points cannot be negative", severity: "error" },
     { field: "resources", issue: "Resource values cannot be negative", severity: "error" },
-    { field: "population", issue: "Current population exceeds maximum", severity: "warning" }
   ]
 }
 ```
@@ -300,7 +295,6 @@ const byName = VillageUtils.sortVillages(villages, {
 
 // Sortowanie według populacji (malejąco)
 const byPopulation = VillageUtils.sortVillages(villages, {
-  field: 'population',
   direction: 'desc',
 });
 
@@ -321,7 +315,6 @@ const byCoordinates = VillageUtils.sortVillages(villages, {
 
 - `name` - alfabetycznie według nazwy
 - `points` - według liczby punktów
-- `population` - według bieżącej populacji
 - `resources` - według sumy wszystkich surowców
 - `coordinates` - według współrzędnych (string)
 
@@ -450,7 +443,7 @@ const csvData = VillageUtils.exportVillageData(villages, {
 });
 
 // Wynik:
-`id,name,coordinates,points,resources,storage,population
+`id,name,coordinates,points,resources,storage
 12345,Wioska 1,456|789,8234,"{""wood"":15000,""clay"":12000,""iron"":8000}",24000,"{""current"":7800,""max"":8000}"
 12346,Wioska 2,457|790,12456,"{""wood"":20000,""clay"":18000,""iron"":15000}",24000,"{""current"":7950,""max"":8000}"`;
 

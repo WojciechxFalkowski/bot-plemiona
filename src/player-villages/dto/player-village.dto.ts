@@ -38,30 +38,19 @@ export class PlayerVillageDto {
     @IsString()
     owner: string;
 
-    @ApiProperty({ description: 'ID właściciela', required: false })
-    @IsOptional()
+    @ApiProperty({ description: 'ID właściciela wioski' })
     @IsString()
-    ownerId?: string;
+    ownerId: string;
 
     @ApiProperty({ description: 'Plemię', required: false })
     @IsOptional()
     @IsString()
     tribe?: string;
 
-    @ApiProperty({ description: 'ID plemienia', required: false })
-    @IsOptional()
-    @IsString()
-    tribeId?: string;
-
     @ApiProperty({ description: 'Punkty wioski' })
     @IsInt()
     @Min(0)
     points: number;
-
-    @ApiProperty({ description: 'Populacja wioski' })
-    @IsInt()
-    @Min(0)
-    population: number;
 
     @ApiProperty({ description: 'Czy można atakować' })
     @IsBoolean()

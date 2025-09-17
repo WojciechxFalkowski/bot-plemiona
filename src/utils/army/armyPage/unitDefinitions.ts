@@ -1,7 +1,6 @@
 export interface StaticUnitData {
   dataUnit: string;
   name: string;
-  population: number;
   wood: number;
   clay: number;
   iron: number;
@@ -26,7 +25,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "spear",
       name: "Pikinier",
-      population: 2,
       wood: 50,
       clay: 30,
       iron: 10,
@@ -43,7 +41,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "sword",
       name: "Miecznik",
-      population: 2,
       wood: 30,
       clay: 30,
       iron: 70,
@@ -60,7 +57,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "axe",
       name: "Topornik",
-      population: 2,
       wood: 60,
       clay: 30,
       iron: 40,
@@ -77,7 +73,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "archer",
       name: "Łucznik",
-      population: 2,
       wood: 100,
       clay: 30,
       iron: 60,
@@ -94,7 +89,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "spy",
       name: "Zwiadowca",
-      population: 2,
       wood: 50,
       clay: 50,
       iron: 20,
@@ -111,7 +105,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "light",
       name: "Lekki kawalerzysta",
-      population: 4,
       wood: 125,
       clay: 100,
       iron: 250,
@@ -128,7 +121,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "marcher",
       name: "Łucznik na koniu",
-      population: 5,
       wood: 250,
       clay: 100,
       iron: 150,
@@ -145,7 +137,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "heavy",
       name: "Ciężki kawalerzysta",
-      population: 6,
       wood: 200,
       clay: 150,
       iron: 600,
@@ -162,7 +153,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "ram",
       name: "Taran",
-      population: 6,
       wood: 300,
       clay: 200,
       iron: 200,
@@ -179,7 +169,6 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
     staticData: {
       dataUnit: "catapult",
       name: "Katapulta",
-      population: 6,
       wood: 320,
       clay: 400,
       iron: 100,

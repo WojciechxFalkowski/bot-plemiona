@@ -113,8 +113,8 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
             coordinateX,
             coordinateY,
             owner: '', // Will be filled during first attack
+            ownerId: target, // Target becomes ownerId
             points: 0, // Will be filled during first attack
-            population: 0, // Will be filled during first attack
             canAttack: true
         });
 
@@ -231,9 +231,8 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
                     coordinateY: y || 0,
                     points: parseInt(points) || 0,
                     owner: playerLink?.textContent?.trim() || '',
-                    ownerId: playerLink?.getAttribute('href')?.match(/player\/(\d+)/)?.[1] || undefined,
+                    ownerId: playerLink?.getAttribute('href')?.match(/id=(\d+)/)?.[1] || '',
                     tribe: tribeLink?.textContent?.trim() || undefined,
-                    tribeId: tribeLink?.getAttribute('href')?.match(/tribe\/(\d+)/)?.[1] || undefined,
                 };
             });
 
@@ -255,6 +254,11 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
         //
         // Check if owner has changed
         if (village.owner !== villageData.owner && village.owner !== "") {
+            village.canAttack = false;
+        }
+
+        // Check if ownerId has changed
+        if (village.ownerId !== villageData.ownerId && village.ownerId !== "") {
             village.canAttack = false;
         }
 
@@ -333,7 +337,7 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
     }
 
     private async executeAttackForVillage(village: PlayerVillageEntity, serverId: number): Promise<void> {
-        const { browser, page } = await this.createBrowserSession(serverId, true);
+        const { browser, page } = await this.createBrowserSession(serverId, false);
         const serverCode = await this.serversService.getServerCode(serverId);
         try {
             await this.checkVillageOwnerAndUpdate(page, village, serverCode);
@@ -341,7 +345,6 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
             await this.executeAttack(page, village, serverCode, serverId, browser, strategy);
         } catch (error) {
             this.logger.error(`Error executing attack for village ${village.name}: ${error.message}`);
-            throw new Error(`Error executing attack for village ${village.name}: ${error.message}`);
         } finally {
             await browser.close();
         }
@@ -368,6 +371,17 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
         else {
             this.logger.log(`Village owner is the same in database as it is in VillageInfoData`);
         }
+
+        if (village.ownerId !== villageInfoData.ownerId && villageInfoData.ownerId !== "") {
+            await this.update(village.id, { canAttack: false });
+            this.logger.log(`Village ownerId changed from ${village.ownerId} to ${villageInfoData.ownerId}`);
+        }
+        else {
+            this.logger.log(`Village ownerId is the same in database as it is in VillageInfoData`);
+        }
+
+        // Update village data with new information
+        await this.updateVillageData(village.id, villageInfoData);
 
         const lastAttackCheck = await villageInfo.checkLastAttackResult(page, {
             name: village.name,

@@ -71,10 +71,6 @@ export interface VillageData {
 		iron: number;
 	};
 	storage: number;
-	population: {
-		current: number;
-		max: number;
-	};
 	// Extended data - will be populated by detailed scraping
 	buildingLevels?: BuildingLevels;
 	armyUnits?: ArmyUnits;
@@ -181,19 +177,6 @@ export class VillageOverviewPage {
 			const storageText = await storageCell.textContent();
 			const storage = storageText ? parseInt(storageText.replace(/\./g, '').replace(/\s/g, ''), 10) : 0;
 
-			// Extract population (current/max)
-			const populationCell = row.locator('td').nth(4);
-			const populationText = await populationCell.textContent();
-			let currentPop = 0;
-			let maxPop = 0;
-
-			if (populationText) {
-				const popMatch = populationText.match(/(\d+)\/(\d+)/);
-				if (popMatch) {
-					currentPop = parseInt(popMatch[1], 10);
-					maxPop = parseInt(popMatch[2], 10);
-				}
-			}
 
 			return {
 				id: villageId,
@@ -206,10 +189,6 @@ export class VillageOverviewPage {
 					iron
 				},
 				storage,
-				population: {
-					current: currentPop,
-					max: maxPop
-				}
 			};
 
 		} catch (error) {

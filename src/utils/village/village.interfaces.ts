@@ -58,7 +58,7 @@ export interface VillageFilterCriteria {
 
 // Interfejs dla sortowania wiosek
 export interface VillageSortCriteria {
-    field: 'name' | 'points' | 'population' | 'resources' | 'coordinates';
+    field: 'name' | 'points' | 'resources' | 'coordinates';
     direction: 'asc' | 'desc';
 }
 
@@ -67,8 +67,6 @@ export interface VillageStatistics {
     totalVillages: number;                // Całkowita liczba wiosek
     totalPoints: number;                  // Suma punktów
     averagePoints: number;                // Średnia punktów
-    totalPopulation: number;              // Suma populacji
-    averagePopulation: number;            // Średnia populacji
     totalResources: {                     // Suma surowców
         wood: number;
         clay: number;
@@ -79,7 +77,6 @@ export interface VillageStatistics {
         clay: number;
         iron: number;
     };
-    villagesWithFreeFarm: number;         // Liczba wiosek z wolną farmą
     villagesWithFullStorage: number;      // Liczba wiosek z pełnym magazynem
 }
 

@@ -107,12 +107,12 @@ export class VillagesCrawlerController {
 
   /**
    * Gets basic village information (fast endpoint)
-   * Returns only overview data: ID, name, coordinates, points, resources, population, storage
+   * Returns only overview data: ID, name, coordinates, points, resources, storage
    */
   // @Get('villages-basic')
   // @ApiOperation({
   //   summary: 'Get basic village information',
-  //   description: 'Quickly retrieves basic information about all villages (name, coordinates, points, resources, population). Does not include building levels, army units, or queues.'
+  //   description: 'Quickly retrieves basic information about all villages (name, coordinates, points, resources). Does not include building levels, army units, or queues.'
   // })
   // @ApiResponse({
   //   status: 200,
@@ -140,7 +140,6 @@ export class VillagesCrawlerController {
   //               }
   //             },
   //             storage: { type: 'number' },
-  //             population: {
   //               type: 'object',
   //               properties: {
   //                 current: { type: 'number' },

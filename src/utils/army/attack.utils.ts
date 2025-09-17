@@ -25,11 +25,8 @@ export interface PlayerVillage {
     coordinateX: number;
     coordinateY: number;
     owner: string;
-    ownerId?: string;
     tribe?: string;
-    tribeId?: string;
     points: number;
-    population: number;
     canAttack: boolean;
     lastVerified?: Date;
     createdAt: Date;
@@ -84,11 +81,8 @@ export interface VillageOwnerVerification {
 export interface PlayerVillageOwnerVerification {
     isValid: boolean;
     owner: string;
-    ownerId?: string;
     tribe?: string;
-    tribeId?: string;
     points: number;
-    population: number;
     error?: string;
 }
 
@@ -736,9 +730,7 @@ export class AttackUtils {
                     coordinateY: y || 0,
                     points: parseInt(points) || 0,
                     owner: playerLink?.textContent?.trim() || '',
-                    ownerId: playerLink?.getAttribute('href')?.match(/player\/(\d+)/)?.[1] || undefined,
                     tribe: tribeLink?.textContent?.trim() || undefined,
-                    tribeId: tribeLink?.getAttribute('href')?.match(/tribe\/(\d+)/)?.[1] || undefined,
                 };
             });
 
@@ -750,11 +742,8 @@ export class AttackUtils {
                 return {
                     isValid: false,
                     owner: villageData.owner,
-                    ownerId: villageData.ownerId,
                     tribe: villageData.tribe,
-                    tribeId: villageData.tribeId,
                     points: villageData.points,
-                    population: 0, // Populacja nie jest dostępna z tej strony
                     error: `Owner changed from ${targetVillage.owner} to ${villageData.owner}`,
                 };
             }
@@ -762,11 +751,8 @@ export class AttackUtils {
             return {
                 isValid: true,
                 owner: villageData.owner,
-                ownerId: villageData.ownerId,
                 tribe: villageData.tribe,
-                tribeId: villageData.tribeId,
                 points: villageData.points,
-                population: 0, // Populacja nie jest dostępna z tej strony
             };
         } catch (error) {
             this.logger.error(`Error verifying player village owner: ${error.message}`);
@@ -774,7 +760,6 @@ export class AttackUtils {
                 isValid: false,
                 owner: '',
                 points: 0,
-                population: 0,
                 error: error.message,
             };
         }

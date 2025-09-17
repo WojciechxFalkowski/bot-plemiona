@@ -32,6 +32,15 @@ export class TroopDispatchPage {
         this.baseUrl = `https://${serverCode}.plemiona.pl`;
     }
 
+    private formatStrategyToString(strategy: PlayerVillageAttackStrategyEntity): string {
+        const strategyUnits = Object.entries(strategy)
+            .filter(([key, value]) => typeof value === 'number' && value > 0)
+            .map(([unit, count]) => `${unit}: ${count}`)
+            .join(', ');
+        
+        return strategyUnits || 'no units';
+    }
+
     public async navigateToTroopDispatch(sourceVillageId: string, targetVillageId: string) {
         const attackUrl = `${this.baseUrl}/game.php?village=${sourceVillageId}&screen=place&target=${targetVillageId}`;
         this.logger.debug(`Attack URL: ${attackUrl}`);
@@ -41,7 +50,7 @@ export class TroopDispatchPage {
 
     // method to check strategy and fill attack form with proper units, some of the units may not exist in HTML
     public async fillAttackFormWithStrategy(strategy: PlayerVillageAttackStrategyEntity) {
-        this.logger.log(`Filling attack form with strategy: ${strategy}`);
+        this.logger.log(`Filling attack form with strategy: ${this.formatStrategyToString(strategy)}`);
         for (const unit of Object.keys(availableUnitSelectors)) {
             try {
                 if (strategy[unit] === 0) {
@@ -72,11 +81,11 @@ export class TroopDispatchPage {
 
     public async confirmAttackSequence() {
         this.logger.log('Clicking attack button...');
-        await this.page.click('#target_attack');
-        await this.page.waitForLoadState('networkidle', { timeout: 10000 });
-        await this.page.waitForTimeout(2000);
-        await this.page.click('#troop_confirm_submit');
-        await this.page.waitForTimeout(2000);
+        await this.page.click('#target_attack', { timeout: 3000 });
+        await this.page.waitForLoadState('networkidle', { timeout: 3000 });
+        await this.page.waitForTimeout(1000);
+        await this.page.click('#troop_confirm_submit', { timeout: 3000 });
+        await this.page.waitForTimeout(1000);
         this.logger.log('Attack sequence completed successfully');
     }
 }

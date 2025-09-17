@@ -7,9 +7,8 @@ export interface VillageInfoData {
     coordinateY: number;
     points: number;
     owner: string;
-    ownerId?: string;
+    ownerId: string;
     tribe?: string;
-    tribeId?: string;
 }
 
 export class VillageInfoPage {
@@ -81,9 +80,8 @@ export class VillageInfoPage {
                 coordinateY: y || 0,
                 points: parseInt(points) || 0,
                 owner: playerLink?.textContent?.trim() || '',
-                ownerId: playerLink?.getAttribute('href')?.match(/player\/(\d+)/)?.[1] || undefined,
+                ownerId: playerLink?.getAttribute('href')?.match(/id=(\d+)/)?.[1] || '',
                 tribe: tribeLink?.textContent?.trim() || undefined,
-                tribeId: tribeLink?.getAttribute('href')?.match(/tribe\/(\d+)/)?.[1] || undefined,
             };
         });
 
@@ -113,8 +111,7 @@ export class VillageInfoPage {
 
             // Nawiguj do strony informacji o wiosce
             this.logger.debug('Navigating to village info page...');
-            await page.goto(infoUrl, { waitUntil: 'networkidle', timeout: 15000 });
-            await page.waitForTimeout(2000);
+            await page.goto(infoUrl, { waitUntil: 'networkidle', timeout: 10000 });
 
             // Sprawdź czy istnieje forma z raportami (form z id 'report_table')
             const reportTableExists = await page.locator('#report_table').isVisible({ timeout: 5000 });

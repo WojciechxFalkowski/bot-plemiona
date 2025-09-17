@@ -12,7 +12,7 @@ export class UpdatePlayerVillageDto {
     @IsString()
     owner?: string;
 
-    @ApiProperty({ description: 'ID właściciela', required: false })
+    @ApiProperty({ description: 'ID właściciela wioski', required: false })
     @IsOptional()
     @IsString()
     ownerId?: string;
@@ -22,22 +22,11 @@ export class UpdatePlayerVillageDto {
     @IsString()
     tribe?: string;
 
-    @ApiProperty({ description: 'ID plemienia', required: false })
-    @IsOptional()
-    @IsString()
-    tribeId?: string;
-
     @ApiProperty({ description: 'Punkty wioski', required: false })
     @IsOptional()
     @IsInt()
     @Min(0)
     points?: number;
-
-    @ApiProperty({ description: 'Populacja wioski', required: false })
-    @IsOptional()
-    @IsInt()
-    @Min(0)
-    population?: number;
 
     @ApiProperty({ description: 'Czy można atakować', required: false })
     @IsOptional()
