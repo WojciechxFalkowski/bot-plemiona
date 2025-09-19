@@ -22,16 +22,13 @@ export class PlayerVillageEntity {
     name: string;
 
     @Column({ type: 'int' })
-    coordinateX: number; 
+    coordinateX: number;
 
     @Column({ type: 'int' })
     coordinateY: number;
 
     @Column({ type: 'varchar', length: 255 })
     owner: string;
-
-    @Column({ type: 'varchar', length: 255 })
-    ownerId: string;
 
     @Column({ type: 'varchar', length: 255, nullable: true })
     tribe?: string;

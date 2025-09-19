@@ -12,11 +12,6 @@ export class UpdatePlayerVillageDto {
     @IsString()
     owner?: string;
 
-    @ApiProperty({ description: 'ID właściciela wioski', required: false })
-    @IsOptional()
-    @IsString()
-    ownerId?: string;
-
     @ApiProperty({ description: 'Plemię', required: false })
     @IsOptional()
     @IsString()

@@ -38,10 +38,6 @@ export class PlayerVillageDto {
     @IsString()
     owner: string;
 
-    @ApiProperty({ description: 'ID właściciela wioski' })
-    @IsString()
-    ownerId: string;
-
     @ApiProperty({ description: 'Plemię', required: false })
     @IsOptional()
     @IsString()

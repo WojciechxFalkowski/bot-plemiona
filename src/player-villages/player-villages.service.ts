@@ -113,7 +113,6 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
             coordinateX,
             coordinateY,
             owner: '', // Will be filled during first attack
-            ownerId: target, // Target becomes ownerId
             points: 0, // Will be filled during first attack
             canAttack: true
         });
@@ -179,8 +178,9 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
 
     async verifyVillageOwner(id: number, serverCode: string): Promise<any> {
         const village = await this.findOne(id);
-        const { browser, page } = await createBrowserPage({ headless: true });
-
+        const { browser, page } = await createBrowserPage({ headless: false });
+        console.log("village");
+        console.log(village);
         try {
             // Get server by code
             const server = await this.serversService.findByCode(serverCode);
@@ -199,8 +199,16 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
 
             this.logger.log(`Successfully logged in for server ${serverCode}, verifying village owner...`);
 
+            console.log("v1");
+
             const infoUrl = `https://${serverCode}.plemiona.pl/game.php?village=${village.villageId}&screen=info_village&id=${village.target}`;
+            console.log("v2");
+            console.log('village.target', village.target);
+
+            console.log("infoUrl");
+            console.log(infoUrl);
             await page.goto(infoUrl);
+            console.log("v3");
             await page.waitForTimeout(1000);
 
             const villageData = await page.evaluate(() => {
@@ -231,7 +239,6 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
                     coordinateY: y || 0,
                     points: parseInt(points) || 0,
                     owner: playerLink?.textContent?.trim() || '',
-                    ownerId: playerLink?.getAttribute('href')?.match(/id=(\d+)/)?.[1] || '',
                     tribe: tribeLink?.textContent?.trim() || undefined,
                 };
             });
@@ -254,11 +261,6 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
         //
         // Check if owner has changed
         if (village.owner !== villageData.owner && village.owner !== "") {
-            village.canAttack = false;
-        }
-
-        // Check if ownerId has changed
-        if (village.ownerId !== villageData.ownerId && village.ownerId !== "") {
             village.canAttack = false;
         }
 
@@ -370,14 +372,6 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
         }
         else {
             this.logger.log(`Village owner is the same in database as it is in VillageInfoData`);
-        }
-
-        if (village.ownerId !== villageInfoData.ownerId && villageInfoData.ownerId !== "") {
-            await this.update(village.id, { canAttack: false });
-            this.logger.log(`Village ownerId changed from ${village.ownerId} to ${villageInfoData.ownerId}`);
-        }
-        else {
-            this.logger.log(`Village ownerId is the same in database as it is in VillageInfoData`);
         }
 
         // Update village data with new information
