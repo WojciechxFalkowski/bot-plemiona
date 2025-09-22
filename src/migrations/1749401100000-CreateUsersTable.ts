@@ -9,9 +9,6 @@ export class CreateUsersTable1749401100000 implements MigrationInterface {
         \`id\` int NOT NULL AUTO_INCREMENT,
         \`clerkUserId\` varchar(255) NOT NULL,
         \`email\` varchar(255) NOT NULL,
-        \`gameNick\` varchar(255) NULL,
-        \`gamePassword\` varchar(255) NULL,
-        \`gameServer\` varchar(255) NULL,
         \`createdAt\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         \`updatedAt\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         UNIQUE INDEX \`IDX_users_clerkUserId\` (\`clerkUserId\`),
@@ -20,7 +17,7 @@ export class CreateUsersTable1749401100000 implements MigrationInterface {
     `);
     }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
+    public async down(queryRunner: QueryRunner): Promise<void> { 
         await queryRunner.query(`DROP INDEX \`IDX_users_clerkUserId\` ON \`users\``);
         await queryRunner.query(`DROP TABLE \`users\``);
     }

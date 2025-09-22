@@ -23,20 +23,6 @@ export class UserProfileDto {
   email: string;
 
   @ApiProperty({
-    example: 'PlayerNick',
-    description: 'Game nickname',
-    required: false,
-  })
-  gameNick?: string;
-
-  @ApiProperty({
-    example: 'game-server-1',
-    description: 'Game server name',
-    required: false,
-  })
-  gameServer?: string;
-
-  @ApiProperty({
     example: '2025-01-01T00:00:00.000Z',
     description: 'Account creation date',
   })

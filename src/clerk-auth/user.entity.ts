@@ -11,15 +11,6 @@ export class UserEntity {
   @Column({ type: 'varchar' })
   email: string;
 
-  @Column({ type: 'varchar', nullable: true })
-  gameNick?: string;
-
-  @Column({ type: 'varchar', nullable: true })
-  gamePassword?: string;
-
-  @Column({ type: 'varchar', nullable: true })
-  gameServer?: string;
-
   @CreateDateColumn()
   createdAt: Date;
 

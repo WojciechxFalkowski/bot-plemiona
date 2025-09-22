@@ -11,6 +11,6 @@ import { SettingsModule } from '@/settings/settings.module';
   imports: [DatabaseModule, ConfigModule, SettingsModule],
   controllers: [ClerkAuthController],
   providers: [...clerkAuthProviders, ClerkAuthService, ClerkAuthGuard],
-  exports: [ClerkAuthService, ClerkAuthGuard],
+  exports: [...clerkAuthProviders, ClerkAuthService, ClerkAuthGuard],
 })
 export class ClerkAuthModule { } 

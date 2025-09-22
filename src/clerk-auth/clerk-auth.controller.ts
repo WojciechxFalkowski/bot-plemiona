@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Body, Headers, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, Headers, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ClerkAuthService } from './clerk-auth.service';
 import { UpdateProfileDto, UserProfileDto, TokenVerificationDto } from './dto';
@@ -10,21 +10,21 @@ import {
   ClerkAuth,
   CurrentUser,
 } from './decorators';
+import { ClerkAuthGuard } from './guards/clerk-auth.guard';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class ClerkAuthController {
-  constructor(private readonly clerkAuthService: ClerkAuthService) {}
+  constructor(private readonly clerkAuthService: ClerkAuthService) { }
 
-  // @Get('profile')
-  // @ClerkAuth()
-  // @GetProfileDecorators()
-  // async getProfile(@CurrentUser() user: UserEntity): Promise<UserProfileDto> {
-  //   console.log('GET -> getProfile');
-  //   return this.clerkAuthService.getUserProfile(user.clerkUserId);
-  // }
+  @Get('profile')
+  @UseGuards(ClerkAuthGuard)
+  @GetProfileDecorators()
+  async getProfile(@CurrentUser() user: UserEntity): Promise<UserProfileDto> {
+    return this.clerkAuthService.getUserProfile(user.clerkUserId);
+  }
 
-  @Put('profile') 
+  @Put('profile')
   @ClerkAuth()
   @UpdateProfileDecorators()
   async updateProfile(

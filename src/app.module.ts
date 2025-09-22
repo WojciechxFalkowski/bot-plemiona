@@ -18,6 +18,7 @@ import { PlemionaCookiesModule } from './plemiona-cookies';
 import { MiniAttackStrategiesModule } from './mini-attack-strategies';
 import { ArmyTrainingModule } from './army-training/army-training.module';
 import { PlayerVillagesModule } from './player-villages/player-villages.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -36,7 +37,8 @@ import { PlayerVillagesModule } from './player-villages/player-villages.module';
 		PlemionaCookiesModule,
     MiniAttackStrategiesModule,
     ArmyTrainingModule,
-    PlayerVillagesModule
+    PlayerVillagesModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
