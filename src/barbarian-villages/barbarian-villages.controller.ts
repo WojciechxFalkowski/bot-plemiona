@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiParam, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { CreateBarbarianVillageDto, CreateBarbarianVillageFromUrlDto, UpdateBarbarianVillageDto } from './dto';
 import { BarbarianVillagesService } from './barbarian-villages.service';
 
@@ -9,6 +9,31 @@ export class BarbarianVillagesController {
   constructor(
     private readonly barbarianVillagesService: BarbarianVillagesService
   ) { }
+
+  @Get()
+  @ApiOperation({
+    summary: 'Get all barbarian villages',
+    description: 'Retrieves all barbarian villages across all servers. Optionally filter by canAttack flag.'
+  })
+  @ApiQuery({
+    name: 'canAttack',
+    required: false,
+    type: Boolean,
+    description: 'If provided, filters villages by canAttack flag (true/false)'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Barbarian villages retrieved successfully'
+  })
+  async findAllGlobal(@Query('canAttack') canAttack?: string) {
+    let canAttackFilter: boolean | undefined = undefined;
+    if (typeof canAttack === 'string') {
+      const lowered = canAttack.toLowerCase();
+      if (lowered === 'true') canAttackFilter = true;
+      else if (lowered === 'false') canAttackFilter = false;
+    }
+    return await this.barbarianVillagesService.findAllGlobal(canAttackFilter);
+  }
 
   @Get(':serverId')
   @ApiOperation({

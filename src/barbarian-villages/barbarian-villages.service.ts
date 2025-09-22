@@ -41,6 +41,23 @@ export class BarbarianVillagesService {
         });
     }
 
+    /**
+     * Returns all barbarian villages across servers. When canAttack is provided, filters by the flag.
+     */
+    async findAllGlobal(canAttack?: boolean): Promise<BarbarianVillageEntity[]> {
+        if (typeof canAttack === 'boolean') {
+            this.logger.debug(`Finding all barbarian villages with canAttack=${canAttack}`);
+            return await this.barbarianVillageRepository.find({
+                where: { canAttack },
+                order: { createdAt: 'DESC' }
+            });
+        }
+        this.logger.debug('Finding all barbarian villages without canAttack filter');
+        return await this.barbarianVillageRepository.find({
+            order: { createdAt: 'DESC' }
+        });
+    }
+
     async findOne(serverId: number, target: string): Promise<BarbarianVillageEntity> {
         this.logger.debug(`Finding barbarian village ${target} for server ${serverId}`);
         const village = await this.barbarianVillageRepository.findOne({
