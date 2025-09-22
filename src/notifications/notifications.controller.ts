@@ -21,7 +21,7 @@ export class NotificationsController {
   }
  
   @Post('unregister')
-  // @UseGuards(ClerkAuthGuard)
+  @UseGuards(ClerkAuthGuard)
   @HttpCode(HttpStatus.OK)
   async unregister(
     @Body() registerFcmDto: RegisterFcmDto,
