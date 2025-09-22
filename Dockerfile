@@ -1,5 +1,6 @@
-FROM node:20.11.1
-
+FROM node:22.18.0
+RUN npx playwright install
+RUN npx playwright install-deps
 # Ustawienie zmiennej środowiskowej NODE_ENV na produkcję
 # ENV NODE_ENV production
 
@@ -8,8 +9,7 @@ COPY package.json package-lock.json ./
 
 # Instalacja zależności
 RUN npm install
-RUN npx playwright install
-RUN npx playwright install-deps
+
 # Kopiowanie całego kodu źródłowego
 COPY . .
 

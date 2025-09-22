@@ -24,6 +24,7 @@ services:
     container_name: bot-plemiona-backend
     environment:
       BACKEND_PORT: ${BACKEND_PORT}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
     ports:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
     restart: always
