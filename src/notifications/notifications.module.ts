@@ -9,5 +9,6 @@ import { ClerkAuthModule } from '@/clerk-auth/clerk-auth.module';
   imports: [DatabaseModule, ClerkAuthModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, ...notificationsProviders],
+  exports: [NotificationsService],
 })
 export class NotificationsModule { }

@@ -17,6 +17,8 @@ import { ArmyTrainingService } from '@/army-training/army-training.service';
 import { PlayerVillagesService } from '@/player-villages/player-villages.service';
 import { PlayerVillageAttackStrategiesService } from '@/player-villages/player-village-attack-strategies.service';
 import * as ghostCursor from 'ghost-cursor-playwright';
+import { NotificationsService } from '@/notifications/notifications.service';
+import { Page } from 'playwright';
 
 interface CrawlerTask {
     nextExecutionTime: Date;
@@ -96,7 +98,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly miniAttackStrategiesService: MiniAttackStrategiesService,
         private readonly armyTrainingService: ArmyTrainingService,
         private readonly playerVillagesService: PlayerVillagesService,
-        private readonly playerVillageAttackStrategiesService: PlayerVillageAttackStrategiesService
+        private readonly notificationsService: NotificationsService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -227,10 +229,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const miniAttackDelay = this.getInitialMiniAttackInterval();
         const playerVillageAttackDelay = this.getInitialPlayerVillageAttackInterval();
         const armyTrainingDelay = this.getInitialArmyTrainingInterval();
-        // if (server.id == 216 || server.id == 217 || server.id == 29) {
-        //     console.log("No initialize server plan", server.id);
-        //     return
-        // }
 
         const serverPlan: ServerCrawlerPlan = {
             serverId: server.id,
@@ -320,7 +318,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         try {
             // plan.constructionQueue.enabled = await this.isConstructionQueueEnabled(serverId);
             // plan.scavenging.enabled = await this.isScavengingEnabled(serverId);
-            // plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
+            plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
             // plan.playerVillageAttacks.enabled = await this.isPlayerVillageAttacksEnabled(serverId);
             // plan.armyTraining.enabled = await this.isArmyTrainingEnabled(serverId);
 
@@ -716,8 +714,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private async executeMiniAttacksTask(serverId: number): Promise<void> {
         this.logger.log(`🚀 Executing mini attacks for server ${serverId}`);
 
-        let browser: any = null;
-
+        const browserPage = await createBrowserPage({ headless: true });
+        const browser = browserPage.browser;
+        const { page } = browserPage;
         try {
             // Get all strategies for this server
             const strategies = await this.miniAttackStrategiesService.findAllByServer(serverId);
@@ -732,10 +731,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             const serverCode = await this.serversService.getServerCode(serverId);
 
             // 1. Login and select world
-            const browserPage = await createBrowserPage({ headless: true });
-            browser = browserPage.browser;
-            const { page } = browserPage;
-
             const loginResult = await AuthUtils.loginAndSelectWorld(
                 page,
                 this.credentials,
@@ -767,10 +762,29 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         } catch (error) {
             this.logger.error(`❌ Error during mini attacks execution for server ${serverId}:`, error);
+            // Check for bot protection quest element after error
+            await this.checkBotProtection(serverId, page);
         } finally {
             if (browser) {
                 await browser.close();
             }
+        }
+    }
+
+    public async checkBotProtection(serverId: number, page: Page): Promise<void> {
+        try {
+            const botProtectionElement = await page.$('#botprotection_quest');
+            if (botProtectionElement) {
+                this.logger.warn(`🚨 Bot protection detected on server ${serverId} during mini attacks execution`);
+
+                // Send notification to all users about captcha detection
+                await this.notificationsService.createNotificationForAllUsers({
+                    title: 'Wykryto reCAPTCHA',
+                    body: `Bot zatrzymał się na serwerze ${serverId} podczas wykonywania ataków. Wykryto ochronę botową - wymagane odblokowanie reCAPTCHA.`
+                });
+            }
+        } catch (checkError) {
+            this.logger.error(`❌ Error checking for bot protection on server ${serverId}:`, checkError);
         }
     }
 

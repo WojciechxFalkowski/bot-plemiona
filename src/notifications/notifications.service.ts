@@ -5,6 +5,7 @@ import * as admin from 'firebase-admin';
 import { ServiceAccount } from 'firebase-admin';
 import { FcmTokenEntity } from './entities/fcm-token.entity';
 import { NOTIFICATIONS_ENTITY_REPOSITORY } from './player-villages.contracts';
+import { SendNotificationDto } from './dto/send-notification.dto';
 
 @Injectable()
 export class NotificationsService {
@@ -70,6 +71,13 @@ export class NotificationsService {
         this.logger.log(`Token ${token} is not registered. Removing from DB.`);
         await this.unregisterToken(token);
       }
+    }
+  }
+
+  public async createNotificationForAllUsers(notification: Omit<SendNotificationDto, 'token'>): Promise<void> {
+    const tokens = await this.fcmTokenRepository.find();
+    for (const token of tokens) {
+      await this.sendNotification(token.token, notification.title, notification.body);
     }
   }
 }
