@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, Logger, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, Logger, ParseIntPipe, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { MiniAttackStrategiesService } from './mini-attack-strategies.service';
 import {
@@ -25,6 +25,15 @@ export class MiniAttackStrategiesController {
     constructor(
         private readonly strategiesService: MiniAttackStrategiesService
     ) { }
+
+    @Get()
+    @HttpCode(HttpStatus.OK)
+    @GetMiniAttackStrategyDecorator()
+    async getAllStrategies(
+        @Query('serverId', ParseIntPipe) serverId: number
+    ): Promise<MiniAttackStrategyResponseDto[]> {
+        return this.strategiesService.findAllByServer(serverId);
+    }
 
     @Get(':id')
     @HttpCode(HttpStatus.OK)
