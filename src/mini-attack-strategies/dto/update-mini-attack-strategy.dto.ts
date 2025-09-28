@@ -125,4 +125,22 @@ export class UpdateMiniAttackStrategyDto {
     @IsInt()
     @Min(0)
     snob?: number;
+
+    @ApiProperty({
+        description: 'Indeks następnego celu do ataku',
+        example: 0,
+        required: false
+    })
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    next_target_index?: number;
+
+    @ApiProperty({
+        description: 'Czy strategia jest aktywna',
+        example: true,
+        required: false
+    })
+    @IsOptional()
+    is_active?: boolean;
 } 

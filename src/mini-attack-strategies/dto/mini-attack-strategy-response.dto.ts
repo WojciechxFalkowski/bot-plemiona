@@ -96,6 +96,18 @@ export class MiniAttackStrategyResponseDto {
     snob: number;
 
     @ApiProperty({
+        description: 'Indeks następnego celu do ataku',
+        example: 0
+    })
+    next_target_index: number;
+
+    @ApiProperty({
+        description: 'Czy strategia jest aktywna',
+        example: true
+    })
+    is_active: boolean;
+
+    @ApiProperty({
         description: 'Data utworzenia strategii',
         example: '2025-01-26T12:00:00.000Z'
     })

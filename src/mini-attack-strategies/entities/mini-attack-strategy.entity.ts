@@ -54,6 +54,12 @@ export class MiniAttackStrategyEntity {
     @Column({ type: 'int', default: 0 })
     snob: number;
 
+    @Column({ type: 'int', default: 0 })
+    next_target_index: number;
+
+    @Column({ type: 'boolean', default: true })
+    is_active: boolean;
+
     @CreateDateColumn()
     createdAt: Date;
 

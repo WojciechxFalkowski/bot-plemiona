@@ -718,14 +718,14 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const browser = browserPage.browser;
         const { page } = browserPage;
         try {
-            // Get all strategies for this server
-            const strategies = await this.miniAttackStrategiesService.findAllByServer(serverId);
+            // Get only active strategies for this server
+            const strategies = await this.miniAttackStrategiesService.findActiveByServer(serverId);
             if (strategies.length === 0) {
-                this.logger.warn(`⚠️ No mini attack strategies found for server ${serverId}`);
+                this.logger.warn(`⚠️ No active mini attack strategies found for server ${serverId}`);
                 return;
             }
 
-            this.logger.log(`📋 Found ${strategies.length} strategies for server ${serverId}`);
+            this.logger.log(`📋 Found ${strategies.length} active strategies for server ${serverId}`);
 
             const serverName = await this.serversService.getServerName(serverId);
             const serverCode = await this.serversService.getServerCode(serverId);

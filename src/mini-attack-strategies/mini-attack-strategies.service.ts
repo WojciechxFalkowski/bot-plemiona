@@ -88,6 +88,22 @@ export class MiniAttackStrategiesService {
     }
 
     /**
+     * Pobiera tylko aktywne strategie dla konkretnego serwera
+     */
+    async findActiveByServer(serverId: number): Promise<MiniAttackStrategyResponseDto[]> {
+        this.logger.debug(`Finding active strategies for server ${serverId}`);
+
+        const strategies = await this.strategiesRepo.find({
+            where: { serverId, is_active: true },
+            order: { villageId: 'ASC', id: 'ASC' }
+        });
+
+        this.logger.debug(`Found ${strategies.length} active strategies for server ${serverId}`);
+
+        return strategies.map(strategy => this.mapToResponseDto(strategy));
+    }
+
+    /**
      * Tworzy nową strategię
      */
     async create(createDto: CreateMiniAttackStrategyDto): Promise<MiniAttackStrategyResponseDto> {
@@ -107,7 +123,9 @@ export class MiniAttackStrategiesService {
             ram: createDto.ram ?? 0,
             catapult: createDto.catapult ?? 0,
             knight: createDto.knight ?? 0,
-            snob: createDto.snob ?? 0
+            snob: createDto.snob ?? 0,
+            next_target_index: createDto.next_target_index ?? 0,
+            is_active: createDto.is_active ?? true
         });
 
         const savedStrategy = await this.strategiesRepo.save(strategy);
@@ -143,6 +161,8 @@ export class MiniAttackStrategiesService {
         if (updateDto.catapult !== undefined) strategy.catapult = updateDto.catapult;
         if (updateDto.knight !== undefined) strategy.knight = updateDto.knight;
         if (updateDto.snob !== undefined) strategy.snob = updateDto.snob;
+        if (updateDto.next_target_index !== undefined) strategy.next_target_index = updateDto.next_target_index;
+        if (updateDto.is_active !== undefined) strategy.is_active = updateDto.is_active;
 
         const savedStrategy = await this.strategiesRepo.save(strategy);
         this.logger.log(`Strategy updated successfully with ID ${id}`);
@@ -178,6 +198,8 @@ export class MiniAttackStrategiesService {
         if (updateDto.catapult !== undefined) strategy.catapult = updateDto.catapult;
         if (updateDto.knight !== undefined) strategy.knight = updateDto.knight;
         if (updateDto.snob !== undefined) strategy.snob = updateDto.snob;
+        if (updateDto.next_target_index !== undefined) strategy.next_target_index = updateDto.next_target_index;
+        if (updateDto.is_active !== undefined) strategy.is_active = updateDto.is_active;
 
         const savedStrategy = await this.strategiesRepo.save(strategy);
         this.logger.log(`Strategy updated successfully for server ${serverId}, village ${villageId}`);
@@ -311,6 +333,48 @@ export class MiniAttackStrategiesService {
     }
 
     /**
+     * Aktualizuje indeks następnego celu do ataku dla strategii
+     */
+    async updateNextTargetIndex(serverId: number, villageId: string, nextTargetIndex: number): Promise<void> {
+        this.logger.debug(`Updating next target index to ${nextTargetIndex} for server ${serverId}, village ${villageId}`);
+
+        const strategy = await this.strategiesRepo.findOne({
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
+        });
+
+        if (!strategy) {
+            throw new NotFoundException(`Strategy not found for server ${serverId}, village ${villageId}`);
+        }
+
+        strategy.next_target_index = nextTargetIndex;
+        await this.strategiesRepo.save(strategy);
+        
+        this.logger.debug(`Next target index updated to ${nextTargetIndex} for server ${serverId}, village ${villageId}`);
+    }
+
+    /**
+     * Włącza/wyłącza strategię
+     */
+    async toggleStrategy(serverId: number, villageId: string, isActive: boolean): Promise<void> {
+        this.logger.debug(`Toggling strategy to ${isActive ? 'active' : 'inactive'} for server ${serverId}, village ${villageId}`);
+
+        const strategy = await this.strategiesRepo.findOne({
+            where: { serverId, villageId },
+            order: { id: 'ASC' }
+        });
+
+        if (!strategy) {
+            throw new NotFoundException(`Strategy not found for server ${serverId}, village ${villageId}`);
+        }
+
+        strategy.is_active = isActive;
+        await this.strategiesRepo.save(strategy);
+        
+        this.logger.debug(`Strategy toggled to ${isActive ? 'active' : 'inactive'} for server ${serverId}, village ${villageId}`);
+    }
+
+    /**
      * Zwraca tylko aktywne jednostki (różne od 0) ze strategii
      */
     async getActiveUnits(serverId: number, villageId: string): Promise<Record<string, number>> {
@@ -357,6 +421,8 @@ export class MiniAttackStrategiesService {
             catapult: strategy.catapult,
             knight: strategy.knight,
             snob: strategy.snob,
+            next_target_index: strategy.next_target_index,
+            is_active: strategy.is_active,
             createdAt: strategy.createdAt,
             updatedAt: strategy.updatedAt
         };

@@ -10,7 +10,6 @@ import { AttackUtils, AttackResult, AttackCalculationResult, BarbarianVillage, L
 import { AuthUtils } from '@/utils/auth/auth.utils';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
-import { SettingsKey } from '@/settings/settings-keys.enum';
 import { createBrowserPage } from '@/utils/browser.utils';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { ServersService } from '@/servers';
@@ -280,9 +279,8 @@ export class BarbarianVillagesService {
 
             this.logger.log(`📊 Will perform ${maxPossibleAttacks} attacks (limited by min(troops, ${attackableVillages.length} villages))`);
 
-            // 5. Get current target index from settings
-            const nextTargetIndexSetting = await this.settingsService.getSetting<{ value: number }>(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX);
-            let currentTargetIndex = nextTargetIndexSetting?.value || 0;
+            // 5. Get current target index from strategy
+            let currentTargetIndex = attackStrategy.next_target_index || 0;
 
             // Ensure index is within bounds
             if (currentTargetIndex >= attackableVillages.length) {
@@ -313,7 +311,7 @@ export class BarbarianVillagesService {
 
                         // Move to next target
                         currentTargetIndex = (currentTargetIndex + 1) % attackableVillages.length;
-                        await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: currentTargetIndex });
+                        await this.miniAttackStrategiesService.updateNextTargetIndex(serverId, villageId, currentTargetIndex);
 
                         // Add skipped result to attack results
                         attackResults.push({
@@ -359,8 +357,8 @@ export class BarbarianVillagesService {
                     // Update target index for next attack (round-robin)
                     currentTargetIndex = (currentTargetIndex + 1) % attackableVillages.length;
 
-                    // Save current index to settings (for resumption after interruption)
-                    await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: currentTargetIndex });
+                    // Save current index to strategy (for resumption after interruption)
+                    await this.miniAttackStrategiesService.updateNextTargetIndex(serverId, villageId, currentTargetIndex);
 
                     // Delay between attacks to avoid overwhelming the server
                     if (i < maxPossibleAttacks - 1) {
@@ -373,7 +371,7 @@ export class BarbarianVillagesService {
 
                     // Still update the target index to move to next village
                     currentTargetIndex = (currentTargetIndex + 1) % attackableVillages.length;
-                    await this.settingsService.setSetting(serverId, SettingsKey.MINI_ATTACKS_NEXT_TARGET_INDEX, { value: currentTargetIndex });
+                    await this.miniAttackStrategiesService.updateNextTargetIndex(serverId, villageId, currentTargetIndex);
 
                     // Add failed result
                     attackResults.push({
