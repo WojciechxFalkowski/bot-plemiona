@@ -14,6 +14,7 @@ import { ServerResponseDto } from '@/servers/dto';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { MiniAttackStrategiesService } from '@/mini-attack-strategies/mini-attack-strategies.service';
 import { ArmyTrainingService } from '@/army-training/army-training.service';
+import { ArmyTrainingStrategiesService } from '@/army-training/army-training-strategies.service';
 import { PlayerVillagesService } from '@/player-villages/player-villages.service';
 import { PlayerVillageAttackStrategiesService } from '@/player-villages/player-village-attack-strategies.service';
 import * as ghostCursor from 'ghost-cursor-playwright';
@@ -83,7 +84,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     // Army training configuration - will be loaded from settings with defaults
     private readonly DEFAULT_MIN_ARMY_TRAINING_INTERVAL = 1000 * 60 * 10; // 10 minutes
     private readonly DEFAULT_MAX_ARMY_TRAINING_INTERVAL = 1000 * 60 * 15; // 15 minutes
-    private readonly VILLAGE_ID_FOR_ARMY_TRAINING = '9919'; // TODO: fix it
 
 
 
@@ -97,6 +97,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly barbarianVillagesService: BarbarianVillagesService,
         private readonly miniAttackStrategiesService: MiniAttackStrategiesService,
         private readonly armyTrainingService: ArmyTrainingService,
+        private readonly armyTrainingStrategiesService: ArmyTrainingStrategiesService,
         private readonly playerVillagesService: PlayerVillagesService,
         private readonly notificationsService: NotificationsService
     ) {
@@ -795,20 +796,29 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log(`🚀 Executing army training for server ${serverId}`);
 
         try {
-            // Get the village ID for army training from settings
-            const villageId = this.VILLAGE_ID_FOR_ARMY_TRAINING;
-
-            if (!villageId) {
-                this.logger.warn(`⚠️ No village ID configured for army training on server ${serverId}`);
+            // Get active army training strategies for this server
+            const strategies = await this.armyTrainingStrategiesService.findActiveByServer(serverId);
+            if (strategies.length === 0) {
+                this.logger.warn(`⚠️ No active army training strategies found for server ${serverId}`);
                 return;
             }
 
-            this.logger.log(`⚔️ Starting army training for village ${villageId} on server ${serverId}`);
+            this.logger.log(`📋 Found ${strategies.length} active army training strategies for server ${serverId}`);
 
-            // Execute army training
-            await this.armyTrainingService.startTrainingLight(villageId, serverId);
+            // Execute army training for each strategy (village)
+            for (const strategy of strategies) {
+                this.logger.log(`⚔️ Starting army training for village ${strategy.villageId} on server ${serverId}`);
 
-            this.logger.log(`✅ Army training completed for village ${villageId} on server ${serverId}`);
+                try {
+                    await this.armyTrainingService.startTrainingUnits(strategy, serverId);
+                    this.logger.log(`✅ Army training completed for village ${strategy.villageId} on server ${serverId}`);
+                } catch (villageError) {
+                    this.logger.error(`❌ Error executing army training for village ${strategy.villageId} on server ${serverId}:`, villageError);
+                    // Continue with next village instead of stopping
+                }
+            }
+
+            this.logger.log(`🎯 All army training completed for server ${serverId}`);
 
         } catch (error) {
             this.logger.error(`❌ Error during army training execution for server ${serverId}:`, error);
@@ -1215,7 +1225,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     public async triggerArmyTraining(serverId: number): Promise<void> {
         const plan = this.multiServerState.serverPlans.get(serverId);
         if (!plan) {
-            throw new Error(`Server ${serverId} not found`);
+            throw new Error(`Server ${serverId} not found`); 
         }
 
         this.logger.log(`🔧 Manually triggering army training for server ${plan.serverCode}...`);

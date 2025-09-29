@@ -198,12 +198,54 @@ export class ArmyUtils {
         await page.goto(trainingUrl, { waitUntil: 'networkidle', timeout: 15000 });
         const trainingForm = page.locator('#train_form');
         const input = trainingForm.locator(`input[name="${lightNameKey}"]`);
+        
+        // Pobierz dostępną liczbę jednostek do rekrutacji
+        const availableRecruitment = await trainingForm.locator(`a[id="light_0_a"]`).textContent();
+        const availableRecruitmentNumber = availableRecruitment?.match(/\((\d+)\)/)?.[1];
+        
+        if (!availableRecruitmentNumber) {
+            this.logger.warn(`Could not extract available recruitment number for village ${villageId} on server ${serverCode}`);
+            return {
+                success: false,
+                error: 'Could not extract available recruitment number'
+            };
+        }
+
+        const availableNumber = parseInt(availableRecruitmentNumber, 10);
+        
+        // Sprawdź dostępną liczbę rekrutacji i zaloguj odpowiedni komunikat
+        if (availableNumber < maxRecruitment) {
+            this.logger.warn(`Insufficient recruitment capacity for village ${villageId} on server ${serverCode}. Available: ${availableNumber}, Requested: ${maxRecruitment}. Cannot recruit requested amount.`);
+            return {
+                success: false,
+                error: 'Insufficient recruitment capacity',
+                availableCapacity: availableNumber,
+                requestedAmount: maxRecruitment
+            };
+        } else {
+            this.logger.log(`Recruitment capacity sufficient for village ${villageId} on server ${serverCode}. Available: ${availableNumber}, Requested: ${maxRecruitment}.`);
+        }
+
+        // Sprawdź czy w ogóle można coś zrekrutować
+        if (availableNumber === 0) {
+            this.logger.warn(`No recruitment capacity available for village ${villageId} on server ${serverCode}. Cannot recruit any units.`);
+            return {
+                success: false,
+                error: 'No recruitment capacity available'
+            };
+        }
+
         await input.fill(maxRecruitment.toString());
 
         const submitButton = trainingForm.locator('input[class="btn btn-recruit"]');
         await submitButton.click();
+        
+        this.logger.log(`Successfully started training ${maxRecruitment} light units for village ${villageId} on server ${serverCode}`);
+        
         return {
             success: true,
-        }
+            recruitedAmount: maxRecruitment,
+            availableCapacity: availableNumber
+        };
     }
 } 
