@@ -99,20 +99,39 @@ export class ProfilePage {
                         continue;
                     }
 
-                    // Pobierz współrzędne z drugiej kolumny (indeks 1)
-                    const coordinatesCell = row.locator(':scope > td').nth(1);
-                    const coordinatesRaw = (await coordinatesCell.textContent()) ?? '';
-                    const coordinates = coordinatesRaw.replace(/\s+/g, ' ').replace(/\u00A0/g, ' ').trim();
-                    if (!/^\d+\|\d+$/.test(coordinates)) {
-                        this.logger.warn(`Coordinates not in x|y format for village ${villageName}: "${coordinatesRaw}"`);
+                    // Znajdź komórkę ze współrzędnymi dynamicznie (dopasowanie do wzorca x|y)
+                    const cells = row.locator(':scope > td');
+                    const cellCount = await cells.count();
+                    let coordinates: string | null = null;
+                    let coordinatesIndex: number = -1;
+                    for (let c = 0; c < cellCount; c++) {
+                        const raw = (await cells.nth(c).textContent()) ?? '';
+                        const text = raw.replace(/\s+/g, ' ').replace(/\u00A0/g, ' ').trim();
+                        if (/^\d+\|\d+$/.test(text)) {
+                            coordinates = text;
+                            coordinatesIndex = c;
+                            break;
+                        }
+                    }
+                    if (!coordinates) {
+                        this.logger.warn(`Coordinates cell not found for village ${villageName}`);
                         continue;
                     }
 
-                    // Pobierz punkty z trzeciej kolumny (indeks 2)
-                    const pointsCell = row.locator('td').nth(2);
-                    const pointsTextRaw = await pointsCell.textContent();
-                    const pointsText = pointsTextRaw?.trim() || '';
-                    const points = pointsText ? parseInt(pointsText, 10) : 0;
+                    // Znajdź komórkę z punktami: pierwsza liczba całkowita po kolumnie współrzędnych
+                    let points = 0;
+                    for (let c = coordinatesIndex + 1; c < cellCount; c++) {
+                        const raw = (await cells.nth(c).textContent()) ?? '';
+                        const normalized = raw
+                            .replace(/\./g, '')
+                            .replace(/\s+/g, '')
+                            .replace(/\u00A0/g, '')
+                            .trim();
+                        if (/^\d+$/.test(normalized)) {
+                            points = parseInt(normalized, 10);
+                            break;
+                        }
+                    }
 
                     const villageData: BasicVillageData = {
                         id: villageId,

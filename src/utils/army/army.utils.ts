@@ -190,6 +190,36 @@ export class ArmyUtils {
         this.logger.log('==================');
     }
 
+    /**
+     * Wypełnia formularz treningu na już otwartej stronie budynku "train" i wysyła żądanie rekrutacji
+     * Nie wykonuje nawigacji ani dodatkowych walidacji pojemności – zakłada, że logika wyżej to sprawdziła
+     */
+    static async startTrainingUnitOnTrainPage(page: Page, unitNameKey: string, amount: number) {
+        const trainingForm = page.locator('#train_form');
+        if (!(await trainingForm.isVisible({ timeout: 5000 }))) {
+            this.logger.warn('Training form not visible on page');
+            return { success: false, error: 'Training form not visible' };
+        }
+
+        const input = trainingForm.locator(`input[name="${unitNameKey}"]`);
+        if (!(await input.isVisible({ timeout: 2000 }))) {
+            this.logger.warn(`Input for unit ${unitNameKey} not found`);
+            return { success: false, error: `Input for unit ${unitNameKey} not found` };
+        }
+
+        await input.fill(amount.toString());
+
+        const submitButton = trainingForm.locator('input.btn.btn-recruit');
+        if (!(await submitButton.isVisible({ timeout: 2000 }))) {
+            this.logger.warn('Recruit submit button not found');
+            return { success: false, error: 'Recruit submit button not found' };
+        }
+
+        await submitButton.click();
+        this.logger.log(`Submitted recruitment for ${amount} of ${unitNameKey}`);
+        return { success: true, recruitedAmount: amount };
+    }
+
     static async startTrainingLight(page: Page, villageId: string, serverCode: string, lightNameKey: string, maxRecruitment: number) {
         const trainingUrl = this.TRAIN_URL_TEMPLATE
             .replace('{serverCode}', serverCode)
@@ -198,11 +228,11 @@ export class ArmyUtils {
         await page.goto(trainingUrl, { waitUntil: 'networkidle', timeout: 15000 });
         const trainingForm = page.locator('#train_form');
         const input = trainingForm.locator(`input[name="${lightNameKey}"]`);
-        
+
         // Pobierz dostępną liczbę jednostek do rekrutacji
         const availableRecruitment = await trainingForm.locator(`a[id="light_0_a"]`).textContent();
         const availableRecruitmentNumber = availableRecruitment?.match(/\((\d+)\)/)?.[1];
-        
+
         if (!availableRecruitmentNumber) {
             this.logger.warn(`Could not extract available recruitment number for village ${villageId} on server ${serverCode}`);
             return {
@@ -212,7 +242,7 @@ export class ArmyUtils {
         }
 
         const availableNumber = parseInt(availableRecruitmentNumber, 10);
-        
+
         // Sprawdź dostępną liczbę rekrutacji i zaloguj odpowiedni komunikat
         if (availableNumber < maxRecruitment) {
             this.logger.warn(`Insufficient recruitment capacity for village ${villageId} on server ${serverCode}. Available: ${availableNumber}, Requested: ${maxRecruitment}. Cannot recruit requested amount.`);
@@ -239,9 +269,9 @@ export class ArmyUtils {
 
         const submitButton = trainingForm.locator('input[class="btn btn-recruit"]');
         await submitButton.click();
-        
+
         this.logger.log(`Successfully started training ${maxRecruitment} light units for village ${villageId} on server ${serverCode}`);
-        
+
         return {
             success: true,
             recruitedAmount: maxRecruitment,

@@ -132,41 +132,63 @@ export class ArmyTrainingService {
             const formattedTable = this.formatUnitsInProductionTable(unitsInProduction, villageName.name, strategy);
             this.logger.log(formattedTable);
 
-            // Global limits enforcement (current implementation acts only on 'light')
-            if (strategy.light > 0) {
-                const light = unitsInProduction.find(unit => unit.staticData.dataUnit === 'light');
-                if (!light || !light.dynamicData.canRecruit) {
-                    this.logger.error('❌ Light unit not found or cannot recruit');
-                    return { success: false, error: 'Light unit not available for training' };
+            // Generic training across all units requested in strategy
+            const requestedByUnitKey: Record<string, number> = {
+                spear: strategy.spear ?? 0,
+                sword: strategy.sword ?? 0,
+                axe: strategy.axe ?? 0,
+                archer: strategy.archer ?? 0,
+                spy: strategy.spy ?? 0,
+                light: strategy.light ?? 0,
+                marcher: strategy.marcher ?? 0,
+                heavy: strategy.heavy ?? 0,
+                ram: strategy.ram ?? 0,
+                catapult: strategy.catapult ?? 0,
+                knight: strategy.knight ?? 0,
+                snob: strategy.snob ?? 0,
+            };
+
+            // Oblicz globalne ograniczenia (startowo z istniejącego stanu)
+            let remainingByMaxTotal = Math.max(0, (strategy.max_total_overall ?? Number.POSITIVE_INFINITY) -
+                unitsInProduction.reduce((sum, u) => sum + (u.dynamicData?.unitsTotal ?? 0) + (u.dynamicData?.unitsInQueue ?? 0), 0));
+            const globalQueueCapPerUnit = strategy.max_in_queue_per_unit_overall ?? 10;
+
+            let anyTrained = false;
+
+            for (const unit of unitsInProduction) {
+                const unitKey = unit.staticData.dataUnit; // np. 'light'
+                const requested = requestedByUnitKey[unitKey] ?? 0;
+                if (requested <= 0) continue;
+                if (!unit.dynamicData.canRecruit) continue;
+
+                const producible = unit.dynamicData.producibleCount ?? 0;
+                const inQueue = unit.dynamicData.unitsInQueue ?? 0;
+                const queueRemaining = Math.max(0, globalQueueCapPerUnit - inQueue);
+
+                const grant = Math.min(requested, producible, queueRemaining, remainingByMaxTotal);
+                if (grant <= 0) continue;
+
+                this.logger.log(`⚔️ Training ${grant} of ${unitKey} for village ${villageName.name}`);
+                const result = await ArmyUtils.startTrainingUnitOnTrainPage(page, unitKey, grant);
+                if (result.success) {
+                    anyTrained = true;
+                    remainingByMaxTotal = Math.max(0, remainingByMaxTotal - grant);
+                } else {
+                    this.logger.warn(`Failed to train ${unitKey}: ${result.error}`);
                 }
 
-                // Compute global current total across all units in the list
-                const currentTotalAllUnits = unitsInProduction.reduce((sum, u) => sum + (u.dynamicData?.unitsTotal ?? 0) + (u.dynamicData?.unitsInQueue ?? 0), 0);
-                const maxTotalOverall = strategy.max_total_overall ?? Number.POSITIVE_INFINITY;
-                const remainingByMaxTotal = Math.max(0, maxTotalOverall - currentTotalAllUnits);
-
-                const globalQueueCapPerUnit = strategy.max_in_queue_per_unit_overall ?? 10;
-                const inQueueLight = light.dynamicData?.unitsInQueue ?? 0;
-                const queueCapRemainingForLight = Math.max(0, globalQueueCapPerUnit - inQueueLight);
-
-                const producibleLight = light.dynamicData?.producibleCount ?? 0;
-                const requestedLight = strategy.light;
-
-                const toRecruit = Math.min(requestedLight, producibleLight, queueCapRemainingForLight, remainingByMaxTotal);
-
-                if (toRecruit <= 0) {
-                    this.logger.log(`⛔ Skipping training: constraints hit (requested=${requestedLight}, producible=${producibleLight}, queueCapRemaining=${queueCapRemainingForLight}, remainingByMaxTotal=${remainingByMaxTotal})`);
-                    return { success: true, message: 'No units to train due to constraints' };
+                if (remainingByMaxTotal <= 0) {
+                    this.logger.log('Reached global max_total_overall limit; stopping further recruitment');
+                    break;
                 }
-
-                this.logger.log(`⚔️ Starting training of ${toRecruit} light units for village ${villageName.name}`);
-                const trainingResult = await this.startTrainingLight(page, villageName.name, serverId, light, toRecruit);
-                this.logger.log(`✅ Light unit training completed for village ${villageName.name}`);
-                return trainingResult;
             }
 
-            this.logger.log(`ℹ️ No light units to train for village ${strategy.villageId}`);
-            return { success: true, message: 'No units to train' };
+            if (!anyTrained) {
+                this.logger.log(`ℹ️ No units to train for village ${strategy.villageId} after applying constraints`);
+                return { success: true, message: 'No units to train' };
+            }
+
+            return { success: true };
 
         } catch (error) {
             this.logger.error(`❌ Error starting army training for village ${strategy.villageId}:`, error);

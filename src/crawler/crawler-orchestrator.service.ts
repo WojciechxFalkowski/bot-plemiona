@@ -1092,7 +1092,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Generates initial 30 seconds interval for army training
      */
     private getInitialArmyTrainingInterval(): number {
-        return 3000;
+        return 30000;
     }
 
     /**
