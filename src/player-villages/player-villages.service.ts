@@ -178,9 +178,7 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
 
     async verifyVillageOwner(id: number, serverCode: string): Promise<any> {
         const village = await this.findOne(id);
-        const { browser, page } = await createBrowserPage({ headless: false });
-        console.log("village");
-        console.log(village);
+        const { browser, page } = await createBrowserPage({ headless: true });
         try {
             // Get server by code
             const server = await this.serversService.findByCode(serverCode);

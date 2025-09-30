@@ -134,4 +134,25 @@ export class UpdateArmyTrainingStrategyDto {
     @IsOptional()
     @IsBoolean()
     is_active?: boolean;
+
+    @ApiProperty({
+        description: 'Global max: total (InVillage + InQueue + new) across all units',
+        example: 200,
+        required: false,
+        nullable: true
+    })
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    max_total_overall?: number | null;
+
+    @ApiProperty({
+        description: 'Global per-unit cap: max InQueue allowed for any unit',
+        example: 10,
+        required: false
+    })
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    max_in_queue_per_unit_overall?: number;
 }

@@ -418,7 +418,7 @@ export class AttackUtils {
             // Nawiguj do strony ataku
             this.logger.debug('Navigating to attack page...');
             await page.goto(attackUrl, { waitUntil: 'networkidle', timeout: 15000 });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(300);
 
             // Sprawdź czy strona się załadowała poprawnie
             const formExists = await page.locator('#command-data-form').isVisible({ timeout: 5000 });
@@ -446,7 +446,7 @@ export class AttackUtils {
             this.logger.debug(`Filling light cavalry field with ${lightCount} units...`);
             const lightInput = page.locator('#unit_input_light');
             await lightInput.fill(lightCount.toString());
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(300);
 
             // Kliknij przycisk ataku
             this.logger.debug('Clicking attack button...');
@@ -457,7 +457,7 @@ export class AttackUtils {
 
                 // Poczekaj na załadowanie strony potwierdzenia
                 await page.waitForLoadState('networkidle', { timeout: 10000 });
-                await page.waitForTimeout(1000);
+                await page.waitForTimeout(300);
                 this.logger.debug('Confirmation page loaded');
 
                 // Kliknij przycisk potwierdzenia
@@ -468,7 +468,7 @@ export class AttackUtils {
                     this.logger.debug('Confirmation button clicked successfully');
 
                     // Poczekaj na finalizację
-                    await page.waitForTimeout(1000);
+                    await page.waitForTimeout(300);
 
                     this.logger.log(`✅ Mini attack completed successfully: ${targetVillage.name} (${targetVillage.coordinateX}|${targetVillage.coordinateY})`);
 

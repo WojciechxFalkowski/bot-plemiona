@@ -317,10 +317,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         if (!plan) return;
 
         try {
-            plan.constructionQueue.enabled = await this.isConstructionQueueEnabled(serverId);
-            plan.scavenging.enabled = await this.isScavengingEnabled(serverId);
-            plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
-            plan.playerVillageAttacks.enabled = await this.isPlayerVillageAttacksEnabled(serverId);
+            // plan.constructionQueue.enabled = await this.isConstructionQueueEnabled(serverId);
+            // plan.scavenging.enabled = await this.isScavengingEnabled(serverId);
+            // plan.miniAttacks.enabled = await this.isMiniAttacksEnabled(serverId);
+            // plan.playerVillageAttacks.enabled = await this.isPlayerVillageAttacksEnabled(serverId);
             plan.armyTraining.enabled = await this.isArmyTrainingEnabled(serverId);
 
             this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}`);
@@ -623,6 +623,14 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         this.logger.log(`🚀 Executing ${taskType} for server ${plan.serverCode} (${plan.serverName})`);
 
+        // Visible START banner with runId and timestamp
+        const runId = `${taskType.replace(/\s+/g, '_')}-${plan.serverCode}-${Date.now()}`;
+        const startTs = Date.now();
+        this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
+        this.logger.warn(`🟩 START | ${taskType} | ${plan.serverCode} (${plan.serverName}) | runId=${runId}`);
+        this.logger.warn(`⏱️ Started at: ${new Date(startTs).toLocaleString()}`);
+        this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
+
         try {
             switch (taskType) {
                 case 'Construction Queue':
@@ -652,9 +660,23 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             // Mark as successful
             plan.lastSuccessfulExecution = new Date();
 
+            const durationMs = Date.now() - startTs;
+            this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
+            this.logger.warn(`🟦 END   | ${taskType} | ${plan.serverCode} | runId=${runId}`);
+            this.logger.warn(`✅ Status: success | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
+            this.logger.warn(`🕒 Ended at: ${new Date().toLocaleString()}`);
+            this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
+
             this.logger.log(`✅ ${taskType} completed successfully for server ${plan.serverCode}`);
 
         } catch (error) {
+            const durationMs = Date.now() - startTs;
+            this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
+            this.logger.warn(`🟥 END   | ${taskType} | ${plan.serverCode} | runId=${runId}`);
+            this.logger.warn(`❌ Status: error   | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
+            this.logger.warn(`🕒 Ended at: ${new Date().toLocaleString()}`);
+            this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
+
             this.logger.error(`❌ Error executing ${taskType} for server ${plan.serverCode}:`, error);
 
             // Update next execution time for the failed task to prevent immediate retry
@@ -664,8 +686,6 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         // Schedule next execution
         this.scheduleNextExecution();
     }
-
-
 
     /**
      * Updates next execution time for a failed task to prevent immediate retry
@@ -1072,7 +1092,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Generates initial 30 seconds interval for army training
      */
     private getInitialArmyTrainingInterval(): number {
-        return 30000;
+        return 3000;
     }
 
     /**
@@ -1225,7 +1245,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     public async triggerArmyTraining(serverId: number): Promise<void> {
         const plan = this.multiServerState.serverPlans.get(serverId);
         if (!plan) {
-            throw new Error(`Server ${serverId} not found`); 
+            throw new Error(`Server ${serverId} not found`);
         }
 
         this.logger.log(`🔧 Manually triggering army training for server ${plan.serverCode}...`);

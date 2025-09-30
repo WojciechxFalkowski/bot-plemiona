@@ -40,6 +40,7 @@ export class ArmyPage {
           canRecruit: canRecruitSet.has(dataUnit),
           unitsInVillage: counts?.unitsInVillage,
           unitsOutside: counts?.unitsOutside,
+          unitsTotal: counts?.total,
           unitsInQueue: inQueue,
           producibleCount,
           // jeśli chcesz możesz też przekazać total pod inną nazwą lub pominąć

@@ -11,6 +11,7 @@ interface DynamicUnitData {
   unitsInQueue: number | undefined; // ile jednostek jest aktualnie w kolejce produkcji
   unitsInVillage: number | undefined; // ile jednostek jest w wiosce
   unitsOutside: number | undefined; // ile jednostek jest poza wioską (np. na wyprawach)
+  unitsTotal: number | undefined; // ile jednostek jest w sumie
   producibleCount: number | undefined; // ile jednostek można aktualnie wyprodukować (bazując na surowcach)
 }
 
@@ -34,6 +35,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -50,6 +52,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -66,6 +69,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -82,6 +86,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -98,6 +103,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -114,6 +120,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -130,6 +137,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -146,6 +154,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -162,6 +171,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },
@@ -178,6 +188,7 @@ export const unitDefinitionsStatic: UnitDefinition[] = [
       unitsInQueue: undefined,
       unitsInVillage: undefined,
       unitsOutside: undefined,
+      unitsTotal: undefined,
       producibleCount: undefined,
     },
   },

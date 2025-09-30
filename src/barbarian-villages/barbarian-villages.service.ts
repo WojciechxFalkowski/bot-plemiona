@@ -362,8 +362,8 @@ export class BarbarianVillagesService {
 
                     // Delay between attacks to avoid overwhelming the server
                     if (i < maxPossibleAttacks - 1) {
-                        this.logger.debug('⏳ Waiting 0.5 seconds before next attack...');
-                        await page.waitForTimeout(500);
+                        this.logger.debug('⏳ Waiting 0.3 seconds before next attack...');
+                        await page.waitForTimeout(300);
                     }
 
                 } catch (attackError) {

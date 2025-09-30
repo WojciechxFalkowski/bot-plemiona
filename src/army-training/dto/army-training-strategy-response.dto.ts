@@ -102,6 +102,20 @@ export class ArmyTrainingStrategyResponseDto {
     is_active: boolean;
 
     @ApiProperty({
+        description: 'Global max: total (InVillage + InQueue + new) across all units',
+        example: 200,
+        required: false,
+        nullable: true
+    })
+    max_total_overall: number | null;
+
+    @ApiProperty({
+        description: 'Global per-unit cap: max InQueue allowed for any unit',
+        example: 10
+    })
+    max_in_queue_per_unit_overall: number;
+
+    @ApiProperty({
         description: 'Data utworzenia',
         example: '2024-01-01T00:00:00.000Z'
     })
