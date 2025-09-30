@@ -89,23 +89,22 @@ export class ProfilePage {
                         continue;
                     }
 
-                                        // Pobierz nazwę wioski z linku w zagnieżdżonej tabeli
+                    // Pobierz nazwę wioski z linku w zagnieżdżonej tabeli
                     const villageLink = villageSpan.locator('a').first();
                     const villageNameRaw = await villageLink.textContent();
                     const villageName = villageNameRaw?.trim() || '';
-                    
+
                     if (!villageName) {
                         this.logger.warn(`Village name not found for ID ${villageId}`);
                         continue;
                     }
 
                     // Pobierz współrzędne z drugiej kolumny (indeks 1)
-                    const coordinatesCell = row.locator('td').nth(1);
-                    const coordinatesRaw = await coordinatesCell.textContent();
-                    const coordinates = coordinatesRaw?.trim() || '';
-                    
-                    if (!coordinates) {
-                        this.logger.warn(`Coordinates not found for village ${villageName}`);
+                    const coordinatesCell = row.locator(':scope > td').nth(1);
+                    const coordinatesRaw = (await coordinatesCell.textContent()) ?? '';
+                    const coordinates = coordinatesRaw.replace(/\s+/g, ' ').replace(/\u00A0/g, ' ').trim();
+                    if (!/^\d+\|\d+$/.test(coordinates)) {
+                        this.logger.warn(`Coordinates not in x|y format for village ${villageName}: "${coordinatesRaw}"`);
                         continue;
                     }
 

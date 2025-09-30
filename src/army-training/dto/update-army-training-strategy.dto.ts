@@ -1,7 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, Min, IsBoolean } from 'class-validator';
+import { IsInt, IsOptional, Min, IsBoolean, IsString } from 'class-validator';
 
 export class UpdateArmyTrainingStrategyDto {
+    @ApiProperty({
+        description: 'Village ID for which this strategy applies',
+        example: '12208',
+        required: false
+    })
+    @IsOptional()
+    @IsString()
+    villageId?: string;
     // Jednostki piechoty
     @ApiProperty({
         description: 'Liczba włóczników do treningu',

@@ -102,6 +102,7 @@ export class ArmyTrainingStrategiesService {
         }
 
         // Update only provided fields
+        if (updateDto.villageId !== undefined) strategy.villageId = updateDto.villageId;
         if (updateDto.spear !== undefined) strategy.spear = updateDto.spear;
         if (updateDto.sword !== undefined) strategy.sword = updateDto.sword;
         if (updateDto.axe !== undefined) strategy.axe = updateDto.axe;
@@ -136,6 +137,7 @@ export class ArmyTrainingStrategiesService {
         }
 
         // Update only provided fields
+        if (updateDto.villageId !== undefined) strategy.villageId = updateDto.villageId;
         if (updateDto.spear !== undefined) strategy.spear = updateDto.spear;
         if (updateDto.sword !== undefined) strategy.sword = updateDto.sword;
         if (updateDto.axe !== undefined) strategy.axe = updateDto.axe;
