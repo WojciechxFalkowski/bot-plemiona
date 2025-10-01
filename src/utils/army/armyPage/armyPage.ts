@@ -171,19 +171,16 @@ export class ArmyPage {
 
     // Lokator na oba tbodyy z wierszami kolejki
     const queueWrappersLocator = this.page.locator(
-      "#trainqueue_wrap_stable table.vis > tbody"
+      'div.trainqueue_wrap table.vis > tbody'
     );
     const tbodyCount = await queueWrappersLocator.count();
-
     for (let i = 0; i < tbodyCount; i++) {
       const tbody = queueWrappersLocator.nth(i);
       // Wiersze w każdym tbody
       const rows = tbody.locator("tr");
       const rowCount = await rows.count();
-
       for (let j = 0; j < rowCount; j++) {
         const row = rows.nth(j);
-
         // Klasy na wierszach to bearne 'lit' lub 'sortable_row'
         // Ignorujemy wiersze, które nie mają klasy lit ani sortable_row
         const classAttr = (await row.getAttribute("class")) || "";
