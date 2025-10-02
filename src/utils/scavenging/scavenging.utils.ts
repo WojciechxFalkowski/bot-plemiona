@@ -115,7 +115,8 @@ export class ScavengingUtils {
      */
     static calculateTroopDistribution(
         availableUnits: Partial<Record<ScavengingUnit, number>>,
-        freeLevels: ScavengeLevelStatus[]
+        freeLevels: ScavengeLevelStatus[],
+        maxSpearLimit?: number
     ): LevelDispatchPlan[] | null {
 
         const dispatchPlan: LevelDispatchPlan[] = freeLevels.map(l => ({ level: l.level, dispatchUnits: {} }));
@@ -145,7 +146,18 @@ export class ScavengingUtils {
 
         // Używaj tylko pikinierów (spear) do obliczania wojska
         const spearUnits = availableUnits['spear'] || 0;
-        unitsToSendTotal['spear'] = spearUnits;
+        
+        // NOWA LOGIKA: Zastosuj limit jeśli został podany
+        const effectiveSpearUnits = maxSpearLimit !== undefined 
+            ? Math.min(spearUnits, maxSpearLimit)
+            : spearUnits;
+        
+        unitsToSendTotal['spear'] = effectiveSpearUnits;
+        
+        // Logowanie informacji o limicie
+        if (maxSpearLimit !== undefined && maxSpearLimit < spearUnits) {
+            this.logger.log(`Applied spear limit: ${spearUnits} available → ${effectiveSpearUnits} used (limit: ${maxSpearLimit})`);
+        }
 
         // Pozostałe jednostki ustaw na 0
         for (const unit of unitOrder) {
@@ -154,7 +166,7 @@ export class ScavengingUtils {
             }
         }
 
-        this.logger.debug(`Using only spear units for scavenging: ${spearUnits} units`);
+        this.logger.debug(`Using only spear units for scavenging: ${effectiveSpearUnits} units (${spearUnits} available${maxSpearLimit !== undefined ? `, limit: ${maxSpearLimit}` : ''})`);
         this.logger.debug('Total units eligible for sending (only spear):', unitsToSendTotal);
 
         // Rozdziel tylko pikinierów proporcjonalnie na poziomy
@@ -165,7 +177,7 @@ export class ScavengingUtils {
             if (!plan) continue;
 
             // Oblicz liczbę pikinierów dla tego poziomu
-            const spearCountForLevel = Math.floor((spearUnits * levelPack) / totalPacks);
+            const spearCountForLevel = Math.floor((effectiveSpearUnits * levelPack) / totalPacks);
             plan.dispatchUnits['spear'] = spearCountForLevel;
 
             // Pozostałe jednostki ustaw na 0

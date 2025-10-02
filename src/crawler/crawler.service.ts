@@ -25,6 +25,7 @@ import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
 import { VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { ServersService } from '@/servers';
+import { ScavengingLimitsService } from '@/scavenging-limits/scavenging-limits.service';
 
 /**
  * Configuration for a scheduled attack or support
@@ -87,7 +88,8 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
         private settingsService: SettingsService,
         private plemionaCookiesService: PlemionaCookiesService,
         private villagesService: VillagesService,
-        private serversService: ServersService
+        private serversService: ServersService,
+        private scavengingLimitsService: ScavengingLimitsService
     ) {
     }
 
@@ -425,18 +427,21 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
                         this.logger.log(`Village ${village.name} has ${freeLevels.length} free levels: ${freeLevels.map(l => l.level).join(', ')}`);
 
-                        // 3. Oblicz dystrybucję wojsk dla tej wioski
-                        const dispatchPlan = ScavengingUtils.calculateTroopDistribution(availableUnits, freeLevels);
+                        // 3. Pobierz limit pikinierów dla tej wioski
+                        const maxSpearLimit = await this.getScavengingSpearLimit(serverId, village.id);
+                        
+                        // 4. Oblicz dystrybucję wojsk dla tej wioski
+                        const dispatchPlan = ScavengingUtils.calculateTroopDistribution(availableUnits, freeLevels, maxSpearLimit);
 
                         if (!dispatchPlan || dispatchPlan.length === 0) {
                             this.logger.log(`Could not calculate troop distribution for village ${village.name}. Skipping to next village.`);
                             continue;
                         }
 
-                        // 4. Wypełnij formularze i wyloguj plan dystrybucji
+                        // 5. Wypełnij formularze i wyloguj plan dystrybucji
                         ScavengingUtils.logDispatchPlan(dispatchPlan, village.name);
 
-                        // 5. Wypełnij i wyślij każdy poziom po kolei, czekając na przeładowanie strony po każdym
+                        // 6. Wypełnij i wyślij każdy poziom po kolei, czekając na przeładowanie strony po każdym
                         this.logger.log(`Starting scavenging missions for village ${village.name}...`);
                         let villageSuccessfulDispatches = 0;
 
@@ -769,6 +774,28 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
      */
     public getVillageScavengingData(villageId: string): VillageScavengingData | null {
         return this.scavengingTimeData.villages.find(v => v.villageId === villageId) || null;
+    }
+
+    /**
+     * Pobiera limit pikinierów dla wioski z bazy danych
+     * @param serverId ID serwera
+     * @param villageId ID wioski
+     * @returns Limit pikinierów lub undefined jeśli brak limitu
+     */
+    private async getScavengingSpearLimit(serverId: number, villageId: string): Promise<number | undefined> {
+        try {
+            const limit = await this.scavengingLimitsService.findByServerAndVillage(serverId, villageId);
+            if (limit) {
+                this.logger.debug(`Found scavenging limit for village ${villageId} on server ${serverId}: ${limit.maxSpearUnits} spear units`);
+                return limit.maxSpearUnits;
+            } else {
+                this.logger.debug(`No scavenging limit found for village ${villageId} on server ${serverId} - using all available units`);
+                return undefined; // Brak limitu = użyj wszystkich dostępnych
+            }
+        } catch (error) {
+            this.logger.debug(`Error getting scavenging limit for village ${villageId} on server ${serverId}:`, error);
+            return undefined; // Brak limitu = użyj wszystkich dostępnych
+        }
     }
 
     /**

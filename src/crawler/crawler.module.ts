@@ -13,9 +13,10 @@ import { MiniAttackStrategiesModule } from '@/mini-attack-strategies/mini-attack
 import { ArmyTrainingModule } from '@/army-training/army-training.module';
 import { PlayerVillagesModule } from '@/player-villages/player-villages.module';
 import { NotificationsModule } from '@/notifications/notifications.module';
+import { ScavengingLimitsModule } from '@/scavenging-limits/scavenging-limits.module';
 
 @Module({
-  imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule],
+  imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule, ScavengingLimitsModule],
   controllers: [CrawlerController, CrawlerOrchestratorController],
   providers: [CrawlerService, CrawlerOrchestratorService],
   exports: [CrawlerService, CrawlerOrchestratorService],
