@@ -179,23 +179,35 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         // 3. Sprawdź czy nie ma już takiego samego wpisu w kolejce
         await this.validateNoDuplicateInQueue(dto.villageId, dto.buildingId, dto.targetLevel, buildingConfig.name);
 
+        // === OPTYMALIZACJA: Sprawdź czy można pominąć walidację Playwright ===
+        const canSkipValidation = await this.canSkipPlaywrightValidation(
+            dto.serverId,
+            dto.villageId,
+            dto.buildingId,
+            dto.targetLevel
+        );
+
         // === ZAAWANSOWANA WALIDACJA (z scrappowaniem) ===
 
-        // 4. Stwórz sesję przeglądarki do scrappowania danych z gry
-        const { browser, context, page } = await this.createBrowserSession(dto.serverId);
+        if (!canSkipValidation) {
+            // 4. Stwórz sesję przeglądarki do scrappowania danych z gry
+            const { browser, context, page } = await this.createBrowserSession(dto.serverId);
 
-        try {
-            // 5. Sprawdź wymagania budynku używając danych z gry
-            await this.validateBuildingRequirementsWithScraping(dto.villageId, dto.buildingId, dto.serverId, page);
+            try {
+                // 5. Sprawdź wymagania budynku używając danych z gry
+                await this.validateBuildingRequirementsWithScraping(dto.villageId, dto.buildingId, dto.serverId, page);
 
-            // 6. Sprawdź ciągłość poziomów (gra + budowa + baza)
-            const serverCode = await this.serversService.findById(dto.serverId).then(server => server.serverCode);
+                // 6. Sprawdź ciągłość poziomów (gra + budowa + baza)
+                const serverCode = await this.serversService.findById(dto.serverId).then(server => server.serverCode);
 
-            await this.validateLevelContinuity(serverCode, dto.villageId, dto.buildingId, dto.targetLevel, buildingConfig.name, page);
+                await this.validateLevelContinuity(dto.serverId, serverCode, dto.villageId, dto.buildingId, dto.targetLevel, buildingConfig.name, page);
 
-        } finally {
-            // Zawsze zamykaj przeglądarkę
-            await browser.close();
+            } finally {
+                // Zawsze zamykaj przeglądarkę
+                await browser.close();
+            }
+        } else {
+            this.logger.log(`Skipping Playwright validation - previous level found in queue for ${buildingConfig.name} level ${dto.targetLevel} in village ${dto.villageId}`);
         }
 
         // === TWORZENIE WPISU ===
@@ -279,6 +291,44 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
                 `Building '${buildingName}' level ${targetLevel} is already in queue for village ${villageId}`
             );
         }
+    }
+
+    /**
+     * Sprawdza, czy można pominąć walidację Playwright na podstawie istniejącego wpisu w kolejce
+     * @param serverId ID serwera
+     * @param villageId ID wioski
+     * @param buildingId ID budynku
+     * @param targetLevel Docelowy poziom
+     * @returns true jeśli można pominąć walidację Playwright, false w przeciwnym razie
+     */
+    private async canSkipPlaywrightValidation(
+        serverId: number,
+        villageId: string,
+        buildingId: string,
+        targetLevel: number
+    ): Promise<boolean> {
+        const previousLevel = targetLevel - 1;
+
+        if (previousLevel < 1) {
+            return false;
+        }
+
+        const previousLevelItem = await this.findQueueItemByLevel(
+            serverId,
+            villageId,
+            buildingId,
+            previousLevel
+        );
+
+        if (previousLevelItem) {
+            this.logger.log(
+                `Found previous level ${previousLevel} in queue for ${buildingId} in village ${villageId} on server ${serverId}. ` +
+                `Skipping Playwright validation for level ${targetLevel}.`
+            );
+            return true;
+        }
+
+        return false;
     }
 
     // ==============================
@@ -365,6 +415,8 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * - Aktualny poziom w grze
      * - Budynki w kolejce budowy w grze  
      * - Budynki w naszej kolejce w bazie
+     * @param serverId ID serwera
+     * @param serverCode Kod serwera
      * @param villageId ID wioski
      * @param buildingId ID budynku
      * @param targetLevel Docelowy poziom
@@ -373,6 +425,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * @throws BadRequestException jeśli nie można dodać budynku na tym poziomie
      */
     private async validateLevelContinuity(
+        serverId: number,
         serverCode: string,
         villageId: string,
         buildingId: string,
@@ -383,7 +436,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         try {
             // 1. Pobierz wszystkie potrzebne dane
             const gameData = await this.scrapeVillageBuildingData(serverCode, villageId, page);
-            const databaseQueue = await this.getDatabaseQueue(villageId, buildingId);
+            const databaseQueue = await this.getDatabaseQueue(serverId, villageId, buildingId);
 
             // 2. Oblicz następny dozwolony poziom
             const nextAllowedLevel = this.calculateNextAllowedLevel(buildingId, gameData, databaseQueue);
@@ -532,13 +585,15 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
     /**
      * Pobiera wszystkie budynki określonego typu z naszej kolejki w bazie dla danej wioski
+     * @param serverId ID serwera
      * @param villageId ID wioski
      * @param buildingId ID budynku
      * @returns Lista budynków z bazy posortowana według targetLevel
      */
-    private async getDatabaseQueue(villageId: string, buildingId: string): Promise<VillageConstructionQueueEntity[]> {
+    private async getDatabaseQueue(serverId: number, villageId: string, buildingId: string): Promise<VillageConstructionQueueEntity[]> {
         const queueItems = await this.queueRepository.find({
             where: {
+                serverId: serverId,
                 villageId: villageId,
                 buildingId: buildingId
             },
@@ -547,9 +602,35 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
             }
         });
 
-        this.logger.log(`Found ${queueItems.length} items in database queue for ${buildingId} in village ${villageId}`);
+        this.logger.log(`Found ${queueItems.length} items in database queue for ${buildingId} in village ${villageId} on server ${serverId}`);
 
         return queueItems;
+    }
+
+    /**
+     * Znajduje wpis w kolejce dla konkretnego poziomu budynku
+     * @param serverId ID serwera
+     * @param villageId ID wioski
+     * @param buildingId ID budynku
+     * @param level Poziom do znalezienia
+     * @returns Wpis w kolejce lub null jeśli nie znaleziono
+     */
+    private async findQueueItemByLevel(
+        serverId: number,
+        villageId: string,
+        buildingId: string,
+        level: number
+    ): Promise<VillageConstructionQueueEntity | null> {
+        const queueItem = await this.queueRepository.findOne({
+            where: {
+                serverId: serverId,
+                villageId: villageId,
+                buildingId: buildingId,
+                targetLevel: level
+            }
+        });
+
+        return queueItem;
     }
 
     /**
