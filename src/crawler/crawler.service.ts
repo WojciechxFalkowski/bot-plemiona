@@ -20,7 +20,7 @@ import { VillagesService } from '../villages/villages.service';
 import { VillageResponseDto } from '../villages/dto';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { AuthUtils } from '@/utils/auth/auth.utils';
-import { ScavengingTimeData } from '@/utils/scavenging/scavenging.interfaces';
+import { ScavengingTimeData, ScavengeLevelStatus } from '@/utils/scavenging/scavenging.interfaces';
 import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
 import { VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
@@ -449,12 +449,31 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                         const sortedPlans = [...dispatchPlan].sort((a, b) => a.level - b.level);
 
                         for (const levelPlan of sortedPlans) {
-                            // Po każdym przeładowaniu strony musimy odczytać nowe statusy poziomów
-                            const currentStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
-                            const levelStatus = currentStatuses.find(s => s.level === levelPlan.level);
+                            // Retry logic - spróbuj maksymalnie 3 razy z opóźnieniem, aby uniknąć race condition
+                            let levelStatus: ScavengeLevelStatus | undefined;
+                            let retryCount = 0;
+                            const maxRetries = 3;
+                            const retryDelay = 1500; // 1.5 sekundy między próbami
+
+                            while (retryCount < maxRetries && !levelStatus?.isAvailable) {
+                                if (retryCount > 0) {
+                                    this.logger.debug(`Retry ${retryCount}/${maxRetries - 1} checking level ${levelPlan.level} status in village ${village.name} after ${retryDelay}ms delay...`);
+                                    await page.waitForTimeout(retryDelay);
+                                }
+
+                                // Po każdym przeładowaniu strony musimy odczytać nowe statusy poziomów
+                                const currentStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
+                                levelStatus = currentStatuses.find(s => s.level === levelPlan.level);
+
+                                if (levelStatus?.isAvailable) {
+                                    break; // Poziom jest dostępny, wyjdź z pętli retry
+                                }
+
+                                retryCount++;
+                            }
 
                             if (!levelStatus || !levelStatus.isAvailable) {
-                                this.logger.warn(`Level ${levelPlan.level} is no longer available in village ${village.name}. Skipping.`);
+                                this.logger.warn(`Level ${levelPlan.level} is not available in village ${village.name} after ${maxRetries} attempts. Skipping.`);
                                 continue;
                             }
 
@@ -520,6 +539,10 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                                     await page.waitForLoadState('networkidle', { timeout: 5000 });
                                     await page.waitForTimeout(1000); // Dodatkowe opóźnienie dla stabilności
                                     this.logger.debug(`Page reloaded after starting level ${levelPlan.level} in village ${village.name}`);
+                                    
+                                    // Wait for level containers to be visible before checking status in next iteration
+                                    await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+                                    await page.waitForTimeout(500); // Dodatkowe opóźnienie dla stabilności DOM
                                 } else {
                                     this.logger.warn(`Start button not visible for level ${levelPlan.level} in village ${village.name}, skipping dispatch.`);
                                 }

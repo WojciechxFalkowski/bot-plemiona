@@ -36,13 +36,13 @@ export class ScavengingUtils {
             const level = i + 1; // Poziom 1, 2, 3, 4
 
             // Sprawdź, czy poziom jest zablokowany (szukając przycisku Odblokowanie)
-            const isLocked = await container.locator(levelSelectors.levelUnlockButton).isVisible({ timeout: 1000 }); // Krótki timeout
+            const isLocked = await container.locator(levelSelectors.levelUnlockButton).isVisible({ timeout: 3000 });
 
             // Sprawdź, czy poziom jest w trakcie odblokowywania
-            const isUnlocking = await container.locator('.unlocking-view').isVisible({ timeout: 1000 });
+            const isUnlocking = await container.locator('.unlocking-view').isVisible({ timeout: 3000 });
 
             // Sprawdź, czy poziom ma przycisk Start (jest potencjalnie dostępny)
-            const hasStartButton = await container.locator(levelSelectors.levelStartButton).isVisible({ timeout: 1000 }); // Krótki timeout
+            const hasStartButton = await container.locator(levelSelectors.levelStartButton).isVisible({ timeout: 3000 });
 
             // Określ stan:
             const isAvailable = !isLocked && !isUnlocking && hasStartButton;
