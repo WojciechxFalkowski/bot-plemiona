@@ -32,8 +32,18 @@ export class BarbarianVillagesService {
     ) {
     }
 
-    async findAll(serverId: number): Promise<BarbarianVillageEntity[]> {
-        this.logger.debug(`Finding all barbarian villages for server ${serverId}`);
+    async findAll(
+        serverId: number,
+        villageId?: string,
+        coordinateX?: number,
+        coordinateY?: number
+    ): Promise<BarbarianVillageEntity[]> {
+        const coordsLog = villageId && coordinateX !== undefined && coordinateY !== undefined
+            ? ` for village ${villageId} at coordinates (${coordinateX};${coordinateY})`
+            : villageId
+                ? ` for village ${villageId}`
+                : '';
+        this.logger.log(`Finding all barbarian villages for server ${serverId}${coordsLog}`);
         return await this.barbarianVillageRepository.find({
             where: { serverId },
             order: { createdAt: 'DESC' }
@@ -134,6 +144,42 @@ export class BarbarianVillagesService {
         this.logger.log(`Barbarian village created from URL: ${savedVillage.name} (${savedVillage.target}) on server ${serverId}`);
 
         return savedVillage;
+    }
+
+    /**
+     * Creates multiple barbarian villages in bulk
+     * @param serverId - Server ID
+     * @param villagesData - Array of village data to create
+     * @returns Array of created barbarian village entities
+     */
+    async createBulk(
+        serverId: number,
+        villagesData: Array<{ target: string; villageId: string }>
+    ): Promise<BarbarianVillageEntity[]> {
+        this.logger.log(`Creating ${villagesData.length} barbarian villages in bulk for serverId=${serverId}`);
+
+        if (villagesData.length === 0) {
+            return [];
+        }
+
+        // Create entities for all villages
+        const villages = villagesData.map(data => 
+            this.barbarianVillageRepository.create({
+                target: data.target,
+                serverId,
+                villageId: data.villageId,
+                name: 'Wioska barbarzyńska',
+                coordinateX: 0,
+                coordinateY: 0,
+                canAttack: true
+            })
+        );
+
+        // Save all villages in batch
+        const savedVillages = await this.barbarianVillageRepository.save(villages);
+        this.logger.log(`Successfully created ${savedVillages.length} barbarian villages for serverId=${serverId}`);
+
+        return savedVillages;
     }
 
     async update(serverId: number, target: string, updateBarbarianVillageDto: UpdateBarbarianVillageDto): Promise<BarbarianVillageEntity> {

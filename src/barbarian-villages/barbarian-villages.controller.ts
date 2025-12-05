@@ -1,13 +1,15 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe, Query, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { CreateBarbarianVillageDto, CreateBarbarianVillageFromUrlDto, UpdateBarbarianVillageDto } from './dto';
+import { CreateBarbarianVillageDto, CreateBarbarianVillageFromUrlDto, CreateBarbarianVillagesBulkFromUrlDto, UpdateBarbarianVillageDto } from './dto';
 import { BarbarianVillagesService } from './barbarian-villages.service';
+import { BulkBarbarianVillagesService } from './bulk-barbarian-villages/bulk-barbarian-villages.service';
 
 @ApiTags('Barbarian Villages')
 @Controller('barbarian-villages')
 export class BarbarianVillagesController {
   constructor(
-    private readonly barbarianVillagesService: BarbarianVillagesService
+    private readonly barbarianVillagesService: BarbarianVillagesService,
+    private readonly bulkBarbarianVillagesService: BulkBarbarianVillagesService
   ) { }
 
   @Get()
@@ -115,6 +117,56 @@ export class BarbarianVillagesController {
     @Body() createBarbarianVillageDto: CreateBarbarianVillageDto
   ) {
     return await this.barbarianVillagesService.create(serverId, createBarbarianVillageDto);
+  }
+
+  @Post(':serverId/bulk-from-url')
+  @ApiOperation({
+    summary: 'Bulk create barbarian villages from URLs',
+    description: 'Accepts multiple map URLs, extracts barbarian village links from the map and returns them'
+  })
+  @ApiParam({
+    name: 'serverId',
+    description: 'Server ID',
+    type: 'number',
+    example: 223
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Barbarian village links extracted successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        links: {
+          type: 'array',
+          items: { type: 'string' },
+          example: [
+            'https://pl223.plemiona.pl/game.php?village=8742&screen=info_village&id=12345',
+            'https://pl223.plemiona.pl/game.php?village=8742&screen=info_village&id=12346'
+          ]
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed - URLs are invalid or serverId/villageId mismatch'
+  })
+  async bulkCreateFromUrl(
+    @Param('serverId', ParseIntPipe) serverId: number,
+    @Body() bulkDto: CreateBarbarianVillagesBulkFromUrlDto
+  ): Promise<{ links: string[] }> {
+    // Verify that serverId from path matches serverId from body
+    if (bulkDto.serverId !== serverId) {
+      throw new BadRequestException(`serverId from path (${serverId}) does not match serverId from body (${bulkDto.serverId})`);
+    }
+
+    const result = await this.bulkBarbarianVillagesService.executeBulkExtraction(
+      bulkDto.urls,
+      bulkDto.serverId,
+      bulkDto.villageId
+    );
+
+    return result;
   }
 
   @Post(':serverId/from-url')

@@ -8,11 +8,12 @@ import { PlemionaCookiesModule } from '@/plemiona-cookies';
 import { ServersModule } from '@/servers';
 import { MiniAttackStrategiesModule } from '@/mini-attack-strategies';
 import { BarbarianVillagesService } from './barbarian-villages.service';
+import { BulkBarbarianVillagesService } from './bulk-barbarian-villages/bulk-barbarian-villages.service';
 
 @Module({
   imports: [DatabaseModule, ConfigModule, SettingsModule, PlemionaCookiesModule, ServersModule, MiniAttackStrategiesModule],
   controllers: [BarbarianVillagesController],
-  providers: [...barbarianVillagesProviders, BarbarianVillagesService],
+  providers: [...barbarianVillagesProviders, BarbarianVillagesService, BulkBarbarianVillagesService],
   exports: [BarbarianVillagesService],
 })
 export class BarbarianVillagesModule { } 
