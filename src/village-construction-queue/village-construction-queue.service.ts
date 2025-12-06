@@ -522,24 +522,15 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         if (!village) {
             throw new NotFoundException(`Village with name "${villageName}" not found`);
         }
+        console.log("v1");
+        console.log(serverId);
 
         const server = await this.serversService.findById(serverId);
         const serverCode = server.serverCode;
-        const serverName = server.serverName;
 
         const { browser, context, page } = await this.createBrowserSession(serverId);
-        try {
-            const loginResult = await AuthUtils.loginAndSelectWorld(
-                page,
-                this.credentials,
-                this.plemionaCookiesService,
-                serverName
-            );
-            if (!loginResult.success || !loginResult.worldSelected) {
-                await browser.close();
-                throw new BadRequestException(`Login failed: ${loginResult.error || 'Unknown error'}`);
-            }
 
+        try {
             const villageResponseDto = this.villagesService.mapToResponseDto(village);
             const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverCode, village.id, page);
 
@@ -550,6 +541,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
                 buildingLevels,
                 buildQueue
             };
+
         } finally {
             await browser.close();
         }
@@ -573,13 +565,13 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         const buildingLevels = await villageDetailPage.extractBuildingLevels(serverCode);
 
         // Pobierz aktualną kolejkę budowy z gry
-        const buildQueue = await villageDetailPage.extractBuildQueue(serverCode);
+        // const buildQueue = await villageDetailPage.extractBuildQueue(serverCode);
 
-        this.logger.log(`Scraped game data for village ${villageId}: ${Object.keys(buildingLevels).length} buildings, ${buildQueue.length} items in game queue`);
+        // this.logger.log(`Scraped game data for village ${villageId}: ${Object.keys(buildingLevels).length} buildings, ${buildQueue.length} items in game queue`);
 
         return {
             buildingLevels,
-            buildQueue
+            buildQueue: []
         };
     }
 

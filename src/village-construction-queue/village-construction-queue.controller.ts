@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Logger, Get, Param, Delete, ParseIntPipe, NotFoundException, Query } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Logger, Get, Param, Delete, ParseIntPipe, NotFoundException, Query, BadRequestException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { VillageConstructionQueueService } from './village-construction-queue.service';
 import { CreateConstructionQueueDto } from './dto/create-construction-queue.dto';
@@ -7,7 +7,7 @@ import { VillageConstructionQueueEntity } from './entities/village-construction-
 import { BuildingLevels, BuildQueueItem } from '@/crawler/pages/village-overview.page';
 import { VillageResponseDto } from '@/villages/dto';
 import { VillagesService } from '@/villages/villages.service';
-import { 
+import {
     AddBuildingToQueueDecorators,
     GetVillageQueueDecorators,
     GetAllVillagesQueueDecorators,
@@ -94,7 +94,7 @@ export class VillageConstructionQueueController {
         @Query('serverId') serverId?: string
     ): Promise<VillageConstructionQueueEntity[]> {
         const serverIdNumber = serverId ? parseInt(serverId, 10) : undefined;
-        const logMessage = serverIdNumber 
+        const logMessage = serverIdNumber
             ? `Request to get construction queue for server ${serverIdNumber}`
             : 'Request to get construction queue for all villages';
 
@@ -102,17 +102,17 @@ export class VillageConstructionQueueController {
 
         try {
             const result = await this.constructionQueueService.getAllQueues(serverIdNumber);
-            const successMessage = serverIdNumber 
+            const successMessage = serverIdNumber
                 ? `Successfully retrieved ${result.length} total queue items for server ${serverIdNumber}`
                 : `Successfully retrieved ${result.length} total queue items for all villages`;
-            
+
             this.logger.log(successMessage);
             return result;
         } catch (error) {
-            const errorMessage = serverIdNumber 
+            const errorMessage = serverIdNumber
                 ? `Failed to get queue for server ${serverIdNumber}: ${error.message}`
                 : `Failed to get queue for all villages: ${error.message}`;
-            
+
             this.logger.error(errorMessage, error.stack);
             throw error;
         }
@@ -141,12 +141,21 @@ export class VillageConstructionQueueController {
     @ScrapeVillageQueueDecorators()
     async scrapeVillageQueue(
         @Param('villageName') villageName: string,
-        @Param('serverId') serverId: number
+        @Query('serverId') serverId: number
     ): Promise<{
         villageInfo: VillageResponseDto;
         buildingLevels: BuildingLevels;
         buildQueue: BuildQueueItem[];
     }> {
+
+        if (!serverId) {
+            throw new BadRequestException('Server ID is required');
+        }
+
+        if (!villageName) {
+            throw new BadRequestException('Village name is required');
+        }
+
         this.logger.log(`Request to scrape queue for village "${villageName}"`);
 
         try {
