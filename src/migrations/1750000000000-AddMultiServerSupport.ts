@@ -68,6 +68,12 @@ export class AddMultiServerSupport1750000000000 implements MigrationInterface {
             FOREIGN KEY (\`serverId\`) REFERENCES \`servers\`(\`id\`) ON DELETE CASCADE
         `);
 
+        await queryRunner.query(`
+            ALTER TABLE \`mini_attack_strategies\` 
+            ADD CONSTRAINT \`FK_mini_attack_strategies_serverId\` 
+            FOREIGN KEY (\`serverId\`) REFERENCES \`servers\`(\`id\`) ON DELETE CASCADE
+        `);
+
         // 5. Dodanie unique constraints dla kombinacji server_id + game_id
         await queryRunner.query(`
             ALTER TABLE \`villages\` 
@@ -93,7 +99,7 @@ export class AddMultiServerSupport1750000000000 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX \`IDX_village_construction_queue_serverId\` ON \`village_construction_queue\` (\`serverId\`)`);
         await queryRunner.query(`CREATE INDEX \`IDX_settings_serverId_key\` ON \`settings\` (\`serverId\`, \`key\`)`);
         await queryRunner.query(`CREATE INDEX \`IDX_servers_isActive\` ON \`servers\` (\`isActive\`)`);
-        
+
         // Dodatkowe indeksy dla często używanych kolumn
         await queryRunner.query(`CREATE INDEX \`IDX_barbarian_villages_coordinates\` ON \`barbarian_villages\` (\`coordinateX\`, \`coordinateY\`)`);
     }
@@ -111,7 +117,7 @@ export class AddMultiServerSupport1750000000000 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE \`settings\` DROP CONSTRAINT \`UQ_settings_serverId_key\``);
         await queryRunner.query(`ALTER TABLE \`barbarian_villages\` DROP CONSTRAINT \`UQ_barbarian_villages_serverId_target\``);
         await queryRunner.query(`ALTER TABLE \`villages\` DROP CONSTRAINT \`UQ_villages_serverId_id\``);
-
+        await queryRunner.query(`ALTER TABLE \`mini_attack_strategies\` DROP FOREIGN KEY \`FK_mini_attack_strategies_serverId\``);
         // Usunięcie foreign keys
         await queryRunner.query(`ALTER TABLE \`settings\` DROP FOREIGN KEY \`FK_settings_serverId\``);
         await queryRunner.query(`ALTER TABLE \`village_construction_queue\` DROP FOREIGN KEY \`FK_village_construction_queue_serverId\``);
