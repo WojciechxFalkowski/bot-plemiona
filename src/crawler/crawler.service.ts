@@ -774,6 +774,11 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                                     // Wait for level containers to be visible before checking status in next iteration
                                     await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
                                     await page.waitForTimeout(500); // Dodatkowe opóźnienie dla stabilności DOM
+                                    //refresh page
+                                    await page.reload();
+                                    await page.waitForTimeout(1000); // wait 1 second
+                                    this.logger.debug(`Page reloaded after starting level ${levelPlan.level} in village ${village.name}`);
+                                    await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
                                 } else {
                                     this.logger.warn(`Start button not visible for level ${levelPlan.level} in village ${village.name}, skipping dispatch.`);
                                 }
