@@ -35,12 +35,21 @@ export class ScavengingLimitsController {
     createOrUpdate(
         @Query('serverId') serverId: string,
         @Query('villageId') villageId: string,
-        @Body('maxSpearUnits') maxSpearUnits: number
+        @Body() limits: {
+            maxSpearUnits?: number | null;
+            maxSwordUnits?: number | null;
+            maxAxeUnits?: number | null;
+            maxArcherUnits?: number | null;
+            maxLightUnits?: number | null;
+            maxMarcherUnits?: number | null;
+            maxHeavyUnits?: number | null;
+        }
     ) {
         if (!serverId || !villageId) {
             throw new BadRequestException('Both serverId and villageId query parameters are required');
         }
-        return this.scavengingLimitsService.createOrUpdate(+serverId, villageId, maxSpearUnits);
+        
+        return this.scavengingLimitsService.createOrUpdate(+serverId, villageId, limits);
     }
 
     @Patch(':id')

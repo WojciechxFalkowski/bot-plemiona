@@ -14,8 +14,26 @@ export class ScavengingLimitEntity {
     @Column({ type: 'varchar', length: 255 })
     villageId: string;
 
-    @Column({ type: 'int', default: 0 })
-    maxSpearUnits: number; // Maksymalna ilość pikinierów do użycia w zbieractwie
+    @Column({ type: 'int', nullable: true, default: null })
+    maxSpearUnits: number | null; // Maksymalna ilość pikinierów do użycia w zbieractwie
+
+    @Column({ type: 'int', nullable: true, default: null })
+    maxSwordUnits: number | null; // Maksymalna ilość mieczników do użycia w zbieractwie
+
+    @Column({ type: 'int', nullable: true, default: null })
+    maxAxeUnits: number | null; // Maksymalna ilość toporników do użycia w zbieractwie
+
+    @Column({ type: 'int', nullable: true, default: null })
+    maxArcherUnits: number | null; // Maksymalna ilość łuczników do użycia w zbieractwie
+
+    @Column({ type: 'int', nullable: true, default: null })
+    maxLightUnits: number | null; // Maksymalna ilość lekkiej kawalerii do użycia w zbieractwie
+
+    @Column({ type: 'int', nullable: true, default: null })
+    maxMarcherUnits: number | null; // Maksymalna ilość konnych łuczników do użycia w zbieractwie
+
+    @Column({ type: 'int', nullable: true, default: null })
+    maxHeavyUnits: number | null; // Maksymalna ilość ciężkiej kawalerii do użycia w zbieractwie
 
     @CreateDateColumn()
     createdAt: Date;

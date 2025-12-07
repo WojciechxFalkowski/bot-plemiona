@@ -19,6 +19,7 @@ import { MiniAttackStrategiesModule } from './mini-attack-strategies';
 import { ArmyTrainingModule } from './army-training/army-training.module';
 import { PlayerVillagesModule } from './player-villages/player-villages.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AdvancedScavengingModule } from './advanced-scavenging/advanced-scavenging.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ArmyTrainingModule,
     PlayerVillagesModule,
     NotificationsModule,
+    AdvancedScavengingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

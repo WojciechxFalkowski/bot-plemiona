@@ -111,12 +111,38 @@ export class ScavengingUtils {
     }
 
     /**
+     * Mapuje nazwę jednostki na nazwę pola limitu w obiekcie unitLimits.
+     */
+    private static getUnitLimitKey(unit: ScavengingUnit): string {
+        const unitNameMap: Record<ScavengingUnit, string> = {
+            spear: 'maxSpearUnits',
+            sword: 'maxSwordUnits',
+            axe: 'maxAxeUnits',
+            archer: 'maxArcherUnits',
+            light: 'maxLightUnits',
+            marcher: 'maxMarcherUnits',
+            heavy: 'maxHeavyUnits',
+        };
+        return unitNameMap[unit];
+    }
+
+    /**
      * Oblicza dystrybucję wojsk na dostępne poziomy.
+     * Uwzględnia wszystkie włączone jednostki i limity dla każdej jednostki.
      */
     static calculateTroopDistribution(
         availableUnits: Partial<Record<ScavengingUnit, number>>,
         freeLevels: ScavengeLevelStatus[],
-        maxSpearLimit?: number
+        enabledUnits: Record<ScavengingUnit, boolean>,
+        unitLimits?: {
+            maxSpearUnits?: number | null;
+            maxSwordUnits?: number | null;
+            maxAxeUnits?: number | null;
+            maxArcherUnits?: number | null;
+            maxLightUnits?: number | null;
+            maxMarcherUnits?: number | null;
+            maxHeavyUnits?: number | null;
+        }
     ): LevelDispatchPlan[] | null {
 
         const dispatchPlan: LevelDispatchPlan[] = freeLevels.map(l => ({ level: l.level, dispatchUnits: {} }));
@@ -142,57 +168,70 @@ export class ScavengingUtils {
 
         this.logger.debug(`Total packs for distribution: ${totalPacks}`);
 
-        const unitsToSendTotal: Partial<Record<ScavengingUnit, number>> = {};
-
-        // Używaj tylko pikinierów (spear) do obliczania wojska
-        const spearUnits = availableUnits['spear'] || 0;
-        
-        // NOWA LOGIKA: Zastosuj limit jeśli został podany
-        const effectiveSpearUnits = maxSpearLimit !== undefined 
-            ? Math.min(spearUnits, maxSpearLimit)
-            : spearUnits;
-        
-        unitsToSendTotal['spear'] = effectiveSpearUnits;
-        
-        // Logowanie informacji o limicie
-        if (maxSpearLimit !== undefined && maxSpearLimit < spearUnits) {
-            this.logger.log(`Applied spear limit: ${spearUnits} available → ${effectiveSpearUnits} used (limit: ${maxSpearLimit})`);
-        }
-
-        // Pozostałe jednostki ustaw na 0
+        // Krok 1: Filtrowanie dostępnych jednostek - tylko włączone i dostępne
+        const eligibleUnits: Partial<Record<ScavengingUnit, number>> = {};
         for (const unit of unitOrder) {
-            if (unit !== 'spear') {
-                unitsToSendTotal[unit] = 0;
+            if (enabledUnits[unit] && (availableUnits[unit] || 0) > 0) {
+                eligibleUnits[unit] = availableUnits[unit] || 0;
             }
         }
 
-        this.logger.debug(`Using only spear units for scavenging: ${effectiveSpearUnits} units (${spearUnits} available${maxSpearLimit !== undefined ? `, limit: ${maxSpearLimit}` : ''})`);
-        this.logger.debug('Total units eligible for sending (only spear):', unitsToSendTotal);
+        if (Object.keys(eligibleUnits).length === 0) {
+            this.logger.warn('No eligible units found (no enabled units with available count > 0).');
+            return null;
+        }
 
-        // Rozdziel tylko pikinierów proporcjonalnie na poziomy
+        // Krok 2: Zastosowanie limitów dla każdej jednostki
+        const effectiveUnits: Partial<Record<ScavengingUnit, number>> = {};
+        for (const unit of unitOrder) {
+            if (eligibleUnits[unit] !== undefined) {
+                const available = eligibleUnits[unit]!;
+                const limitKey = this.getUnitLimitKey(unit);
+                const limit = unitLimits?.[limitKey as keyof typeof unitLimits];
+
+                if (limit !== null && limit !== undefined) {
+                    effectiveUnits[unit] = Math.min(available, limit);
+                    if (limit < available) {
+                        this.logger.log(`Applied ${unit} limit: ${available} available → ${effectiveUnits[unit]} used (limit: ${limit})`);
+                    }
+                } else {
+                    effectiveUnits[unit] = available;
+                }
+            }
+        }
+
+        // Logowanie informacji o używanych jednostkach
+        const unitsString = Object.entries(effectiveUnits)
+            .map(([unit, count]) => `${unit}=${count}`)
+            .join(', ');
+        this.logger.debug(`Using units for scavenging: ${unitsString}`);
+
+        // Krok 3: Rozdziel wszystkie jednostki proporcjonalnie na poziomy
         for (const levelStatus of eligibleLevels) {
             const level = levelStatus.level;
             const levelPack = levelPacks[level];
             const plan = dispatchPlan.find(p => p.level === level);
             if (!plan) continue;
 
-            // Oblicz liczbę pikinierów dla tego poziomu
-            const spearCountForLevel = Math.floor((effectiveSpearUnits * levelPack) / totalPacks);
-            plan.dispatchUnits['spear'] = spearCountForLevel;
-
-            // Pozostałe jednostki ustaw na 0
+            // Dla każdej jednostki oblicz proporcjonalną dystrybucję
             for (const unit of unitOrder) {
-                if (unit !== 'spear') {
+                if (effectiveUnits[unit] !== undefined) {
+                    const countForLevel = Math.floor((effectiveUnits[unit]! * levelPack) / totalPacks);
+                    plan.dispatchUnits[unit] = countForLevel;
+                } else {
                     plan.dispatchUnits[unit] = 0;
                 }
             }
         }
 
-        // Zastosuj limit max_resources dla każdego poziomu osobno (tylko pikinierzy)
+        // Krok 4: Zastosuj limit max_resources dla każdego poziomu osobno (wszystkie jednostki)
         for (const plan of dispatchPlan) {
-            // Oblicz pojemność tylko dla pikinierów
-            const spearUnits = plan.dispatchUnits['spear'] || 0;
-            const currentCapacity = spearUnits * unitSettings['spear'].capacity;
+            // Oblicz całkowitą pojemność dla wszystkich jednostek
+            let totalCapacity = 0;
+            for (const unit of unitOrder) {
+                const count = plan.dispatchUnits[unit] || 0;
+                totalCapacity += count * unitSettings[unit].capacity;
+            }
 
             let levelMaxResources = scavengingSettings.max_resources;
             // Dostosuj max_resources dla poziomu (logika z JS)
@@ -201,10 +240,15 @@ export class ScavengingUtils {
             else if (eligibleLevels.length === 3) levelMaxResources *= 2;
             else levelMaxResources *= 1.3333;
 
-            if (currentCapacity > levelMaxResources) {
-                const ratio = levelMaxResources / currentCapacity;
-                this.logger.debug(`Level ${plan.level} spear capacity ${currentCapacity} exceeds limit ${levelMaxResources}. Applying ratio ${ratio}.`);
-                plan.dispatchUnits['spear'] = Math.floor(spearUnits * ratio);
+            if (totalCapacity > levelMaxResources) {
+                const ratio = levelMaxResources / totalCapacity;
+                this.logger.debug(`Level ${plan.level} total capacity ${totalCapacity} exceeds limit ${levelMaxResources}. Applying ratio ${ratio}.`);
+                
+                // Zastosuj ratio do wszystkich jednostek
+                for (const unit of unitOrder) {
+                    const currentCount = plan.dispatchUnits[unit] || 0;
+                    plan.dispatchUnits[unit] = Math.floor(currentCount * ratio);
+                }
             }
         }
 
@@ -218,6 +262,8 @@ export class ScavengingUtils {
     static async collectScavengingTimeData(page: Page, villageId: string, villageName: string): Promise<VillageScavengingData> {
         const now = new Date();
         const levels: ScavengingLevelTimeData[] = [];
+
+        await page.waitForTimeout(1000); // wait 1 second
 
         try {
             // Pobierz aktualny status poziomów
@@ -239,6 +285,7 @@ export class ScavengingUtils {
                         const unlockCountdownElement = levelStatus.containerLocator.locator('.unlock-countdown-text');
                         if (await unlockCountdownElement.isVisible({ timeout: 2000 })) {
                             timeRemaining = await unlockCountdownElement.textContent({ timeout: 2000 });
+                            this.logger.debug(`Found unlock time text for level ${levelStatus.level}: "${timeRemaining}"`);
                             if (timeRemaining) {
                                 timeRemainingSeconds = this.parseTimeToSeconds(timeRemaining.trim());
                                 estimatedCompletionTime = new Date(now.getTime() + (timeRemainingSeconds * 1000));
@@ -250,13 +297,17 @@ export class ScavengingUtils {
                 } else if (levelStatus.isBusy) {
                     status = 'busy';
                     // Spróbuj odczytać czas pozostały do końca misji
+                    this.logger.debug(`Trying to read remaining time for busy level ${levelStatus.level}`);
                     try {
                         const timerElement = levelStatus.containerLocator.locator(levelSelectors.levelTimeRemaining);
                         if (await timerElement.isVisible({ timeout: 2000 })) {
                             timeRemaining = await timerElement.textContent({ timeout: 2000 });
+                            this.logger.debug(`Found time text for level ${levelStatus.level}: "${timeRemaining}"`);
                             if (timeRemaining) {
                                 timeRemainingSeconds = this.parseTimeToSeconds(timeRemaining.trim());
+                                this.logger.debug(`Parsed time text for level ${levelStatus.level}: "${timeRemaining}" to ${timeRemainingSeconds} seconds`);
                                 estimatedCompletionTime = new Date(now.getTime() + (timeRemainingSeconds * 1000));
+                                this.logger.debug(`Estimated completion time for level ${levelStatus.level}: "${estimatedCompletionTime}"`);
                             }
                         }
                     } catch (error) {

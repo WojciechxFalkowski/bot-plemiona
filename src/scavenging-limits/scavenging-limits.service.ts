@@ -36,22 +36,56 @@ export class ScavengingLimitsService {
     /**
      * Utwórz lub zaktualizuj limit dla wioski
      */
-    async createOrUpdate(serverId: number, villageId: string, maxSpearUnits: number): Promise<ScavengingLimitEntity> {
+    async createOrUpdate(
+        serverId: number,
+        villageId: string,
+        limits: {
+            maxSpearUnits?: number | null;
+            maxSwordUnits?: number | null;
+            maxAxeUnits?: number | null;
+            maxArcherUnits?: number | null;
+            maxLightUnits?: number | null;
+            maxMarcherUnits?: number | null;
+            maxHeavyUnits?: number | null;
+        }
+    ): Promise<ScavengingLimitEntity> {
         const existing = await this.findByServerAndVillage(serverId, villageId);
         
         if (existing) {
-            existing.maxSpearUnits = maxSpearUnits;
+            // Aktualizuj tylko te limity, które zostały przekazane
+            if (limits.maxSpearUnits !== undefined) existing.maxSpearUnits = limits.maxSpearUnits;
+            if (limits.maxSwordUnits !== undefined) existing.maxSwordUnits = limits.maxSwordUnits;
+            if (limits.maxAxeUnits !== undefined) existing.maxAxeUnits = limits.maxAxeUnits;
+            if (limits.maxArcherUnits !== undefined) existing.maxArcherUnits = limits.maxArcherUnits;
+            if (limits.maxLightUnits !== undefined) existing.maxLightUnits = limits.maxLightUnits;
+            if (limits.maxMarcherUnits !== undefined) existing.maxMarcherUnits = limits.maxMarcherUnits;
+            if (limits.maxHeavyUnits !== undefined) existing.maxHeavyUnits = limits.maxHeavyUnits;
+            
             const updated = await this.scavengingLimitsRepository.save(existing);
-            this.logger.log(`Updated scavenging limit for village ${villageId} on server ${serverId}: ${maxSpearUnits} spear units`);
+            const limitsString = Object.entries(limits)
+                .filter(([_, value]) => value !== undefined && value !== null)
+                .map(([key, value]) => `${key}=${value}`)
+                .join(', ');
+            this.logger.log(`Updated scavenging limit for village ${villageId} on server ${serverId}: ${limitsString || 'no limits'}`);
             return updated;
         } else {
             const newLimit = this.scavengingLimitsRepository.create({
                 serverId,
                 villageId,
-                maxSpearUnits
+                maxSpearUnits: limits.maxSpearUnits ?? null,
+                maxSwordUnits: limits.maxSwordUnits ?? null,
+                maxAxeUnits: limits.maxAxeUnits ?? null,
+                maxArcherUnits: limits.maxArcherUnits ?? null,
+                maxLightUnits: limits.maxLightUnits ?? null,
+                maxMarcherUnits: limits.maxMarcherUnits ?? null,
+                maxHeavyUnits: limits.maxHeavyUnits ?? null,
             });
             const created = await this.scavengingLimitsRepository.save(newLimit);
-            this.logger.log(`Created scavenging limit for village ${villageId} on server ${serverId}: ${maxSpearUnits} spear units`);
+            const limitsString = Object.entries(limits)
+                .filter(([_, value]) => value !== undefined && value !== null)
+                .map(([key, value]) => `${key}=${value}`)
+                .join(', ');
+            this.logger.log(`Created scavenging limit for village ${villageId} on server ${serverId}: ${limitsString || 'no limits'}`);
             return created;
         }
     }
