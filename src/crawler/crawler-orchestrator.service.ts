@@ -20,6 +20,8 @@ import { PlayerVillageAttackStrategiesService } from '@/player-villages/player-v
 import * as ghostCursor from 'ghost-cursor-playwright';
 import { NotificationsService } from '@/notifications/notifications.service';
 import { Page } from 'playwright';
+import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
+import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execution-log.entity';
 
 interface CrawlerTask {
     nextExecutionTime: Date;
@@ -99,7 +101,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly armyTrainingService: ArmyTrainingService,
         private readonly armyTrainingStrategiesService: ArmyTrainingStrategiesService,
         private readonly playerVillagesService: PlayerVillagesService,
-        private readonly notificationsService: NotificationsService
+        private readonly notificationsService: NotificationsService,
+        private readonly crawlerExecutionLogsService: CrawlerExecutionLogsService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -323,6 +326,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             plan.playerVillageAttacks.enabled = await this.isPlayerVillageAttacksEnabled(serverId);
             plan.armyTraining.enabled = await this.isArmyTrainingEnabled(serverId);
 
+            // TODO dopisac logike, aby  wioski barbarzynskie ktore przyniosly straty wyslac na nie atak z taranem
             this.logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}`);
             this.logDetailedTaskSchedule();
             this.scheduleNextExecution();
@@ -626,10 +630,32 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         // Visible START banner with runId and timestamp
         const runId = `${taskType.replace(/\s+/g, '_')}-${plan.serverCode}-${Date.now()}`;
         const startTs = Date.now();
+        const startedAt = new Date(startTs);
         this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
         this.logger.warn(`🟩 START | ${taskType} | ${plan.serverCode} (${plan.serverName}) | runId=${runId}`);
-        this.logger.warn(`⏱️ Started at: ${new Date(startTs).toLocaleString()}`);
+        this.logger.warn(`⏱️ Started at: ${startedAt.toLocaleString()}`);
         this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
+
+        // Get villageId if applicable (for Army Training)
+        let villageId: string | null = null;
+        if (taskType === 'Army Training' && plan.armyTraining.villageId) {
+            villageId = plan.armyTraining.villageId;
+        }
+
+        // Create execution log entry
+        let executionLogId: number | null = null;
+        try {
+            const executionLog = await this.crawlerExecutionLogsService.logExecution({
+                serverId: serverId,
+                villageId: villageId,
+                title: taskType,
+                description: null,
+                startedAt: startedAt,
+            });
+            executionLogId = executionLog.id;
+        } catch (logError) {
+            this.logger.error(`❌ Failed to create execution log:`, logError);
+        }
 
         try {
             switch (taskType) {
@@ -661,23 +687,52 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             plan.lastSuccessfulExecution = new Date();
 
             const durationMs = Date.now() - startTs;
+            const endedAt = new Date();
             this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
             this.logger.warn(`🟦 END   | ${taskType} | ${plan.serverCode} | runId=${runId}`);
             this.logger.warn(`✅ Status: success | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
-            this.logger.warn(`🕒 Ended at: ${new Date().toLocaleString()}`);
+            this.logger.warn(`🕒 Ended at: ${endedAt.toLocaleString()}`);
             this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
 
             this.logger.log(`✅ ${taskType} completed successfully for server ${plan.serverCode}`);
 
+            // Update execution log with success status
+            if (executionLogId !== null) {
+                try {
+                    await this.crawlerExecutionLogsService.updateExecutionLog(executionLogId, {
+                        endedAt: endedAt,
+                        status: ExecutionStatus.SUCCESS,
+                        description: null,
+                    });
+                } catch (logError) {
+                    this.logger.error(`❌ Failed to update execution log:`, logError);
+                }
+            }
+
         } catch (error) {
             const durationMs = Date.now() - startTs;
+            const endedAt = new Date();
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
             this.logger.warn(`🟥 END   | ${taskType} | ${plan.serverCode} | runId=${runId}`);
             this.logger.warn(`❌ Status: error   | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
-            this.logger.warn(`🕒 Ended at: ${new Date().toLocaleString()}`);
+            this.logger.warn(`🕒 Ended at: ${endedAt.toLocaleString()}`);
             this.logger.warn('══════════════════════════════════════════════════════════════════════════════');
 
             this.logger.error(`❌ Error executing ${taskType} for server ${plan.serverCode}:`, error);
+
+            // Update execution log with error status
+            if (executionLogId !== null) {
+                try {
+                    await this.crawlerExecutionLogsService.updateExecutionLog(executionLogId, {
+                        endedAt: endedAt,
+                        status: ExecutionStatus.ERROR,
+                        description: errorMessage,
+                    });
+                } catch (logError) {
+                    this.logger.error(`❌ Failed to update execution log:`, logError);
+                }
+            }
 
             // Update next execution time for the failed task to prevent immediate retry
             this.updateNextExecutionTimeForFailedTask(plan, taskType);
