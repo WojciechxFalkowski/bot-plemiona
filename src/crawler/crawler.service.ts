@@ -20,7 +20,7 @@ import { VillagesService } from '../villages/villages.service';
 import { VillageResponseDto } from '../villages/dto';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { AuthUtils } from '@/utils/auth/auth.utils';
-import { ScavengingTimeData, ScavengeLevelStatus } from '@/utils/scavenging/scavenging.interfaces';
+import { ScavengingTimeData, ScavengeLevelStatus, LevelDispatchPlan } from '@/utils/scavenging/scavenging.interfaces';
 import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
 import { VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
@@ -680,11 +680,20 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                         const sortedPlans = [...dispatchPlan].sort((a, b) => a.level - b.level);
 
                         for (const levelPlan of sortedPlans) {
-                            // Retry logic - spróbuj maksymalnie 3 razy z opóźnieniem, aby uniknąć race condition
+                            // ODŚWIEŻ STRONĘ PRZED KAŻDYM POZIOMEM - zapewnia świeże dane
+                            this.logger.debug(`Refreshing page before processing level ${levelPlan.level} in village ${village.name}...`);
+                            await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                            await page.waitForTimeout(1000);
+                            
+                            // Upewnij się że kontenery poziomów są widoczne
+                            await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+                            await page.waitForTimeout(500);
+
+                            // Retry logic - spróbuj maksymalnie 3 razy z opóźnieniem
                             let levelStatus: ScavengeLevelStatus | undefined;
                             let retryCount = 0;
                             const maxRetries = 3;
-                            const retryDelay = 1500; // 1.5 sekundy między próbami
+                            const retryDelay = 1500;
 
                             while (retryCount < maxRetries && !levelStatus?.isAvailable) {
                                 if (retryCount > 0) {
@@ -692,12 +701,11 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                                     await page.waitForTimeout(retryDelay);
                                 }
 
-                                // Po każdym przeładowaniu strony musimy odczytać nowe statusy poziomów
                                 const currentStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
                                 levelStatus = currentStatuses.find(s => s.level === levelPlan.level);
 
                                 if (levelStatus?.isAvailable) {
-                                    break; // Poziom jest dostępny, wyjdź z pętli retry
+                                    break;
                                 }
 
                                 retryCount++;
@@ -717,7 +725,9 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
                             this.logger.log(`Processing level ${levelPlan.level} in village ${village.name}...`);
 
-                            // 1. Wypełnij formularz dla tego poziomu
+                            await page.waitForTimeout(1000);
+
+                            // Wypełnij formularz dla tego poziomu
                             const filledSuccessfully = await ScavengingUtils.fillUnitsForLevel(page, levelPlan, village.name);
 
                             if (!filledSuccessfully) {
@@ -725,66 +735,69 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                                 continue;
                             }
 
-                            // 2. Kliknij Start dla tego poziomu
+                            // Kliknij Start dla tego poziomu
                             try {
-                                // Sprawdź czy przycisk Start jest widoczny
-                                const startButton = levelStatus.containerLocator.locator(levelSelectors.levelStartButton);
+                                // PRZED KLIKNIĘCIEM - upewnij się że mamy aktualny status poziomu
+                                const currentStatusesBeforeClick = await ScavengingUtils.getScavengingLevelStatuses(page);
+                                const levelStatusBeforeClick = currentStatusesBeforeClick.find(s => s.level === levelPlan.level);
+                                
+                                if (!levelStatusBeforeClick || !levelStatusBeforeClick.isAvailable) {
+                                    this.logger.warn(`Level ${levelPlan.level} became unavailable before clicking Start in village ${village.name}. Skipping.`);
+                                    continue;
+                                }
+
+                                const startButton = levelStatusBeforeClick.containerLocator.locator(levelSelectors.levelStartButton);
 
                                 if (await startButton.isVisible({ timeout: 2000 })) {
-                                    // Logi informacyjne o wysyłce - tylko gdy przycisk Start jest dostępny
                                     ScavengingUtils.logDispatchInfo(levelPlan, village.name);
 
                                     // Pobierz faktyczny czas trwania z interfejsu gry
                                     let actualDurationSeconds = 0;
                                     try {
-                                        // Selektor do czasu trwania zbieractwa w kontenerze tego poziomu
                                         const timeSelector = '.duration';
-                                        const timeElement = levelStatus.containerLocator.locator(timeSelector);
+                                        const timeElement = levelStatusBeforeClick.containerLocator.locator(timeSelector);
 
                                         if (await timeElement.isVisible({ timeout: 2000 })) {
                                             const durationText = await timeElement.textContent();
                                             if (durationText) {
                                                 this.logger.log(`  * Faktyczny czas zbieractwa: ${durationText.trim()}`);
                                                 actualDurationSeconds = ScavengingUtils.parseTimeToSeconds(durationText.trim());
-                                            } else {
-                                                this.logger.log(`  * Nie udało się odczytać czasu zbieractwa`);
                                             }
-                                        } else {
-                                            this.logger.log(`  * Element czasu zbieractwa nie jest widoczny`);
                                         }
                                     } catch (timeError) {
                                         this.logger.log(`  * Błąd podczas odczytu czasu zbieractwa: ${timeError.message}`);
                                     }
 
-                                    // Faktyczne kliknięcie przycisku Start
                                     await startButton.click();
                                     this.logger.log(`Clicked Start for level ${levelPlan.level} in village ${village.name}`);
                                     villageSuccessfulDispatches++;
-                                    totalSuccessfulDispatches++;
 
-                                    // AKTUALIZACJA STANU WIOSKI PO DISPATCH
                                     this.updateVillageStateAfterDispatch(village.id, levelPlan.level, actualDurationSeconds);
 
-                                    // Poczekaj na przeładowanie strony po kliknięciu
-                                    this.logger.debug(`Waiting for page to reload after starting level ${levelPlan.level} in village ${village.name}...`);
-                                    await page.waitForLoadState('networkidle', { timeout: 5000 });
-                                    await page.waitForTimeout(1000); // Dodatkowe opóźnienie dla stabilności
-                                    this.logger.debug(`Page reloaded after starting level ${levelPlan.level} in village ${village.name}`);
+                                    // CZEKAJ NA ZAKOŃCZENIE REQUESTA PO KLIKNIĘCIU
+                                    await page.waitForLoadState('networkidle', { timeout: 10000 });
+                                    await page.waitForTimeout(2000); // Daj więcej czasu na przetworzenie
 
-                                    // Wait for level containers to be visible before checking status in next iteration
+                                    // PO WYSŁANIU - odśwież stronę żeby mieć aktualne dane dla kolejnego poziomu
+                                    this.logger.debug(`Refreshing page after dispatching level ${levelPlan.level} in village ${village.name}...`);
+                                    await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                                    await page.waitForTimeout(1000);
+                                    
+                                    // Upewnij się że kontenery są widoczne po odświeżeniu
                                     await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
-                                    await page.waitForTimeout(500); // Dodatkowe opóźnienie dla stabilności DOM
-                                    //refresh page
-                                    await page.reload();
-                                    await page.waitForTimeout(1000); // wait 1 second
-                                    this.logger.debug(`Page reloaded after starting level ${levelPlan.level} in village ${village.name}`);
-                                    await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+                                    await page.waitForTimeout(500);
                                 } else {
                                     this.logger.warn(`Start button not visible for level ${levelPlan.level} in village ${village.name}, skipping dispatch.`);
                                 }
-
                             } catch (clickError) {
                                 this.logger.error(`Error in scavenging for level ${levelPlan.level} in village ${village.name}:`, clickError);
+                                // Jeśli wystąpił błąd, odśwież stronę przed następnym poziomem
+                                try {
+                                    await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                                    await page.waitForTimeout(1000);
+                                } catch (reloadError) {
+                                    this.logger.error(`Error refreshing page after error:`, reloadError);
+                                }
                             }
                         }
 
@@ -908,14 +921,27 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
             // Wypełnij formularze i wyloguj plan dystrybucji
             ScavengingUtils.logDispatchPlan(dispatchPlan, village.name);
 
+            // Zapamiętaj oryginalny plan dla weryfikacji
+            const originalDispatchPlan = JSON.parse(JSON.stringify(dispatchPlan));
+            const failedDispatchLevels = new Map<number, LevelDispatchPlan>();
+
             // Wypełnij i wyślij każdy poziom po kolei
-            this.logger.log(`Starting scavenging missions for village ${village.name}...`);
+            this.logger.log(`=== ROUND 1: Starting scavenging missions for village ${village.name} ===`);
             let villageSuccessfulDispatches = 0;
 
             // Sortuj poziomy od najniższego do najwyższego
             const sortedPlans = [...dispatchPlan].sort((a, b) => a.level - b.level);
 
             for (const levelPlan of sortedPlans) {
+                // ODŚWIEŻ STRONĘ PRZED KAŻDYM POZIOMEM - zapewnia świeże dane
+                this.logger.debug(`Refreshing page before processing level ${levelPlan.level} in village ${village.name}...`);
+                await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                await page.waitForTimeout(1000);
+                
+                // Upewnij się że kontenery poziomów są widoczne
+                await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+                await page.waitForTimeout(500);
+
                 // Retry logic - spróbuj maksymalnie 3 razy z opóźnieniem
                 let levelStatus: ScavengeLevelStatus | undefined;
                 let retryCount = 0;
@@ -952,7 +978,7 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
                 this.logger.log(`Processing level ${levelPlan.level} in village ${village.name}...`);
 
-                await page.waitForTimeout(1000); // wait 1 second
+                await page.waitForTimeout(1000);
 
                 // Wypełnij formularz dla tego poziomu
                 const filledSuccessfully = await ScavengingUtils.fillUnitsForLevel(page, levelPlan, village.name);
@@ -964,7 +990,16 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
                 // Kliknij Start dla tego poziomu
                 try {
-                    const startButton = levelStatus.containerLocator.locator(levelSelectors.levelStartButton);
+                    // PRZED KLIKNIĘCIEM - upewnij się że mamy aktualny status poziomu
+                    const currentStatusesBeforeClick = await ScavengingUtils.getScavengingLevelStatuses(page);
+                    const levelStatusBeforeClick = currentStatusesBeforeClick.find(s => s.level === levelPlan.level);
+                    
+                    if (!levelStatusBeforeClick || !levelStatusBeforeClick.isAvailable) {
+                        this.logger.warn(`Level ${levelPlan.level} became unavailable before clicking Start in village ${village.name}. Skipping.`);
+                        continue;
+                    }
+
+                    const startButton = levelStatusBeforeClick.containerLocator.locator(levelSelectors.levelStartButton);
 
                     if (await startButton.isVisible({ timeout: 2000 })) {
                         ScavengingUtils.logDispatchInfo(levelPlan, village.name);
@@ -973,7 +1008,7 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                         let actualDurationSeconds = 0;
                         try {
                             const timeSelector = '.duration';
-                            const timeElement = levelStatus.containerLocator.locator(timeSelector);
+                            const timeElement = levelStatusBeforeClick.containerLocator.locator(timeSelector);
 
                             if (await timeElement.isVisible({ timeout: 2000 })) {
                                 const durationText = await timeElement.textContent();
@@ -988,21 +1023,119 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
                         await startButton.click();
                         this.logger.log(`Clicked Start for level ${levelPlan.level} in village ${village.name}`);
-                        villageSuccessfulDispatches++;
 
                         this.updateVillageStateAfterDispatch(village.id, levelPlan.level, actualDurationSeconds);
 
-                        await page.waitForLoadState('networkidle', { timeout: 5000 });
-                        await page.waitForTimeout(1000);
+                        // CZEKAJ NA ZAKOŃCZENIE REQUESTA PO KLIKNIĘCIU
+                        await page.waitForLoadState('networkidle', { timeout: 10000 });
+                        await page.waitForTimeout(2000); // Daj więcej czasu na przetworzenie
 
+                        // WERYFIKACJA: Sprawdź czy poziom faktycznie został wysłany
+                        await page.waitForTimeout(2000); // Daj czas na aktualizację
+                        await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                        await page.waitForTimeout(1000);
                         await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+
+                        const verificationStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
+                        const verificationStatus = verificationStatuses.find(s => s.level === levelPlan.level);
+
+                        if (verificationStatus?.isBusy) {
+                            this.logger.log(`✓ Level ${levelPlan.level} successfully dispatched (now busy)`);
+                            villageSuccessfulDispatches++;
+                        } else if (verificationStatus?.isAvailable) {
+                            this.logger.warn(`✗ Level ${levelPlan.level} dispatch failed - still available. Adding to retry list.`);
+                            failedDispatchLevels.set(levelPlan.level, levelPlan);
+                        } else {
+                            this.logger.warn(`? Level ${levelPlan.level} status unclear after dispatch. Adding to retry list.`);
+                            failedDispatchLevels.set(levelPlan.level, levelPlan);
+                        }
+                        
                         await page.waitForTimeout(500);
                     } else {
                         this.logger.warn(`Start button not visible for level ${levelPlan.level} in village ${village.name}, skipping dispatch.`);
                     }
                 } catch (clickError) {
                     this.logger.error(`Error in scavenging for level ${levelPlan.level} in village ${village.name}:`, clickError);
+                    // Jeśli wystąpił błąd, odśwież stronę przed następnym poziomem
+                    try {
+                        await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                        await page.waitForTimeout(1000);
+                    } catch (reloadError) {
+                        this.logger.error(`Error refreshing page after error:`, reloadError);
+                    }
                 }
+            }
+
+            // RUNDA 2: Ponowne wysłanie brakujących poziomów
+            if (failedDispatchLevels.size > 0) {
+                this.logger.log(`=== ROUND 2: Retrying ${failedDispatchLevels.size} failed dispatches for village ${village.name} ===`);
+                
+                // Odśwież stronę przed rundą 2
+                await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                await page.waitForTimeout(1000);
+                await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+                
+                // Sprawdź aktualny status wszystkich poziomów
+                const round2Statuses = await ScavengingUtils.getScavengingLevelStatuses(page);
+                const availableLevels = round2Statuses.filter(s => s.isAvailable);
+                
+                this.logger.log(`Round 2: Found ${availableLevels.length} available levels in village ${village.name}`);
+                
+                // Sortuj poziomy od najniższego
+                const sortedFailedPlans = Array.from(failedDispatchLevels.entries())
+                    .sort((a, b) => a[0] - b[0]);
+                
+                for (const [level, levelPlan] of sortedFailedPlans) {
+                    const levelStatus = availableLevels.find(s => s.level === level);
+                    
+                    if (!levelStatus || !levelStatus.isAvailable) {
+                        this.logger.warn(`Round 2: Level ${level} is no longer available in village ${village.name}. Skipping.`);
+                        continue;
+                    }
+                    
+                    this.logger.log(`Round 2: Retrying dispatch for level ${level} in village ${village.name}...`);
+                    
+                    // Wypełnij formularz
+                    const filledSuccessfully = await ScavengingUtils.fillUnitsForLevel(page, levelPlan, village.name);
+                    
+                    if (!filledSuccessfully) {
+                        this.logger.warn(`Round 2: Could not fill inputs for level ${level}. Skipping.`);
+                        continue;
+                    }
+                    
+                    // Kliknij Start
+                    try {
+                        const startButton = levelStatus.containerLocator.locator(levelSelectors.levelStartButton);
+                        
+                        if (await startButton.isVisible({ timeout: 2000 })) {
+                            await startButton.click();
+                            this.logger.log(`Round 2: Clicked Start for level ${level} in village ${village.name}`);
+                            
+                            // Weryfikacja sukcesu
+                            await page.waitForLoadState('networkidle', { timeout: 10000 });
+                            await page.waitForTimeout(2000);
+                            await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+                            await page.waitForTimeout(1000);
+                            await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+                            
+                            const finalStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
+                            const finalStatus = finalStatuses.find(s => s.level === level);
+                            
+                            if (finalStatus?.isBusy) {
+                                this.logger.log(`Round 2: ✓ Level ${level} successfully dispatched`);
+                                villageSuccessfulDispatches++;
+                            } else {
+                                this.logger.warn(`Round 2: ✗ Level ${level} still failed after retry`);
+                            }
+                            
+                            await page.waitForTimeout(1000);
+                        }
+                    } catch (round2Error) {
+                        this.logger.error(`Round 2: Error dispatching level ${level}:`, round2Error);
+                    }
+                }
+                
+                this.logger.log(`=== Round 2 completed for village ${village.name} ===`);
             }
 
             return villageSuccessfulDispatches;
