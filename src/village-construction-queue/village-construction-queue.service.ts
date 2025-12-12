@@ -18,6 +18,12 @@ import { AuthUtils } from '@/utils/auth/auth.utils';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { ServersService } from '@/servers';
 
+interface CachedBuildingStates {
+    buildingLevels: BuildingLevels;
+    buildQueue: BuildQueueItem[];
+    timestamp: Date;
+}
+
 @Injectable()
 export class VillageConstructionQueueService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(VillageConstructionQueueService.name);
@@ -25,6 +31,9 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     private readonly MIN_INTERVAL = 1000 * 60 * 3; // 3 minuty
     private readonly MAX_INTERVAL = 1000 * 60 * 7; // 7 minut
     private queueProcessorIntervalId: NodeJS.Timeout | null = null;
+    private readonly CACHE_TTL = 1000 * 60 * 5; // 5 minut
+    private readonly buildingStatesCache = new Map<string, CachedBuildingStates>();
+    private cacheCleanupInterval: NodeJS.Timeout | null = null;
 
     // Configuration for browser operations and timeouts
     private readonly CONFIG = {
@@ -52,6 +61,152 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     async onModuleInit() {
         this.logger.log('VillageConstructionQueueService initialized (auto-start disabled - managed by orchestrator)');
         // this.startConstructionQueueProcessor(); // DISABLED: Now managed by CrawlerOrchestratorService
+        this.startCacheCleanup();
+    }
+
+    async onModuleDestroy() {
+        if (this.cacheCleanupInterval) {
+            clearInterval(this.cacheCleanupInterval);
+        }
+        this.stopConstructionQueueProcessor();
+    }
+
+    /**
+     * Uruchamia okresowe czyszczenie cache
+     */
+    private startCacheCleanup(): void {
+        this.cacheCleanupInterval = setInterval(() => {
+            this.cleanupExpiredCache();
+        }, 60000); // Sprawdzaj co minutę
+    }
+
+    /**
+     * Czyści wygasłe wpisy z cache
+     */
+    private cleanupExpiredCache(): void {
+        const now = new Date();
+        let cleanedCount = 0;
+
+        for (const [key, cached] of this.buildingStatesCache.entries()) {
+            const age = now.getTime() - cached.timestamp.getTime();
+            if (age > this.CACHE_TTL) {
+                this.buildingStatesCache.delete(key);
+                cleanedCount++;
+            }
+        }
+
+        if (cleanedCount > 0) {
+            this.logger.debug(`Cleaned up ${cleanedCount} expired cache entries`);
+        }
+    }
+
+    /**
+     * Zapisuje stany budynków do cache
+     */
+    public cacheVillageBuildingStates(
+        serverId: number,
+        villageId: string,
+        buildingLevels: BuildingLevels,
+        buildQueue: BuildQueueItem[]
+    ): void {
+        const cacheKey = `${serverId}-${villageId}`;
+        this.buildingStatesCache.set(cacheKey, {
+            buildingLevels,
+            buildQueue,
+            timestamp: new Date()
+        });
+        this.logger.debug(`Cached building states for village ${villageId} on server ${serverId}`);
+    }
+
+    /**
+     * Pobiera stany budynków z cache
+     */
+    public getCachedVillageBuildingStates(
+        serverId: number,
+        villageId: string
+    ): CachedBuildingStates | null {
+        const cacheKey = `${serverId}-${villageId}`;
+        const cached = this.buildingStatesCache.get(cacheKey);
+
+        if (!cached) {
+            return null;
+        }
+
+        const now = new Date();
+        const age = now.getTime() - cached.timestamp.getTime();
+
+        if (age > this.CACHE_TTL) {
+            this.buildingStatesCache.delete(cacheKey);
+            return null;
+        }
+
+        return cached;
+    }
+
+    /**
+     * Pobiera stany budynków dla wioski z cache wraz z maxLevels i kolejką z bazy danych
+     * Jeśli cache nie istnieje, wykonuje zapytanie do gry (Playwright)
+     */
+    public async getBuildingStates(serverId: number, villageName: string): Promise<{
+        villageInfo: VillageResponseDto;
+        buildingLevels: BuildingLevels;
+        buildQueue: BuildQueueItem[];
+        databaseQueue: VillageConstructionQueueEntity[];
+        cachedAt: Date;
+        isValid: boolean;
+        maxLevels: Record<string, number>;
+    }> {
+        const village = await this.villagesService.findByName(serverId, villageName);
+        if (!village) {
+            throw new NotFoundException(`Village with name "${villageName}" not found`);
+        }
+
+        // Build maxLevels map from TRIBAL_WARS_BUILDINGS
+        const maxLevels: Record<string, number> = {};
+        for (const [key, config] of Object.entries(TRIBAL_WARS_BUILDINGS)) {
+            maxLevels[config.id] = config.maxLevel;
+        }
+
+        // Pobierz kolejkę z bazy danych dla wioski
+        const databaseQueue = await this.getQueueForVillage(village.id);
+
+        // Sprawdź cache
+        let cached = this.getCachedVillageBuildingStates(serverId, village.id);
+        
+        // Jeśli cache nie istnieje, wykonaj zapytanie do gry
+        if (!cached) {
+            this.logger.log(`Cache not found for village "${villageName}", scraping from game...`);
+            const scrapedData = await this.scrapeVillageQueue(serverId, villageName);
+            
+            // Pobierz dane z cache (zostały zaktualizowane przez scrapeVillageQueue)
+            cached = this.getCachedVillageBuildingStates(serverId, village.id);
+            
+            if (!cached) {
+                // Jeśli nadal nie ma cache, użyj danych z scrapowania
+                this.logger.warn(`Cache still not available after scraping, using fresh data`);
+                return {
+                    villageInfo: scrapedData.villageInfo,
+                    buildingLevels: scrapedData.buildingLevels,
+                    buildQueue: scrapedData.buildQueue,
+                    databaseQueue: databaseQueue,
+                    cachedAt: new Date(),
+                    isValid: true,
+                    maxLevels
+                };
+            }
+        }
+
+        const villageResponseDto = this.villagesService.mapToResponseDto(village);
+
+        return {
+            villageInfo: villageResponseDto,
+            buildingLevels: cached.buildingLevels,
+            buildQueue: cached.buildQueue,
+            databaseQueue: databaseQueue,
+            cachedAt: cached.timestamp,
+            isValid: true,
+            maxLevels
+        };
     }
 
     /**
@@ -128,19 +283,46 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
                 let successCount = 0;
                 let errorCount = 0;
 
+                // Group buildings by village to update cache after processing each village
+                const buildingsByVillage = new Map<string, VillageConstructionQueueEntity[]>();
                 for (const building of buildingsToProcess) {
-                    processedCount++;
-                    this.logger.log(`🏘️  Processing village ${building.village?.name || building.villageId} (${processedCount}/${buildingsToProcess.length}): ${building.buildingName} Level ${building.targetLevel}`);
+                    const villageId = building.villageId;
+                    if (!buildingsByVillage.has(villageId)) {
+                        buildingsByVillage.set(villageId, []);
+                    }
+                    buildingsByVillage.get(villageId)!.push(building);
+                }
 
-                    try {
-                        const result = await this.processSingleBuilding(serverCode, building, page);
-                        if (result.success) {
-                            successCount++;
+                // Process buildings grouped by village
+                for (const [villageId, villageBuildings] of buildingsByVillage.entries()) {
+                    let villageProcessed = false;
+                    
+                    for (const building of villageBuildings) {
+                        processedCount++;
+                        this.logger.log(`🏘️  Processing village ${building.village?.name || building.villageId} (${processedCount}/${buildingsToProcess.length}): ${building.buildingName} Level ${building.targetLevel}`);
+
+                        try {
+                            const result = await this.processSingleBuilding(serverCode, building, page);
+                            if (result.success) {
+                                successCount++;
+                            }
+                            villageProcessed = true;
+                        } catch (error) {
+                            errorCount++;
+                            this.logger.error(`❌ Error processing building ${building.buildingName} L${building.targetLevel} in village ${building.villageId}:`, error);
+                            // Continue with next building - don't stop the whole process
                         }
-                    } catch (error) {
-                        errorCount++;
-                        this.logger.error(`❌ Error processing building ${building.buildingName} L${building.targetLevel} in village ${building.villageId}:`, error);
-                        // Continue with next building - don't stop the whole process
+                    }
+
+                    // Update cache after processing all buildings for this village
+                    if (villageProcessed) {
+                        try {
+                            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverId, serverCode, villageId, page);
+                            this.logger.debug(`Updated cache for village ${villageId} after processing`);
+                        } catch (error) {
+                            this.logger.warn(`Failed to update cache for village ${villageId}:`, error);
+                            // Don't fail the whole process if cache update fails
+                        }
                     }
                 }
 
@@ -158,6 +340,87 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         }
 
         this.logger.log('✅ Construction queue processing finished. Next execution scheduled.');
+    }
+
+    /**
+     * Dodaje budynek do kolejki budowy używając danych z cache (bez Playwright)
+     * @param serverId ID serwera
+     * @param villageName Nazwa wioski
+     * @param buildingId ID budynku
+     * @param targetLevel Opcjonalny docelowy poziom (jeśli nie podany, oblicza automatycznie)
+     * @returns Obiekt zawierający utworzony wpis i pełną kolejkę z bazy dla wioski
+     */
+    async addToQueueFromCache(
+        serverId: number,
+        villageName: string,
+        buildingId: string,
+        targetLevel?: number
+    ): Promise<{
+        queueItem: VillageConstructionQueueEntity;
+        databaseQueue: VillageConstructionQueueEntity[];
+    }> {
+        this.logger.log(`Adding building to queue from cache: ${buildingId} level ${targetLevel || 'auto'} for village ${villageName}`);
+
+        // 1. Znajdź wioskę po nazwie
+        const village = await this.villagesService.findByName(serverId, villageName);
+        if (!village) {
+            throw new NotFoundException(`Village with name "${villageName}" not found`);
+        }
+
+        // 2. Pobierz dane z cache dla wioski
+        const cachedData = this.getCachedVillageBuildingStates(serverId, village.id);
+        if (!cachedData) {
+            throw new BadRequestException(
+                `Cache not available for village "${villageName}". Please fetch building states first.`
+            );
+        }
+
+        // 3. Sprawdź czy budynek istnieje w konfiguracji
+        const buildingConfig = await this.validateBuildingConfig(buildingId, targetLevel || 30);
+
+        // 4. Pobierz kolejkę z bazy danych dla tego budynku
+        const databaseQueue = await this.getDatabaseQueue(serverId, village.id, buildingId);
+
+        // 5. Oblicz następny dozwolony poziom
+        const nextAllowedLevel = this.calculateNextAllowedLevelFromCache(buildingId, cachedData, databaseQueue);
+
+        // 6. Jeśli targetLevel jest podany, sprawdź czy jest poprawny
+        const finalTargetLevel = targetLevel ?? nextAllowedLevel;
+        if (targetLevel !== undefined && targetLevel !== nextAllowedLevel) {
+            throw new BadRequestException(
+                `Invalid target level ${targetLevel}. Next allowed level is ${nextAllowedLevel}. ` +
+                `Current status: game level=${cachedData.buildingLevels[buildingId] || 0}, ` +
+                `game queue max=${this.getHighestLevelFromGameQueue(buildingId, cachedData.buildQueue)}, ` +
+                `database queue max=${databaseQueue.length > 0 ? Math.max(...databaseQueue.map(item => item.targetLevel)) : 0}`
+            );
+        }
+
+        // 7. Walidacja podstawowa (duplikaty, maxLevel)
+        if (finalTargetLevel > buildingConfig.maxLevel) {
+            throw new BadRequestException(
+                `Target level ${finalTargetLevel} exceeds maximum level ${buildingConfig.maxLevel} for building '${buildingConfig.name}'`
+            );
+        }
+
+        await this.validateNoDuplicateInQueue(village.id, buildingId, finalTargetLevel, buildingConfig.name);
+
+        // 8. Utwórz DTO i zapisz do bazy danych
+        const dto: CreateConstructionQueueDto = {
+            villageId: village.id,
+            buildingId: buildingId,
+            targetLevel: finalTargetLevel,
+            serverId: serverId
+        };
+
+        const queueItem = await this.createQueueItem(dto, buildingConfig, village);
+
+        // 9. Pobierz pełną kolejkę z bazy dla wioski
+        const fullDatabaseQueue = await this.getQueueForVillage(village.id);
+
+        return {
+            queueItem,
+            databaseQueue: fullDatabaseQueue
+        };
     }
 
     /**
@@ -435,7 +698,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     ): Promise<void> {
         try {
             // 1. Pobierz wszystkie potrzebne dane
-            const gameData = await this.scrapeVillageBuildingData(serverCode, villageId, page);
+            const gameData = await this.scrapeVillageBuildingData(serverId, serverCode, villageId, page);
             const databaseQueue = await this.getDatabaseQueue(serverId, villageId, buildingId);
 
             // 2. Oblicz następny dozwolony poziom
@@ -499,7 +762,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         }[] = [];
         for (const village of villages) {
             const villageResponseDto = this.villagesService.mapToResponseDto(village);
-            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverCode, village.id, page);
+            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverId, serverCode, village.id, page);
             data.push({ villageInfo: villageResponseDto, buildingLevels, buildQueue });
         }
         return data;
@@ -532,7 +795,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
         try {
             const villageResponseDto = this.villagesService.mapToResponseDto(village);
-            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverCode, village.id, page);
+            const { buildingLevels, buildQueue } = await this.scrapeVillageBuildingData(serverId, serverCode, village.id, page);
 
             this.logger.log(`Successfully scraped queue for village "${villageName}" (ID: ${village.id})`);
 
@@ -553,11 +816,13 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
 
     /**
      * Pobiera dane z gry dla określonej wioski
+     * @param serverId ID serwera
+     * @param serverCode Kod serwera
      * @param villageId ID wioski
      * @param page Strona przeglądarki
      * @returns Dane z gry (poziomy budynków i kolejka budowy)
      */
-    private async scrapeVillageBuildingData(serverCode: string, villageId: string, page: Page) {
+    private async scrapeVillageBuildingData(serverId: number, serverCode: string, villageId: string, page: Page) {
         const villageDetailPage = new VillageDetailPage(page);
         await villageDetailPage.navigateToVillage(serverCode, villageId);
 
@@ -565,13 +830,16 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         const buildingLevels = await villageDetailPage.extractBuildingLevels(serverCode);
 
         // Pobierz aktualną kolejkę budowy z gry
-        // const buildQueue = await villageDetailPage.extractBuildQueue(serverCode);
+        const buildQueue = await villageDetailPage.extractBuildQueue(serverCode);
 
-        // this.logger.log(`Scraped game data for village ${villageId}: ${Object.keys(buildingLevels).length} buildings, ${buildQueue.length} items in game queue`);
+        // Cache the scraped data
+        this.cacheVillageBuildingStates(serverId, villageId, buildingLevels, buildQueue);
+
+        this.logger.log(`Scraped game data for village ${villageId}: ${Object.keys(buildingLevels).length} buildings, ${buildQueue.length} items in game queue`);
 
         return {
             buildingLevels,
-            buildQueue: []
+            buildQueue
         };
     }
 
@@ -653,6 +921,38 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         const nextAllowedLevel = maxCurrentLevel + 1;
 
         this.logger.log(`Level calculation for ${buildingId}: game=${gameLevel}, gameQueue=${gameQueueLevel}, database=${databaseLevel} => next=${nextAllowedLevel}`);
+
+        return nextAllowedLevel;
+    }
+
+    /**
+     * Oblicza następny dozwolony poziom budynku na podstawie danych z cache (bez Playwright)
+     * @param buildingId ID budynku
+     * @param cachedData Dane z cache (poziomy + kolejka budowy)
+     * @param databaseQueue Kolejka budowy z bazy danych
+     * @returns Następny dozwolony poziom
+     */
+    private calculateNextAllowedLevelFromCache(
+        buildingId: string,
+        cachedData: CachedBuildingStates,
+        databaseQueue: VillageConstructionQueueEntity[]
+    ): number {
+        // 1. Pobierz aktualny poziom z cache
+        const gameLevel = cachedData.buildingLevels[buildingId] || 0;
+
+        // 2. Znajdź najwyższy poziom tego budynku w kolejce budowy gry z cache
+        const gameQueueLevel = this.getHighestLevelFromGameQueue(buildingId, cachedData.buildQueue);
+
+        // 3. Znajdź najwyższy poziom tego budynku w naszej kolejce w bazie
+        const databaseLevel = databaseQueue.length > 0
+            ? Math.max(...databaseQueue.map(item => item.targetLevel))
+            : 0;
+
+        // 4. Oblicz następny dozwolony poziom
+        const maxCurrentLevel = Math.max(gameLevel, gameQueueLevel, databaseLevel);
+        const nextAllowedLevel = maxCurrentLevel + 1;
+
+        this.logger.log(`Level calculation from cache for ${buildingId}: game=${gameLevel}, gameQueue=${gameQueueLevel}, database=${databaseLevel} => next=${nextAllowedLevel}`);
 
         return nextAllowedLevel;
     }
@@ -841,9 +1141,6 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
         }
     }
 
-    async onModuleDestroy() {
-        this.stopConstructionQueueProcessor();
-    }
 
     // ==============================
     // METODY PRZETWARZANIA KOLEJKI

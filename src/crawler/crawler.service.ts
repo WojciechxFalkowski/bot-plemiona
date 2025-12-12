@@ -1004,6 +1004,20 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                     if (await startButton.isVisible({ timeout: 2000 })) {
                         ScavengingUtils.logDispatchInfo(levelPlan, village.name);
 
+                        // #region agent log
+                        const formInputsBeforeClick = await Promise.all(unitOrder.map(async (unit) => {
+                            const inputSelector = `input[name="${unitInputNames[unit]}"]`;
+                            try {
+                                const input = await page.locator(inputSelector).first();
+                                const value = await input.inputValue().catch(() => null);
+                                return { unit, value };
+                            } catch {
+                                return { unit, value: null };
+                            }
+                        }));
+                        fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'crawler.service.ts:1007',message:'Form inputs BEFORE click',data:{level:levelPlan.level,formInputs:formInputsBeforeClick,expectedPlan:levelPlan.dispatchUnits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                        // #endregion
+
                         // Pobierz faktyczny czas trwania z interfejsu gry
                         let actualDurationSeconds = 0;
                         try {
@@ -1021,14 +1035,26 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                             this.logger.log(`  * Błąd podczas odczytu czasu zbieractwa: ${timeError.message}`);
                         }
 
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'crawler.service.ts:1024',message:'BEFORE click Start',data:{level:levelPlan.level,villageName:village.name,dispatchUnits:levelPlan.dispatchUnits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                        // #endregion
+
                         await startButton.click();
                         this.logger.log(`Clicked Start for level ${levelPlan.level} in village ${village.name}`);
+
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'crawler.service.ts:1028',message:'AFTER click Start',data:{level:levelPlan.level},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                        // #endregion
 
                         this.updateVillageStateAfterDispatch(village.id, levelPlan.level, actualDurationSeconds);
 
                         // CZEKAJ NA ZAKOŃCZENIE REQUESTA PO KLIKNIĘCIU
                         await page.waitForLoadState('networkidle', { timeout: 10000 });
                         await page.waitForTimeout(2000); // Daj więcej czasu na przetworzenie
+
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'crawler.service.ts:1036',message:'BEFORE reload verification',data:{level:levelPlan.level},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                        // #endregion
 
                         // WERYFIKACJA: Sprawdź czy poziom faktycznie został wysłany
                         await page.waitForTimeout(2000); // Daj czas na aktualizację
@@ -1038,6 +1064,10 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
                         const verificationStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
                         const verificationStatus = verificationStatuses.find(s => s.level === levelPlan.level);
+
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'crawler.service.ts:1044',message:'AFTER verification status check',data:{level:levelPlan.level,isBusy:verificationStatus?.isBusy,isAvailable:verificationStatus?.isAvailable,allStatuses:verificationStatuses.map(s=>({level:s.level,isBusy:s.isBusy,isAvailable:s.isAvailable}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                        // #endregion
 
                         if (verificationStatus?.isBusy) {
                             this.logger.log(`✓ Level ${levelPlan.level} successfully dispatched (now busy)`);

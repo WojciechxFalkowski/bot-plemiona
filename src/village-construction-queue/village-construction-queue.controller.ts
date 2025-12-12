@@ -32,6 +32,10 @@ export class VillageConstructionQueueController {
     async addBuildingToQueue(
         @Body() createDto: CreateConstructionQueueApiDto
     ): Promise<VillageConstructionQueueEntity> {
+        if (createDto.targetLevel === undefined) {
+            throw new BadRequestException('targetLevel is required for this endpoint. Use /from-cache endpoint for automatic level calculation.');
+        }
+
         this.logger.log(`Request to add building ${createDto.buildingId} level ${createDto.targetLevel} to queue for village "${createDto.villageName}"`);
 
         try {
@@ -180,5 +184,66 @@ export class VillageConstructionQueueController {
         buildQueue: BuildQueueItem[];
     }[]> {
         return await this.constructionQueueService.scrapeAllVillagesQueue(serverId);
+    }
+
+    @Get('building-states/:villageName')
+    @HttpCode(HttpStatus.OK)
+    async getBuildingStates(
+        @Param('villageName') villageName: string,
+        @Query('serverId') serverId: number
+    ): Promise<{
+        villageInfo: VillageResponseDto;
+        buildingLevels: BuildingLevels;
+        buildQueue: BuildQueueItem[];
+        databaseQueue: VillageConstructionQueueEntity[];
+        cachedAt: Date;
+        isValid: boolean;
+        maxLevels: Record<string, number>;
+    }> {
+        if (!serverId) {
+            throw new BadRequestException('Server ID is required');
+        }
+
+        if (!villageName) {
+            throw new BadRequestException('Village name is required');
+        }
+
+        this.logger.log(`Request to get building states for village "${villageName}"`);
+
+        try {
+            const result = await this.constructionQueueService.getBuildingStates(serverId, villageName);
+            this.logger.log(`Successfully retrieved building states for village "${villageName}" with ${result.databaseQueue.length} items in database queue`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Failed to get building states for village "${villageName}": ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    @Post('from-cache')
+    @HttpCode(HttpStatus.CREATED)
+    @AddBuildingToQueueDecorators()
+    async addBuildingToQueueFromCache(
+        @Body() createDto: CreateConstructionQueueApiDto
+    ): Promise<{
+        queueItem: VillageConstructionQueueEntity;
+        databaseQueue: VillageConstructionQueueEntity[];
+    }> {
+        const targetLevelStr = createDto.targetLevel !== undefined ? String(createDto.targetLevel) : 'auto';
+        this.logger.log(`Request to add building ${createDto.buildingId} level ${targetLevelStr} to queue from cache for village "${createDto.villageName}"`);
+
+        try {
+            const result = await this.constructionQueueService.addToQueueFromCache(
+                createDto.serverId,
+                createDto.villageName,
+                createDto.buildingId,
+                createDto.targetLevel !== undefined ? createDto.targetLevel : undefined
+            );
+            this.logger.log(`Successfully added building ${createDto.buildingId} level ${result.queueItem.targetLevel} to queue from cache for village "${createDto.villageName}". Database queue contains ${result.databaseQueue.length} items.`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Failed to add building to queue from cache: ${error.message}`, error.stack);
+            throw error;
+        }
     }
 }

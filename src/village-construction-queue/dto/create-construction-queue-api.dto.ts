@@ -25,15 +25,16 @@ export class CreateConstructionQueueApiDto {
     buildingId: BuildingId;
 
     @ApiProperty({
-        description: 'Docelowy poziom budynku',
+        description: 'Docelowy poziom budynku (opcjonalny - jeśli nie podany, oblicza automatycznie)',
         example: 15,
         minimum: 1,
-        maximum: 30
+        maximum: 30,
+        required: false
     })
     @IsInt()
     @Min(1)
     @Max(30)
-    targetLevel: number;
+    targetLevel?: number;
 
     @ApiProperty({
         description: 'ID serwera',
