@@ -30,7 +30,27 @@ import {
     getVillageCountOperation,
     getAutoScavengingCountOperation,
     getAutoBuildingCountOperation,
-    shouldAutoRefreshOperation
+    shouldAutoRefreshOperation,
+    FindAllVillagesDependencies,
+    FindVillageByIdDependencies,
+    FindVillageByNameDependencies,
+    FindVillagesWithAutoScavengingDependencies,
+    FindVillagesWithAutoBuildingDependencies,
+    ToggleAutoScavengingDependencies,
+    ToggleAutoBuildingDependencies,
+    ToggleAutoScavengingByNameDependencies,
+    ToggleAutoBuildingByNameDependencies,
+    CreateVillageDependencies,
+    UpdateVillageDependencies,
+    DeleteVillageDependencies,
+    DeleteAllVillagesForServerDependencies,
+    SyncVillagesDependencies,
+    RefreshVillageDataDependencies,
+    GetOverviewVillageInformationDependencies,
+    GetVillageCountDependencies,
+    GetAutoScavengingCountDependencies,
+    GetAutoBuildingCountDependencies,
+    ShouldAutoRefreshDependencies
 } from './operations';
 
 @Injectable()
