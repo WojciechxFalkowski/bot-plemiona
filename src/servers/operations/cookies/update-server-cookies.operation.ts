@@ -2,8 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { ServerEntity } from '../../entities/server.entity';
 import { ServerCookiesEntity } from '../../entities/server-cookies.entity';
-import { UpdateServerCookiesDto } from '../../dto/update-server-cookies.dto';
-import { ServerCookiesResponseDto } from '../../dto/server-cookies.dto';
+import { UpdateServerCookiesDto, ServerCookiesResponseDto } from '../../dto';
 import { mapToCookiesResponseDtoOperation } from '../utilities/map-to-cookies-response-dto.operation';
 
 export interface UpdateServerCookiesDependencies {
