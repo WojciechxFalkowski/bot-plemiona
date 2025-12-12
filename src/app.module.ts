@@ -7,7 +7,6 @@ import configuration from './database/database-configuration';
 import { CrawlerModule } from './crawler/crawler.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SettingsModule } from './settings/settings.module';
-import { VillagesCrawlerModule } from './villages-crawler/villages-crawler.module';
 import { VillagesModule } from './villages/villages.module';
 import { VillageConstructionQueueModule } from './village-construction-queue/village-construction-queue.module';
 import { ClerkAuthModule } from './clerk-auth/clerk-auth.module';
@@ -28,7 +27,6 @@ import { AdvancedScavengingModule } from './advanced-scavenging/advanced-scaveng
     DatabaseModule,
     CrawlerModule,
     SettingsModule,
-    VillagesCrawlerModule,
     VillagesModule,
     VillageConstructionQueueModule,
     ClerkAuthModule,
