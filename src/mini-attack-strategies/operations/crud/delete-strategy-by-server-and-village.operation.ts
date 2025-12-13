@@ -37,3 +37,4 @@ export async function deleteStrategyByServerAndVillageOperation(
     logger.log(`Strategy deleted successfully for server ${serverId}, village ${villageId}`);
 }
 
+

@@ -20,3 +20,4 @@ export async function getBarbarianVillagesCountOperation(
     return await barbarianVillageRepository.count({ where: { serverId } });
 }
 
+

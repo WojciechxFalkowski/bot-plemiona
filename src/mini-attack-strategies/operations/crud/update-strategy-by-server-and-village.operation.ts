@@ -60,3 +60,4 @@ export async function updateStrategyByServerAndVillageOperation(
     return mapStrategyToResponseDtoOperation(savedStrategy);
 }
 
+

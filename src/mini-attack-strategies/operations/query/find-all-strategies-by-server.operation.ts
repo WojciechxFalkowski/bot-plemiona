@@ -33,3 +33,4 @@ export async function findAllStrategiesByServerOperation(
     return strategies.map(strategy => mapStrategyToResponseDtoOperation(strategy));
 }
 
+

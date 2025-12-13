@@ -24,3 +24,4 @@ export { getActiveUnitsOperation } from './state-management/get-active-units.ope
 // Utilities operations
 export { mapStrategyToResponseDtoOperation } from './utilities/map-strategy-to-response-dto.operation';
 
+

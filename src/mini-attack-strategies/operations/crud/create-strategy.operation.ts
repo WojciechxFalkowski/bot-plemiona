@@ -49,3 +49,4 @@ export async function createStrategyOperation(
     return mapStrategyToResponseDtoOperation(savedStrategy);
 }
 
+

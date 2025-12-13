@@ -39,3 +39,4 @@ export async function findStrategyByServerAndVillageOperation(
     return mapStrategyToResponseDtoOperation(strategy);
 }
 
+

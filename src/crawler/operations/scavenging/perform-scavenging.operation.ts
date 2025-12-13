@@ -1,0 +1,268 @@
+import { Logger } from '@nestjs/common';
+import { Browser } from 'playwright';
+import { createBrowserPage } from '../../../utils/browser.utils';
+import { AuthUtils } from '@/utils/auth/auth.utils';
+import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
+import { PlemionaCookiesService } from '@/plemiona-cookies';
+import { VillagesService } from '@/villages/villages.service';
+import { VillageResponseDto } from '@/villages/dto';
+import { ServersService } from '@/servers';
+import { AdvancedScavengingService } from '@/advanced-scavenging/advanced-scavenging.service';
+import { ScavengingLimitsService } from '@/scavenging-limits/scavenging-limits.service';
+import { ScavengingTimeData, VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
+import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
+import { SettingsService } from '../../../settings/settings.service';
+import { unitOrder } from '../../../utils/scavenging.config';
+import { validateAutoScavengingEnabledOperation } from '../validation/validate-auto-scavenging-enabled.operation';
+import { collectScavengingTimeDataOperation } from './collect-scavenging-time-data.operation';
+import { processVillageScavengingOperation } from './process-village-scavenging.operation';
+
+export interface PerformScavengingDependencies {
+    logger: Logger;
+    credentials: PlemionaCredentials;
+    plemionaCookiesService: PlemionaCookiesService;
+    villagesService: VillagesService;
+    serversService: ServersService;
+    advancedScavengingService: AdvancedScavengingService;
+    scavengingLimitsService: ScavengingLimitsService;
+    settingsService: SettingsService;
+    scavengingTimeData: ScavengingTimeData;
+}
+
+/**
+ * Wykonuje cykl zbieractwa: nawigacja, analiza, dystrybucja, logowanie planu i planowanie.
+ * Iteruje po wszystkich wioskach i wysyła wojsko na odprawy.
+ * Loguje się tylko raz na początku dla wszystkich wiosek.
+ * @param serverId ID serwera
+ * @param deps Dependencies needed for execution
+ */
+export async function performScavengingOperation(
+    serverId: number,
+    deps: PerformScavengingDependencies
+): Promise<void> {
+    const {
+        logger,
+        credentials,
+        plemionaCookiesService,
+        villagesService,
+        serversService,
+        advancedScavengingService,
+        scavengingLimitsService,
+        settingsService,
+        scavengingTimeData
+    } = deps;
+
+    let browser: Browser | null = null;
+
+    try {
+        logger.log('Starting scavenging process for villages with auto-scavenging enabled...');
+
+        // 1. Sprawdź czy scavenging jest włączony dla serwera
+        const isScavengingEnabled = await validateAutoScavengingEnabledOperation(serverId, {
+            settingsService,
+            logger
+        });
+        if (!isScavengingEnabled) {
+            logger.warn(`⚠️ Auto-scavenging is disabled for server ${serverId}. Cannot perform scavenging.`);
+            return;
+        }
+
+        // 2. Pobierz wioski z bazy danych które mają włączone auto-scavenging
+        let villages: VillageResponseDto[] = [];
+        try {
+            const allVillages = await villagesService.findAll(serverId, false); // false = bez auto-refresh
+
+            // Log all villages with their auto-scavenging status
+            const enabledVillages = allVillages.filter(v => v.isAutoScavengingEnabled);
+            const disabledVillages = allVillages.filter(v => !v.isAutoScavengingEnabled);
+
+            logger.log(`Villages auto-scavenging status:`);
+            logger.log(`  ✓ ENABLED (${enabledVillages.length}): ${enabledVillages.map(v => v.name).join(', ') || 'none'}`);
+            logger.log(`  ✗ DISABLED (${disabledVillages.length}): ${disabledVillages.map(v => v.name).join(', ') || 'none'}`);
+
+            villages = enabledVillages;
+
+            if (!villages || villages.length === 0) {
+                logger.warn('No villages with auto-scavenging enabled found. Cannot perform scavenging.');
+                return;
+            }
+            logger.log(`Found ${villages.length} villages with auto-scavenging enabled to process`);
+        } catch (villageError) {
+            logger.error('Error fetching villages from database:', villageError);
+            throw villageError; // Let orchestrator handle the error
+        }
+
+        // 3. Teraz dopiero otwórz przeglądarkę i zaloguj użytkownika
+        const browserPage = await createBrowserPage({ headless: true });
+        browser = browserPage.browser;
+        const { page } = browserPage;
+
+        try {
+            const serverName = await serversService.getServerName(serverId);
+            const serverCode = await serversService.getServerCode(serverId);
+
+            logger.log(`🔐 Logging in to server ${serverName} (${serverCode})...`);
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                credentials,
+                plemionaCookiesService,
+                serverName
+            );
+
+            if (!loginResult.success || !loginResult.worldSelected) {
+                throw new Error(`Login failed for server ${serverCode}: ${loginResult.error || 'Unknown error'}`);
+            }
+
+            logger.log(`✅ Successfully logged in to server ${serverCode}`);
+
+            // Zresetuj dane o czasach scavenging przed rozpoczęciem nowego cyklu
+            scavengingTimeData.lastCollected = new Date();
+            scavengingTimeData.villages = [];
+
+            // PRE-FILTERING: Sprawdź status scavenging dla wiosek z włączonym auto-scavenging
+            logger.log('=== PRE-FILTERING PHASE: Collecting scavenging status for auto-scavenging enabled villages ===');
+            const villagesToProcess: VillageResponseDto[] = [];
+
+            for (let i = 0; i < villages.length; i++) {
+                const village = villages[i];
+                logger.log(`Pre-filtering village ${i + 1}/${villages.length}: ${village.name} (ID: ${village.id})`);
+
+                try {
+                    // Nawigacja do zakładki Zbieractwo dla sprawdzenia statusu
+                    const scavengingUrl = `https://${serverCode}.plemiona.pl/game.php?village=${village.id}&screen=place&mode=scavenge`;
+                    await page.goto(scavengingUrl, { waitUntil: 'networkidle', timeout: 15000 });
+
+                    // Zbierz dane o czasach scavenging dla tej wioski (delegates to operation)
+                    const villageScavengingData = await collectScavengingTimeDataOperation(
+                        village.id,
+                        village.name,
+                        { page }
+                    );
+                    scavengingTimeData.villages.push(villageScavengingData);
+
+                    // Wyloguj zebrane dane o czasach
+                    ScavengingUtils.logScavengingTimeData(villageScavengingData);
+
+                    // Sprawdź czy wioska ma dostępne poziomy zbieractwa
+                    const levelStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
+                    const freeLevels = levelStatuses.filter(s => s.isAvailable);
+                    const busyLevels = levelStatuses.filter(s => s.isBusy);
+
+                    if (freeLevels.length > 0) {
+                        // Sprawdź czy wioska ma jednostki do wysłania
+                        const availableUnits = await ScavengingUtils.getAvailableUnits(page);
+
+                        // Pobierz konfigurację włączonych jednostek dla wioski
+                        const villageUnitsConfig = await advancedScavengingService.getVillageUnitsConfig(serverId, village.id);
+                        const enabledUnits = villageUnitsConfig.units;
+
+                        // Sprawdź czy przynajmniej jedna włączona jednostka jest dostępna
+                        const hasAvailableEnabledUnits = unitOrder.some(unit =>
+                            enabledUnits[unit] && (availableUnits[unit] || 0) > 0
+                        );
+
+                        if (hasAvailableEnabledUnits) {
+                            const enabledUnitsList = unitOrder.filter(unit => enabledUnits[unit] && (availableUnits[unit] || 0) > 0);
+                            const unitsString = enabledUnitsList.map(unit => `${unit}=${availableUnits[unit]}`).join(', ');
+                            logger.log(`✓ Village ${village.name} added to processing queue (${freeLevels.length} free levels, enabled units: ${unitsString})`);
+                            villagesToProcess.push(village);
+                        } else {
+                            logger.log(`✗ Village ${village.name} skipped - no enabled units available`);
+                        }
+                    } else {
+                        logger.log(`✗ Village ${village.name} skipped - ${busyLevels.length} busy levels, no free levels`);
+                    }
+
+                    // Małe opóźnienie między wioskami
+                    if (i < villages.length - 1) {
+                        await page.waitForTimeout(1000);
+                    }
+
+                } catch (villageError) {
+                    logger.error(`Error during pre-filtering for village ${village.name}:`, villageError);
+                    // Dodaj wioską z błędem do scavengingTimeData z domyślnymi wartościami
+                    scavengingTimeData.villages.push({
+                        villageId: village.id,
+                        villageName: village.name,
+                        lastUpdated: new Date(),
+                        levels: [] // Puste poziomy oznaczają błąd podczas zbierania danych
+                    });
+                }
+            }
+
+            logger.log(`=== Pre-filtering completed. ${villagesToProcess.length}/${villages.length} villages selected for processing ===`);
+
+            if (villagesToProcess.length === 0) {
+                logger.log('No villages require scavenging. All villages are either busy or have no units.');
+                return;
+            }
+
+            // DISPATCH PHASE: Teraz przetwarzaj tylko wioski które mają dostępne poziomy i auto-scavenging włączony
+            logger.log('=== DISPATCH PHASE: Processing selected villages ===');
+            let totalSuccessfulDispatches = 0;
+
+            for (let i = 0; i < villagesToProcess.length; i++) {
+                const village = villagesToProcess[i];
+                logger.log(`Processing scavenging for village ${i + 1}/${villagesToProcess.length}: ${village.name} (ID: ${village.id})`);
+
+                try {
+                    // Delegate to operation
+                    const dispatchedCount = await processVillageScavengingOperation(
+                        serverId,
+                        village,
+                        serverCode,
+                        {
+                            page,
+                            logger,
+                            advancedScavengingService,
+                            scavengingLimitsService,
+                            scavengingTimeData
+                        }
+                    );
+                    totalSuccessfulDispatches += dispatchedCount;
+
+                    if (dispatchedCount > 0) {
+                        logger.log(`Successfully dispatched ${dispatchedCount} scavenging missions from village ${village.name}.`);
+                    } else {
+                        logger.log(`No scavenging missions were dispatched from village ${village.name}.`);
+                    }
+
+                    // Małe opóźnienie między wioskami aby nie przeciążać serwera
+                    if (i < villagesToProcess.length - 1) { // Nie opóźniaj po ostatniej wiosce
+                        await page.waitForTimeout(2000);
+                    }
+
+                } catch (villageError) {
+                    logger.error(`Error processing scavenging for village ${village.name}:`, villageError);
+                    // Kontynuuj z następną wioską nawet jeśli aktualna się nie udała
+                    continue;
+                }
+            }
+
+            // Podsumowanie dla wszystkich wiosek
+            if (totalSuccessfulDispatches > 0) {
+                logger.log(`=== SCAVENGING SUMMARY ===`);
+                logger.log(`Successfully dispatched ${totalSuccessfulDispatches} scavenging missions across ${villagesToProcess.length} villages.`);
+                logger.log(`========================`);
+            } else {
+                logger.log(`=== SCAVENGING SUMMARY ===`);
+                logger.log(`No scavenging missions were dispatched across ${villagesToProcess.length} villages.`);
+                logger.log(`========================`);
+            }
+
+            // Scavenging completed - orchestrator will handle scheduling
+
+        } catch (error) {
+            logger.error('Error during scavenging process:', error);
+            throw error; // Let orchestrator handle the error
+        }
+    } catch (error) {
+        logger.error('Error during scavenging process:', error);
+        throw error; // Let orchestrator handle the error
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
+    }
+}
+

@@ -25,3 +25,4 @@ export async function deleteAllForServerOperation(
     logger.log(`All barbarian villages deleted for server ${serverId}`);
 }
 
+

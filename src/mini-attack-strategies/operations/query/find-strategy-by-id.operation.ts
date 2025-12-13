@@ -36,3 +36,4 @@ export async function findStrategyByIdOperation(
     return mapStrategyToResponseDtoOperation(strategy);
 }
 
+

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ArmyTrainingService } from './army-training.service';
 import { ArmyTrainingController } from './army-training.controller';
@@ -13,6 +14,7 @@ import { VillagesModule } from '@/villages/villages.module';
 
 @Module({
   imports: [
+    ConfigModule,
     DatabaseModule,
     ServersModule,
     PlemionaCookiesModule,

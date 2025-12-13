@@ -33,3 +33,4 @@ export async function removeBarbarianVillageOperation(
     logger.log(`Barbarian village deleted successfully: ${village.name} (${target}) from server ${serverId}`);
 }
 
+

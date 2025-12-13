@@ -47,3 +47,4 @@ export async function getActiveUnitsOperation(
     return activeUnits;
 }
 
+

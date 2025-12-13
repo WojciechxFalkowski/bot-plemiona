@@ -37,3 +37,4 @@ export async function toggleCanAttackOperation(
     return savedVillage;
 }
 
+

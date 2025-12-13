@@ -41,3 +41,4 @@ export async function updateNextTargetIndexOperation(
     logger.debug(`Next target index updated to ${nextTargetIndex} for server ${serverId}, village ${villageId}`);
 }
 
+

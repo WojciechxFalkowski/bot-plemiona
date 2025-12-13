@@ -35,3 +35,4 @@ export async function findAllStrategiesByServerAndVillageOperation(
     return strategies.map(strategy => mapStrategyToResponseDtoOperation(strategy));
 }
 
+
