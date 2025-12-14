@@ -2,7 +2,6 @@ import { Logger } from '@nestjs/common';
 import { ServerCrawlerPlan } from '../query/get-multi-server-status.operation';
 import { ScavengingTimeData } from '@/utils/scavenging/scavenging.interfaces';
 import { calculateOptimalScheduleTimeOperation } from '../scavenging/calculate-optimal-schedule-time.operation';
-import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
 
 export interface UpdateNextScavengingTimeDependencies {
     scavengingTimeData: ScavengingTimeData;

@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { MultiServerState, CrawlerTask } from '../query/get-multi-server-status.operation';
 import { formatExecutionTimeOperation } from '../utilities/format-execution-time.operation';
+import { findNextTaskToExecuteOperation } from '../scheduling/find-next-task-to-execute.operation';
 
 export interface LogDetailedTaskScheduleDependencies {
     multiServerState: MultiServerState;
     logger: Logger;
-    findNextTaskToExecute: () => { task: CrawlerTask; serverId: number; taskType: string } | null;
 }
 
 /**
@@ -15,7 +15,7 @@ export interface LogDetailedTaskScheduleDependencies {
 export function logDetailedTaskScheduleOperation(
     deps: LogDetailedTaskScheduleDependencies
 ): void {
-    const { multiServerState, logger, findNextTaskToExecute } = deps;
+    const { multiServerState, logger } = deps;
 
     logger.warn('📋 ============== DETAILED TASK SCHEDULE ==============');
 
@@ -117,7 +117,7 @@ export function logDetailedTaskScheduleOperation(
     }
 
     // Log next scheduled task
-    const nextTask = findNextTaskToExecute();
+    const nextTask = findNextTaskToExecuteOperation({ multiServerState });
     if (nextTask) {
         const plan = multiServerState.serverPlans.get(nextTask.serverId)!;
         const timeString = formatExecutionTimeOperation(nextTask.task.nextExecutionTime.getTime() - now.getTime());

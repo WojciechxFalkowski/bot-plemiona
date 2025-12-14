@@ -35,3 +35,4 @@ export * from './attack-operations/calculate-max-possible-attacks.operation';
 export * from './attack-operations/check-last-attack-before-execution.operation';
 
 
+

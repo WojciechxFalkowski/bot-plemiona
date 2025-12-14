@@ -92,6 +92,14 @@ export * from './calculations/calculate-random-army-training-interval.operation'
 export * from './calculations/get-mini-attack-intervals.operation';
 export * from './calculations/get-initial-intervals.operation';
 
+// Execution operations
+export * from './execution/execute-server-task.operation';
+export * from './execution/execute-scavenging-task.operation';
+export * from './execution/execute-construction-queue-task.operation';
+export * from './execution/execute-mini-attacks-task.operation';
+export * from './execution/execute-army-training-task.operation';
+export * from './execution/execute-player-village-attacks-task.operation';
+
 // Utilities operations
 export * from './utilities/minutes-to-milliseconds.operation';
 export * from './utilities/format-execution-time.operation';
