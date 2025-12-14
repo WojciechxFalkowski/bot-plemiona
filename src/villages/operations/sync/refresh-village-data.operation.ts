@@ -33,7 +33,15 @@ export async function refreshVillageDataOperation(
     
     logger.log(`Extracted ${villageData.length} villages from server ${serverId}`);
 
-    // Sync villages with database
+    // If no villages were extracted, it likely means login failed or there was an error
+    // Don't sync to avoid deleting existing villages when we couldn't load new data
+    if (villageData.length === 0) {
+        const errorMessage = `Failed to extract village data for server ${serverId}. No villages were found. This may indicate a login failure or scraping error. Existing villages were not modified.`;
+        logger.error(errorMessage);
+        throw new Error(errorMessage);
+    }
+
+    // Sync villages with database only if we successfully extracted data
     const syncResult = await syncVillagesOperation(serverId, villageData, syncVillagesDeps);
 
     logger.log(`Village data refresh completed for server ${serverId}: ${JSON.stringify(syncResult)}`);
