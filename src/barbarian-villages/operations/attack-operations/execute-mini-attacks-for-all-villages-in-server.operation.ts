@@ -83,3 +83,15 @@ export async function executeMiniAttacksForAllVillagesInServerOperation(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+

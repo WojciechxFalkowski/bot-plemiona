@@ -23,3 +23,15 @@ export async function extractBarbarianVillagesFromGameOperation(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+

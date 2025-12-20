@@ -19,6 +19,7 @@ import { ArmyTrainingModule } from './army-training/army-training.module';
 import { PlayerVillagesModule } from './player-villages/player-villages.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdvancedScavengingModule } from './advanced-scavenging/advanced-scavenging.module';
+import { ScheduledAttacksModule } from './scheduled-attacks/scheduled-attacks.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AdvancedScavengingModule } from './advanced-scavenging/advanced-scaveng
     PlayerVillagesModule,
     NotificationsModule,
     AdvancedScavengingModule,
+    ScheduledAttacksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

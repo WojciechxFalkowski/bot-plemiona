@@ -43,3 +43,15 @@ export function calculateMaxPossibleAttacksOperation(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+

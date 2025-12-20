@@ -197,16 +197,9 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
 
             this.logger.log(`Successfully logged in for server ${serverCode}, verifying village owner...`);
 
-            console.log("v1");
-
             const infoUrl = `https://${serverCode}.plemiona.pl/game.php?village=${village.villageId}&screen=info_village&id=${village.target}`;
-            console.log("v2");
-            console.log('village.target', village.target);
 
-            console.log("infoUrl");
-            console.log(infoUrl);
             await page.goto(infoUrl);
-            console.log("v3");
             await page.waitForTimeout(1000);
 
             const villageData = await page.evaluate(() => {
