@@ -17,6 +17,7 @@ import {
     ScavengingTimeData,
     LevelDispatchPlan
 } from './scavenging.interfaces';
+import { UnitFormatter } from '@/utils/formatting/unit-formatter.utils';
 
 export class ScavengingUtils {
     private static logger = new Logger(ScavengingUtils.name);
@@ -57,8 +58,10 @@ export class ScavengingUtils {
                 isUnlocking,
                 containerLocator: container
             });
-            this.logger.debug(`Level ${level} status: Locked=${isLocked}, Unlocking=${isUnlocking}, Busy=${isBusy}, Available=${isAvailable} (Start button found: ${hasStartButton})`);
         }
+
+        // Wyświetl statusy w formie tabelki
+        UnitFormatter.logLevelsStatusTable(statuses, 'Scavenging levels status', { logLevel: 'debug' });
 
         // Zwróć statusy (maksymalnie 4)
         return statuses;
@@ -84,12 +87,10 @@ export class ScavengingUtils {
 
                 if (await unitLink.isVisible({ timeout: 2000 })) {
                     const countText = await unitLink.textContent();
-                    console.log(`Unit ${unit} text: "${countText}"`);
 
                     // Wyciągnij liczbę z nawiasów np. "(29)" -> 29
                     const match = countText?.match(/\((\d+)\)/);
                     units[unit] = match ? parseInt(match[1], 10) : 0;
-                    this.logger.debug(`Found unit ${unit}: ${units[unit]}`);
                 } else {
                     this.logger.debug(`Unit link not visible for: ${unit}`);
                     units[unit] = 0;
@@ -106,7 +107,10 @@ export class ScavengingUtils {
             }
         }
 
-        console.log("Final units object:", units);
+        UnitFormatter.logUnitsTable(units, 'Available units', {
+            unitOrder: unitOrder as string[],
+            logLevel: 'debug'
+        });
         return units;
     }
 
@@ -285,33 +289,28 @@ export class ScavengingUtils {
                         const unlockCountdownElement = levelStatus.containerLocator.locator('.unlock-countdown-text');
                         if (await unlockCountdownElement.isVisible({ timeout: 2000 })) {
                             timeRemaining = await unlockCountdownElement.textContent({ timeout: 2000 });
-                            this.logger.debug(`Found unlock time text for level ${levelStatus.level}: "${timeRemaining}"`);
                             if (timeRemaining) {
                                 timeRemainingSeconds = this.parseTimeToSeconds(timeRemaining.trim());
                                 estimatedCompletionTime = new Date(now.getTime() + (timeRemainingSeconds * 1000));
                             }
                         }
                     } catch (error) {
-                        this.logger.debug(`Could not read unlock time for level ${levelStatus.level}: ${error.message}`);
+                        // Błąd odczytu czasu - zostanie pokazany w tabelce jako brak danych
                     }
                 } else if (levelStatus.isBusy) {
                     status = 'busy';
                     // Spróbuj odczytać czas pozostały do końca misji
-                    this.logger.debug(`Trying to read remaining time for busy level ${levelStatus.level}`);
                     try {
                         const timerElement = levelStatus.containerLocator.locator(levelSelectors.levelTimeRemaining);
                         if (await timerElement.isVisible({ timeout: 2000 })) {
                             timeRemaining = await timerElement.textContent({ timeout: 2000 });
-                            this.logger.debug(`Found time text for level ${levelStatus.level}: "${timeRemaining}"`);
                             if (timeRemaining) {
                                 timeRemainingSeconds = this.parseTimeToSeconds(timeRemaining.trim());
-                                this.logger.debug(`Parsed time text for level ${levelStatus.level}: "${timeRemaining}" to ${timeRemainingSeconds} seconds`);
                                 estimatedCompletionTime = new Date(now.getTime() + (timeRemainingSeconds * 1000));
-                                this.logger.debug(`Estimated completion time for level ${levelStatus.level}: "${estimatedCompletionTime}"`);
                             }
                         }
                     } catch (error) {
-                        this.logger.debug(`Could not read remaining time for busy level ${levelStatus.level}: ${error.message}`);
+                        // Błąd odczytu czasu - zostanie pokazany w tabelce jako brak danych
                     }
                 } else {
                     status = 'available';
@@ -325,6 +324,9 @@ export class ScavengingUtils {
                     estimatedCompletionTime
                 });
             }
+
+            // Wyświetl dane czasowe w formie tabelki
+            UnitFormatter.logLevelsTimeTable(levels, 'Scavenging levels time data', { logLevel: 'debug' });
 
         } catch (error) {
             this.logger.error(`Error collecting scavenging time data for village ${villageName}:`, error);
