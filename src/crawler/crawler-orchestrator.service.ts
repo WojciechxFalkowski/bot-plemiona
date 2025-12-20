@@ -226,13 +226,13 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      */
     public async updateServerTaskStates(serverId: number): Promise<void> {
         try {
-            // await updateServerTaskStatesOperation(serverId, {
-            //     multiServerState: this.multiServerState,
-            //     logger: this.logger,
-            //     settingsService: this.settingsService
-            // });
-            // this.logDetailedTaskSchedule();
-            // this.scheduleNextExecution();
+            await updateServerTaskStatesOperation(serverId, {
+                multiServerState: this.multiServerState,
+                logger: this.logger,
+                settingsService: this.settingsService
+            });
+            this.logDetailedTaskSchedule();
+            this.scheduleNextExecution();
         } catch (error) {
             this.logger.error(`❌ Error updating task states for server ${serverId}:`, error);
         }
