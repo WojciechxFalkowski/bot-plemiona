@@ -73,6 +73,3 @@ export async function testLoginOperation(
     logger.log('Test login completed. Browser remains open for manual inspection.');
   }
 }
-
-
-
