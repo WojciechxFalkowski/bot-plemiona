@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { BarbarianVillageEntity } from '../../entities/barbarian-village.entity';
 import { Logger } from '@nestjs/common';
@@ -34,18 +34,3 @@ export async function findOneBarbarianVillageOperation(
 
     return village;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

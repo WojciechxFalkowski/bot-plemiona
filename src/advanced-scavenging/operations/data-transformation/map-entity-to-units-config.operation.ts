@@ -1,4 +1,4 @@
-import { VillageScavengingUnitsConfigEntity } from '../../entities/village-scavenging-units-config.entity';
+﻿import { VillageScavengingUnitsConfigEntity } from '../../entities/village-scavenging-units-config.entity';
 import { ScavengingUnitsConfig } from '../../interfaces/scavenging-units-config.interface';
 
 /**
@@ -19,18 +19,6 @@ export function mapEntityToUnitsConfigOperation(
     heavy: config.isScavengingHeavyEnabled,
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

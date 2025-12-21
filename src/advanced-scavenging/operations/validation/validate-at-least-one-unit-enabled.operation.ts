@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+﻿import { BadRequestException } from '@nestjs/common';
 import { ScavengingUnitsConfig } from '../../interfaces/scavenging-units-config.interface';
 
 /**
@@ -15,18 +15,6 @@ export function validateAtLeastOneUnitEnabledOperation(
     throw new BadRequestException('At least one unit type must be enabled for scavenging');
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

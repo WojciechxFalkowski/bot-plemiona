@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
 import { VillagesService } from '@/villages/villages.service';
 import { VillageScavengingUnitsConfigEntity } from '../../entities/village-scavenging-units-config.entity';
@@ -53,18 +53,3 @@ export async function getServerVillagesUnitsConfigOperation(
     });
   });
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

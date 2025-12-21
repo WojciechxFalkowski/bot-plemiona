@@ -1,4 +1,4 @@
-// Query operations
+﻿// Query operations
 export * from './query/find-all-barbarian-villages.operation';
 export * from './query/find-all-global-barbarian-villages.operation';
 export * from './query/find-one-barbarian-village.operation';
@@ -33,18 +33,3 @@ export * from './attack-operations/execute-mini-attacks.operation';
 export * from './attack-operations/execute-attack-on-village.operation';
 export * from './attack-operations/calculate-max-possible-attacks.operation';
 export * from './attack-operations/check-last-attack-before-execution.operation';
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

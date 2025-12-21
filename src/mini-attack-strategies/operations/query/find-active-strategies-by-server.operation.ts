@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
 import { MiniAttackStrategyEntity } from '../../entities/mini-attack-strategy.entity';
 import { MiniAttackStrategyResponseDto } from '../../dto/mini-attack-strategy-response.dto';
@@ -32,18 +32,3 @@ export async function findActiveStrategiesByServerOperation(
 
     return strategies.map(strategy => mapStrategyToResponseDtoOperation(strategy));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { MiniAttackStrategyEntity } from '../../entities/mini-attack-strategy.entity';
@@ -35,18 +35,3 @@ export async function deleteAllStrategiesByServerAndVillageOperation(
     await strategiesRepo.remove(strategies);
     logger.log(`Deleted ${strategies.length} strategies for server ${serverId}, village ${villageId}`);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

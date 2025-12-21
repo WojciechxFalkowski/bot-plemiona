@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+﻿import { BadRequestException } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 
 export interface ParseBarbarianVillageUrlDependencies {
@@ -74,18 +74,3 @@ export function parseBarbarianVillageUrlOperation(
         throw new BadRequestException(`Invalid URL format: ${error.message}`);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

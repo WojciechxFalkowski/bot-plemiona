@@ -1,4 +1,4 @@
-import { ArmyData, ArmyUtils } from '@/utils/army/army.utils';
+﻿import { ArmyData, ArmyUtils } from '@/utils/army/army.utils';
 import { MiniAttackStrategyResponseDto } from '@/mini-attack-strategies/dto';
 import { Logger } from '@nestjs/common';
 
@@ -40,18 +40,3 @@ export function calculateMaxPossibleAttacksOperation(
 
     return maxPossibleAttacks;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

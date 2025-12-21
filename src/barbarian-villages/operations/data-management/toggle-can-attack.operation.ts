@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { BarbarianVillageEntity } from '../../entities/barbarian-village.entity';
 import { Logger } from '@nestjs/common';
 import { findOneBarbarianVillageOperation } from '../query/find-one-barbarian-village.operation';
@@ -36,18 +36,3 @@ export async function toggleCanAttackOperation(
 
     return savedVillage;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

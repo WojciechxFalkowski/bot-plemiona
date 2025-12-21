@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { BarbarianVillageEntity } from '../../entities/barbarian-village.entity';
 import { UpdateBarbarianVillageDto } from '../../dto/update-barbarian-village.dto';
 import { Logger } from '@nestjs/common';
@@ -38,18 +38,3 @@ export async function updateBarbarianVillageOperation(
     logger.log(`Barbarian village updated successfully: ${savedVillage.name} (${savedVillage.target}) on server ${serverId}`);
     return savedVillage;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

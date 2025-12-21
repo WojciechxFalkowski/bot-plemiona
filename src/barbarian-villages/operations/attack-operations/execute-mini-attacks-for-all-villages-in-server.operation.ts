@@ -1,4 +1,4 @@
-import { Browser } from 'playwright';
+﻿import { Browser } from 'playwright';
 import { Logger } from '@nestjs/common';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { AuthUtils } from '@/utils/auth/auth.utils';
@@ -80,18 +80,3 @@ export async function executeMiniAttacksForAllVillagesInServerOperation(
         await browser.close();
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

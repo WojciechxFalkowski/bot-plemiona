@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { MiniAttackStrategyEntity } from '../../entities/mini-attack-strategy.entity';
@@ -40,18 +40,4 @@ export async function updateNextTargetIndexOperation(
 
     logger.debug(`Next target index updated to ${nextTargetIndex} for server ${serverId}, village ${villageId}`);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

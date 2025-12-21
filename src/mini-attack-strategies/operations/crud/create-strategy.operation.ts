@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
 import { MiniAttackStrategyEntity } from '../../entities/mini-attack-strategy.entity';
 import { CreateMiniAttackStrategyDto } from '../../dto/create-mini-attack-strategy.dto';
@@ -48,18 +48,3 @@ export async function createStrategyOperation(
 
     return mapStrategyToResponseDtoOperation(savedStrategy);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { BarbarianVillageEntity } from '../../entities/barbarian-village.entity';
 
 export interface GetBarbarianVillagesCountDependencies {
@@ -19,18 +19,3 @@ export async function getBarbarianVillagesCountOperation(
 
     return await barbarianVillageRepository.count({ where: { serverId } });
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

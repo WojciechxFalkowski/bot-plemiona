@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { ConflictException } from '@nestjs/common';
 import { BarbarianVillageEntity } from '../../entities/barbarian-village.entity';
 import { CreateBarbarianVillageDto } from '../../dto/create-barbarian-village.dto';
@@ -44,18 +44,3 @@ export async function createBarbarianVillageOperation(
 
     return savedVillage;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

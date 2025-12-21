@@ -1,4 +1,4 @@
-// Query operations
+﻿// Query operations
 export { findStrategyByIdOperation } from './query/find-strategy-by-id.operation';
 export { findStrategyByServerAndVillageOperation } from './query/find-strategy-by-server-and-village.operation';
 export { findAllStrategiesByServerAndVillageOperation } from './query/find-all-strategies-by-server-and-village.operation';
@@ -23,18 +23,3 @@ export { getActiveUnitsOperation } from './state-management/get-active-units.ope
 
 // Utilities operations
 export { mapStrategyToResponseDtoOperation } from './utilities/map-strategy-to-response-dto.operation';
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

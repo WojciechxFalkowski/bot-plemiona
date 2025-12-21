@@ -1,4 +1,4 @@
-import { VillageUnitsConfig, ScavengingUnitsConfig } from '../../interfaces/scavenging-units-config.interface';
+﻿import { VillageUnitsConfig, ScavengingUnitsConfig } from '../../interfaces/scavenging-units-config.interface';
 
 export interface MapConfigToVillageUnitsConfigParams {
   villageId: string;
@@ -24,18 +24,6 @@ export function mapConfigToVillageUnitsConfigOperation(
     units: params.units,
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

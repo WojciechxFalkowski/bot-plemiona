@@ -1,4 +1,4 @@
-import { ScavengingUnitsConfig } from '../../interfaces/scavenging-units-config.interface';
+﻿import { ScavengingUnitsConfig } from '../../interfaces/scavenging-units-config.interface';
 
 /**
  * Tworzy domyślną konfigurację jednostek dla zbieractwa
@@ -16,18 +16,3 @@ export function createDefaultUnitsConfigOperation(): ScavengingUnitsConfig {
     heavy: false,
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

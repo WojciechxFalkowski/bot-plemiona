@@ -1,4 +1,4 @@
-import { MiniAttackStrategyEntity } from '../../entities/mini-attack-strategy.entity';
+﻿import { MiniAttackStrategyEntity } from '../../entities/mini-attack-strategy.entity';
 import { MiniAttackStrategyResponseDto } from '../../dto/mini-attack-strategy-response.dto';
 
 export interface MapStrategyToResponseDtoDependencies {
@@ -37,18 +37,5 @@ export function mapStrategyToResponseDtoOperation(
         updatedAt: strategy.updatedAt
     };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

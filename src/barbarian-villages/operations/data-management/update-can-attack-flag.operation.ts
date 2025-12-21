@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+﻿import { Repository } from 'typeorm';
 import { BarbarianVillageEntity } from '../../entities/barbarian-village.entity';
 import { Logger } from '@nestjs/common';
 
@@ -27,18 +27,3 @@ export async function updateCanAttackFlagOperation(
         logger.error(`Failed to update canAttack flag for village ${target}:`, error);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

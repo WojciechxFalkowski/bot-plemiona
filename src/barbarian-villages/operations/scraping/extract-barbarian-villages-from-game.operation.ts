@@ -1,4 +1,4 @@
-import { Page } from 'playwright';
+﻿import { Page } from 'playwright';
 import { Logger } from '@nestjs/common';
 
 export interface ExtractBarbarianVillagesFromGameDependencies {
@@ -20,18 +20,3 @@ export async function extractBarbarianVillagesFromGameOperation(
 
     return [];
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

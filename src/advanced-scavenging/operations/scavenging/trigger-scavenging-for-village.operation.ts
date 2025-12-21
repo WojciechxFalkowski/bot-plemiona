@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+﻿import { Logger } from '@nestjs/common';
 import { CrawlerService } from '@/crawler/crawler.service';
 
 export interface TriggerScavengingForVillageDependencies {
@@ -23,18 +23,6 @@ export async function triggerScavengingForVillageOperation(
   logger.log(`Manual scavenging trigger requested for village ${villageId} on server ${serverId}`);
   return await crawlerService.performScavengingForVillage(serverId, villageId);
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

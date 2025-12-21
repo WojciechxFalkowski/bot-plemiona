@@ -1,4 +1,4 @@
-import { Page } from 'playwright';
+﻿import { Page } from 'playwright';
 import { AttackUtils, AttackResult, BarbarianVillage, ERROR_MESSAGE_ATTACK_BUTTON_NOT_FOUND, ERROR_MESSAGE_ATTACK_FORM_NOT_FOUND } from '@/utils/army/attack.utils';
 import { ArmyData } from '@/utils/army/army.utils';
 import { BarbarianVillageEntity } from '../../entities/barbarian-village.entity';
@@ -111,18 +111,3 @@ export async function executeAttackOnVillageOperation(
         };
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
