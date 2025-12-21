@@ -17,6 +17,60 @@ export interface ProcessVillageScavengingDependencies {
 }
 
 /**
+ * Nawiguje przez taby na stronie aby wymusić pełne przeładowanie danych
+ * Kliknie w inny tab (np. "Rozkazy Wojska") i wróci na "Zbieractwo"
+ */
+async function navigateThroughTabsAndBack(page: Page, logger: Logger): Promise<void> {
+    try {
+        // Znajdź taby w tabeli .modemenu
+        const modemenuTable = page.locator('table.vis.modemenu');
+
+        // Znajdź tab "Rozkazy Wojska" lub alternatywnie "Pobliskie wioski"
+        // W Plemionach taby są w komórkach tabeli (td) zawierających linki
+        const rozkazyTab = modemenuTable.locator('td a').filter({ hasText: 'Rozkazy Wojska' }).first();
+        const pobliskieTab = modemenuTable.locator('td a').filter({ hasText: 'Pobliskie wioski' }).first();
+
+        // Spróbuj kliknąć w "Rozkazy Wojska", jeśli nie ma - użyj "Pobliskie wioski"
+        if (await rozkazyTab.isVisible({ timeout: 5000 })) {
+            logger.debug('Clicking on "Rozkazy Wojska" tab...');
+            await rozkazyTab.click();
+            await page.waitForLoadState('networkidle', { timeout: 15000 });
+        } else if (await pobliskieTab.isVisible({ timeout: 5000 })) {
+            logger.debug('Clicking on "Pobliskie wioski" tab...');
+            await pobliskieTab.click();
+            await page.waitForLoadState('networkidle', { timeout: 15000 });
+        } else {
+            logger.warn('Could not find alternative tab to navigate - using direct URL navigation as fallback');
+            // Fallback: użyj bezpośredniej nawigacji URL
+            const currentUrl = page.url();
+            const urlObj = new URL(currentUrl);
+            const overviewUrl = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}?${urlObj.search.replace(/mode=[^&]*/, '')}&screen=place`;
+            await page.goto(overviewUrl, { waitUntil: 'networkidle', timeout: 15000 });
+        }
+
+        // Wróć na tab "Zbieractwo"
+        const zbieractwoTab = modemenuTable.locator('td a').filter({ hasText: 'Zbieractwo' }).first();
+        if (await zbieractwoTab.isVisible({ timeout: 5000 })) {
+            logger.debug('Returning to "Zbieractwo" tab...');
+            await zbieractwoTab.click();
+            await page.waitForLoadState('networkidle', { timeout: 15000 });
+        } else {
+            // Fallback: bezpośrednia nawigacja URL
+            const currentUrl = page.url();
+            const urlObj = new URL(currentUrl);
+            const zbieractwoUrl = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}?${urlObj.search.replace(/mode=[^&]*/, '')}&screen=place&mode=scavenge`;
+            await page.goto(zbieractwoUrl, { waitUntil: 'networkidle', timeout: 15000 });
+        }
+
+        // Upewnij się że kontenery poziomów są widoczne
+        await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 15000 });
+    } catch (error) {
+        logger.error('Error during tab navigation:', error);
+        throw error;
+    }
+}
+
+/**
  * Processes scavenging for a specific village
  * This is a complex operation that handles the full scavenging workflow
  * @param serverId ID of the server
@@ -106,14 +160,9 @@ export async function processVillageScavengingOperation(
         const sortedPlans = [...dispatchPlan].sort((a, b) => a.level - b.level);
 
         for (const levelPlan of sortedPlans) {
-            // ODŚWIEŻ STRONĘ PRZED KAŻDYM POZIOMEM - zapewnia świeże dane
-            logger.debug(`Refreshing page before processing level ${levelPlan.level} in village ${village.name}...`);
-            await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
-            await page.waitForTimeout(1000);
-            
-            // Upewnij się że kontenery poziomów są widoczne
-            await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
-            await page.waitForTimeout(500);
+            // NAWIGUJ PRZEZ TABY PRZED KAŻDYM POZIOMEM - zapewnia świeże dane
+            logger.debug(`Navigating through tabs before processing level ${levelPlan.level} in village ${village.name}...`);
+            await navigateThroughTabsAndBack(page, logger);
 
             // Retry logic - spróbuj maksymalnie 3 razy z opóźnieniem
             let levelStatus: ScavengeLevelStatus | undefined;
@@ -166,7 +215,7 @@ export async function processVillageScavengingOperation(
                 // PRZED KLIKNIĘCIEM - upewnij się że mamy aktualny status poziomu
                 const currentStatusesBeforeClick = await ScavengingUtils.getScavengingLevelStatuses(page);
                 const levelStatusBeforeClick = currentStatusesBeforeClick.find(s => s.level === levelPlan.level);
-                
+
                 if (!levelStatusBeforeClick || !levelStatusBeforeClick.isAvailable) {
                     logger.warn(`Level ${levelPlan.level} became unavailable before clicking Start in village ${village.name}. Skipping.`);
                     continue;
@@ -176,20 +225,6 @@ export async function processVillageScavengingOperation(
 
                 if (await startButton.isVisible({ timeout: 2000 })) {
                     ScavengingUtils.logDispatchInfo(levelPlan, village.name);
-
-                    // #region agent log
-                    const formInputsBeforeClick = await Promise.all(unitOrder.map(async (unit) => {
-                        const inputSelector = `input[name="${unitInputNames[unit]}"]`;
-                        try {
-                            const input = await page.locator(inputSelector).first();
-                            const value = await input.inputValue().catch(() => null);
-                            return { unit, value };
-                        } catch {
-                            return { unit, value: null };
-                        }
-                    }));
-                    fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'process-village-scavenging.operation.ts',message:'Form inputs BEFORE click',data:{level:levelPlan.level,formInputs:formInputsBeforeClick,expectedPlan:levelPlan.dispatchUnits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                    // #endregion
 
                     // Pobierz faktyczny czas trwania z interfejsu gry
                     let actualDurationSeconds = 0;
@@ -208,16 +243,8 @@ export async function processVillageScavengingOperation(
                         logger.log(`  * Błąd podczas odczytu czasu zbieractwa: ${timeError.message}`);
                     }
 
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'process-village-scavenging.operation.ts',message:'BEFORE click Start',data:{level:levelPlan.level,villageName:village.name,dispatchUnits:levelPlan.dispatchUnits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                    // #endregion
-
                     await startButton.click();
                     logger.log(`Clicked Start for level ${levelPlan.level} in village ${village.name}`);
-
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'process-village-scavenging.operation.ts',message:'AFTER click Start',data:{level:levelPlan.level},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                    // #endregion
 
                     // Update village state using operation
                     updateVillageStateAfterDispatchOperation(
@@ -234,22 +261,11 @@ export async function processVillageScavengingOperation(
                     await page.waitForLoadState('networkidle', { timeout: 10000 });
                     await page.waitForTimeout(2000); // Daj więcej czasu na przetworzenie
 
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'process-village-scavenging.operation.ts',message:'BEFORE reload verification',data:{level:levelPlan.level},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                    // #endregion
-
-                    // WERYFIKACJA: Sprawdź czy poziom faktycznie został wysłany
-                    await page.waitForTimeout(2000); // Daj czas na aktualizację
-                    await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
-                    await page.waitForTimeout(1000);
-                    await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
+                    // WERYFIKACJA: Sprawdź czy poziom faktycznie został wysłany - nawigacja przez taby
+                    await navigateThroughTabsAndBack(page, logger);
 
                     const verificationStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
                     const verificationStatus = verificationStatuses.find(s => s.level === levelPlan.level);
-
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/00b63b23-f71f-4d89-a6c0-b08216483911',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'process-village-scavenging.operation.ts',message:'AFTER verification status check',data:{level:levelPlan.level,isBusy:verificationStatus?.isBusy,isAvailable:verificationStatus?.isAvailable,allStatuses:verificationStatuses.map(s=>({level:s.level,isBusy:s.isBusy,isAvailable:s.isAvailable}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                    // #endregion
 
                     if (verificationStatus?.isBusy) {
                         logger.log(`✓ Level ${levelPlan.level} successfully dispatched (now busy)`);
@@ -261,19 +277,18 @@ export async function processVillageScavengingOperation(
                         logger.warn(`? Level ${levelPlan.level} status unclear after dispatch. Adding to retry list.`);
                         failedDispatchLevels.set(levelPlan.level, levelPlan);
                     }
-                    
+
                     await page.waitForTimeout(500);
                 } else {
                     logger.warn(`Start button not visible for level ${levelPlan.level} in village ${village.name}, skipping dispatch.`);
                 }
             } catch (clickError) {
                 logger.error(`Error in scavenging for level ${levelPlan.level} in village ${village.name}:`, clickError);
-                // Jeśli wystąpił błąd, odśwież stronę przed następnym poziomem
+                // Jeśli wystąpił błąd, nawiguj przez taby przed następnym poziomem
                 try {
-                    await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
-                    await page.waitForTimeout(1000);
-                } catch (reloadError) {
-                    logger.error(`Error refreshing page after error:`, reloadError);
+                    await navigateThroughTabsAndBack(page, logger);
+                } catch (navigationError) {
+                    logger.error(`Error navigating through tabs after error:`, navigationError);
                 }
             }
         }
@@ -281,72 +296,67 @@ export async function processVillageScavengingOperation(
         // RUNDA 2: Ponowne wysłanie brakujących poziomów
         if (failedDispatchLevels.size > 0) {
             logger.log(`=== ROUND 2: Retrying ${failedDispatchLevels.size} failed dispatches for village ${village.name} ===`);
-            
-            // Odśwież stronę przed rundą 2
-            await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
-            await page.waitForTimeout(1000);
-            await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
-            
+
+            // Nawiguj przez taby przed rundą 2
+            await navigateThroughTabsAndBack(page, logger);
+
             // Sprawdź aktualny status wszystkich poziomów
             const round2Statuses = await ScavengingUtils.getScavengingLevelStatuses(page);
             const availableLevels = round2Statuses.filter(s => s.isAvailable);
-            
+
             logger.log(`Round 2: Found ${availableLevels.length} available levels in village ${village.name}`);
-            
+
             // Sortuj poziomy od najniższego
             const sortedFailedPlans = Array.from(failedDispatchLevels.entries())
                 .sort((a, b) => a[0] - b[0]);
-            
+
             for (const [level, levelPlan] of sortedFailedPlans) {
                 const levelStatus = availableLevels.find(s => s.level === level);
-                
+
                 if (!levelStatus || !levelStatus.isAvailable) {
                     logger.warn(`Round 2: Level ${level} is no longer available in village ${village.name}. Skipping.`);
                     continue;
                 }
-                
+
                 logger.log(`Round 2: Retrying dispatch for level ${level} in village ${village.name}...`);
-                
+
                 // Wypełnij formularz
                 const filledSuccessfully = await ScavengingUtils.fillUnitsForLevel(page, levelPlan, village.name);
-                
+
                 if (!filledSuccessfully) {
                     logger.warn(`Round 2: Could not fill inputs for level ${level}. Skipping.`);
                     continue;
                 }
-                
+
                 // Kliknij Start
                 try {
                     const startButton = levelStatus.containerLocator.locator(levelSelectors.levelStartButton);
-                    
+
                     if (await startButton.isVisible({ timeout: 2000 })) {
                         await startButton.click();
                         logger.log(`Round 2: Clicked Start for level ${level} in village ${village.name}`);
-                        
-                        // Weryfikacja sukcesu
+
+                        // Weryfikacja sukcesu - nawigacja przez taby
                         await page.waitForLoadState('networkidle', { timeout: 10000 });
-                        await page.waitForTimeout(2000);
-                        await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
-                        await page.waitForTimeout(1000);
-                        await page.waitForSelector(levelSelectors.levelContainerBase, { state: 'visible', timeout: 5000 });
-                        
+                        await navigateThroughTabsAndBack(page, logger);
+
                         const finalStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
                         const finalStatus = finalStatuses.find(s => s.level === level);
-                        
+
                         if (finalStatus?.isBusy) {
                             logger.log(`Round 2: ✓ Level ${level} successfully dispatched`);
                             villageSuccessfulDispatches++;
                         } else {
                             logger.warn(`Round 2: ✗ Level ${level} still failed after retry`);
                         }
-                        
+
                         await page.waitForTimeout(1000);
                     }
                 } catch (round2Error) {
                     logger.error(`Round 2: Error dispatching level ${level}:`, round2Error);
                 }
             }
-            
+
             logger.log(`=== Round 2 completed for village ${village.name} ===`);
         }
 
