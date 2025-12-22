@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class ImportAttackPlanDto {
   @ApiProperty({
@@ -17,4 +17,14 @@ export class ImportAttackPlanDto {
   @IsString()
   @IsNotEmpty()
   rawPlan!: string;
+
+  @ApiProperty({
+    description: 'Skip duplicate attacks if they already exist (default: true)',
+    type: Boolean,
+    required: false,
+    default: true,
+  })
+  @IsBoolean()
+  @IsOptional()
+  skipDuplicates?: boolean = true;
 }

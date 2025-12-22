@@ -16,6 +16,7 @@ export enum ScheduledAttackStatus {
   COMPLETED = 'completed',
   FAILED = 'failed',
   CANCELLED = 'cancelled',
+  EXPIRED = 'expired',
 }
 
 @Entity('scheduled_attacks')

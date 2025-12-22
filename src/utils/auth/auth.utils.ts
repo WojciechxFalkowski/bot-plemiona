@@ -1,23 +1,17 @@
 import { BrowserContext, Page } from 'playwright';
 import { Logger } from '@nestjs/common';
-import { SettingsService } from '../../settings/settings.service';
-import { SettingsKey } from '../../settings/settings-keys.enum';
 import { PlemionaCookiesService } from '../../plemiona-cookies';
 import {
-    PlemionaCookie,
     PlemionaCredentials,
     LoginOptions,
     LoginResult
 } from './auth.interfaces';
-import { ConfigService } from '@nestjs/config';
 
 export class AuthUtils {
     private static logger = new Logger(AuthUtils.name);
 
     // Constants for Plemiona Login
     private static readonly PLEMIONA_LOGIN_URL = 'https://www.plemiona.pl/';
-    private static readonly PLEMIONA_USERNAME_SELECTOR = 'textbox[name="Nazwa gracza:"]';
-    private static readonly PLEMIONA_LOGIN_BUTTON_SELECTOR = 'link[name="Logowanie"]';
     private static readonly PLEMIONA_WORLD_SELECTOR = (worldName: string) => `text=${worldName}`;
 
     /**
@@ -132,10 +126,11 @@ export class AuthUtils {
             this.logger.log(`Navigated to ${this.PLEMIONA_LOGIN_URL}`);
 
             // Step 3: Check if world selector is visible (indicates successful cookie login)
-                        // Step 3: Check if world selector is visible (indicates successful cookie login)
+            // Step 3: Check if world selector is visible (indicates successful cookie login)
             const worldWrapper = page.locator('.worlds-container');
 
             const worldSelector = worldWrapper.getByText(serverName);
+            this.logger.log(`serverName: ${serverName}`);
             const worldSelectorVisible = await worldSelector.isVisible();
 
             if (worldSelectorVisible && cookiesAdded && !useManualLogin) {

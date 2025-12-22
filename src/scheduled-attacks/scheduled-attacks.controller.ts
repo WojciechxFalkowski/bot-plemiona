@@ -22,7 +22,11 @@ export class ScheduledAttacksController {
   @ApiResponse({ status: 404, description: 'Server not found' })
   public async importAttackPlan(@Body() dto: ImportAttackPlanDto): Promise<ScheduledAttackResponseDto[]> {
     this.logger.log(`Importing scheduled attacks plan for server ${dto.serverId}`);
-    const entities = await this.scheduledAttacksService.importAndSave(dto.rawPlan, dto.serverId);
+    const entities = await this.scheduledAttacksService.importAndSave(
+      dto.rawPlan,
+      dto.serverId,
+      dto.skipDuplicates !== false // default to true if not specified
+    );
     return entities.map((entity) => this.mapEntityToResponseDto(entity));
   }
 
@@ -81,6 +85,20 @@ export class ScheduledAttacksController {
     return this.mapEntityToResponseDto(entity);
   }
 
+  @Delete()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete all scheduled attacks' })
+  @ApiQuery({ name: 'serverId', required: false, type: Number, description: 'Delete attacks for specific server only' })
+  @ApiResponse({ status: 200, description: 'Attacks deleted successfully', schema: { type: 'object', properties: { deletedCount: { type: 'number' }, message: { type: 'string' } } } })
+  public async deleteAll(@Query('serverId') serverId?: number): Promise<{ deletedCount: number; message: string }> {
+    this.logger.log(`Deleting all scheduled attacks${serverId ? ` for server ${serverId}` : ''}`);
+    const deletedCount = await this.scheduledAttacksService.deleteAll(serverId);
+    return {
+      deletedCount,
+      message: `Deleted ${deletedCount} scheduled attack${deletedCount !== 1 ? 's' : ''}${serverId ? ` for server ${serverId}` : ''}`,
+    };
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a scheduled attack' })
@@ -90,6 +108,33 @@ export class ScheduledAttacksController {
   public async delete(@Param('id', ParseIntPipe) id: number): Promise<{ message: string }> {
     await this.scheduledAttacksService.delete(id);
     return { message: 'Scheduled attack deleted successfully' };
+  }
+
+  @Post('server/:serverId/schedule')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Schedule all pending attacks for a server' })
+  @ApiParam({ name: 'serverId', type: Number, description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'Attacks scheduled successfully', schema: { type: 'object', properties: { scheduledCount: { type: 'number' }, message: { type: 'string' } } } })
+  @ApiResponse({ status: 404, description: 'Server not found' })
+  public async scheduleAttacks(@Param('serverId', ParseIntPipe) serverId: number): Promise<{ scheduledCount: number; message: string }> {
+    this.logger.log(`Scheduling attacks for server ${serverId}`);
+    const scheduledCount = await this.scheduledAttacksService.scheduleAllAttacks(serverId);
+    return {
+      scheduledCount,
+      message: `Scheduled ${scheduledCount} attacks for server ${serverId}`,
+    };
+  }
+
+  @Post(':id/execute-now')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Execute a scheduled attack immediately' })
+  @ApiParam({ name: 'id', type: Number, description: 'Scheduled attack ID' })
+  @ApiResponse({ status: 200, description: 'Attack executed successfully', type: ScheduledAttackResponseDto })
+  @ApiResponse({ status: 404, description: 'Scheduled attack not found' })
+  public async executeNow(@Param('id', ParseIntPipe) id: number): Promise<ScheduledAttackResponseDto> {
+    this.logger.log(`Executing scheduled attack ${id} immediately`);
+    const entity = await this.scheduledAttacksService.executeAttackNow(id);
+    return this.mapEntityToResponseDto(entity);
   }
 
   private mapEntityToResponseDto(entity: ScheduledAttackEntity): ScheduledAttackResponseDto {

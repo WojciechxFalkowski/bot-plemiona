@@ -33,7 +33,7 @@ export async function performAttackOperation(
     const { logger, credentials, plemionaCookiesService } = deps;
 
     logger.log(`Starting attack sequence for village ${config.id}...`);
-    const { browser, context, page } = await createBrowserPage({ headless: true });
+    const { browser, context, page } = await createBrowserPage({ headless: false });
 
     try {
         // Use AuthUtils for login and world selection

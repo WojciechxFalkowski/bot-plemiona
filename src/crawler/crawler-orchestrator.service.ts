@@ -461,14 +461,26 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             const memUsage = process.memoryUsage();
             const formatBytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
 
-            this.logger.log('📊 Memory Usage:', {
-                rss: `${formatBytes(memUsage.rss)} MB`,
-                heapUsed: `${formatBytes(memUsage.heapUsed)} MB`,
-                heapTotal: `${formatBytes(memUsage.heapTotal)} MB`,
-                external: `${formatBytes(memUsage.external)} MB`,
-                arrayBuffers: `${formatBytes(memUsage.arrayBuffers)} MB`,
-                timestamp: new Date().toISOString()
-            });
+            const rss = formatBytes(memUsage.rss);
+            const heapUsed = formatBytes(memUsage.heapUsed);
+            const heapTotal = formatBytes(memUsage.heapTotal);
+            const external = formatBytes(memUsage.external);
+            const arrayBuffers = formatBytes(memUsage.arrayBuffers);
+            const timestamp = new Date().toISOString();
+
+            const table = `
+┌─────────────────────┬──────────────┐
+│ Metric              │ Value        │
+├─────────────────────┼──────────────┤
+│ RSS                 │ ${String(rss).padEnd(12)} MB │
+│ Heap Used           │ ${String(heapUsed).padEnd(12)} MB │
+│ Heap Total          │ ${String(heapTotal).padEnd(12)} MB │
+│ External            │ ${String(external).padEnd(12)} MB │
+│ Array Buffers       │ ${String(arrayBuffers).padEnd(12)} MB │
+│ Timestamp           │ ${timestamp.substring(0, 19)} │
+└─────────────────────┴──────────────┘`;
+
+            this.logger.log(`📊 Memory Usage:${table}`);
         }, 5 * 60 * 1000); // Every 5 minutes
     }
 
