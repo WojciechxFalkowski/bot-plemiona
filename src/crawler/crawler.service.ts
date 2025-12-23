@@ -281,6 +281,7 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
             serversService: this.serversService,
             advancedScavengingService: this.advancedScavengingService,
             scavengingLimitsService: this.scavengingLimitsService,
+            settingsService: this.settingsService,
             scavengingTimeData: this.scavengingTimeData
         });
     }
