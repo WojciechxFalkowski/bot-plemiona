@@ -32,10 +32,18 @@ export class CrawlerOrchestratorController {
         this.logger.log(`Manual scavenging trigger requested for server ${serverId}`);
 
         try {
-            await this.orchestratorService.triggerScavenging(serverId);
+            const result = await this.orchestratorService.triggerScavenging(serverId);
+
+            if (!result.autoScavengingEnabled) {
+                return {
+                    success: true,
+                    message: `Auto-zbieractwo jest wyłączone dla serwera ${result.serverCode} (${result.serverName}). Bot nie został uruchomiony.`
+                };
+            }
+
             return {
                 success: true,
-                message: `Scavenging process completed successfully for server ${serverId}`
+                message: `Zbieractwo zostało pomyślnie uruchomione dla serwera ${result.serverCode} (${result.serverName})`
             };
         } catch (error) {
             this.logger.error(`Error during manual scavenging trigger for server ${serverId}:`, error);

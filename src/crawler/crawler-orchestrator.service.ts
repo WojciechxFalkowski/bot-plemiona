@@ -596,8 +596,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
     /**
      * Public method to manually trigger scavenging for a specific server
+     * @returns Object with serverCode, serverName and autoScavengingEnabled flag for response message
      */
-    public async triggerScavenging(serverId: number): Promise<void> {
+    public async triggerScavenging(serverId: number): Promise<{ serverCode: string; serverName: string; autoScavengingEnabled: boolean }> {
         const plan = this.multiServerState.serverPlans.get(serverId);
         if (!plan) {
             throw new Error(`Server ${serverId} not found`);
@@ -605,9 +606,40 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         this.logger.log(`🔧 Manually triggering scavenging for server ${plan.serverCode}...`);
 
+        // Check if auto-scavenging is enabled before executing task
+        try {
+            const setting = await this.settingsService.getSetting<{ value: boolean }>(
+                serverId,
+                SettingsKey.AUTO_SCAVENGING_ENABLED
+            );
+            const autoScavengingEnabled = setting?.value === true;
+
+            if (!autoScavengingEnabled) {
+                this.logger.warn(`⚠️ Auto-scavenging is disabled for server ${plan.serverCode} (${plan.serverName}). Manual trigger will not run the bot.`);
+                return {
+                    serverCode: plan.serverCode,
+                    serverName: plan.serverName,
+                    autoScavengingEnabled: false
+                };
+            }
+        } catch (error) {
+            this.logger.error(`❌ Failed to check auto-scavenging setting for server ${plan.serverCode}:`, error);
+            // In case of error, treat as disabled to be safe
+            return {
+                serverCode: plan.serverCode,
+                serverName: plan.serverName,
+                autoScavengingEnabled: false
+            };
+        }
+
         try {
             await this.executeScavengingTask(serverId);
             this.logger.log(`✅ Manual scavenging completed successfully for server ${plan.serverCode}`);
+            return {
+                serverCode: plan.serverCode,
+                serverName: plan.serverName,
+                autoScavengingEnabled: true
+            };
         } catch (error) {
             this.logger.error(`❌ Error during manual scavenging for server ${plan.serverCode}:`, error);
             throw error;
