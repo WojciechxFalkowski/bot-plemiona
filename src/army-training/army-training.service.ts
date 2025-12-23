@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { ServersService } from '@/servers';
@@ -26,8 +26,10 @@ export class ArmyTrainingService {
     private readonly MAX_IN_QUEUE_LIGHT = 10;
 
     constructor(
+        @Inject(forwardRef(() => ServersService))
         private readonly serversService: ServersService,
         private readonly plemionaCookiesService: PlemionaCookiesService,
+        @Inject(forwardRef(() => VillagesService))
         private readonly villagesService: VillagesService,
         private readonly configService: ConfigService,
     ) {

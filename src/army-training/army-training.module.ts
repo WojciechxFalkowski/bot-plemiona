@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ArmyTrainingService } from './army-training.service';
@@ -16,7 +16,7 @@ import { VillagesModule } from '@/villages/villages.module';
   imports: [
     ConfigModule,
     DatabaseModule,
-    ServersModule,
+    forwardRef(() => ServersModule),
     PlemionaCookiesModule,
     VillagesModule,
   ],

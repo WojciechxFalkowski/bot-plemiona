@@ -1,10 +1,11 @@
 // settings.controller.ts
-import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus, Logger, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus, Logger, ParseIntPipe, Inject, forwardRef } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import { GlobalSettingsService } from './global-settings.service';
 import { SettingsKey } from './settings-keys.enum';
 import { PlemionaCookieDto, PlemionaCookiesDto } from './dto';
+import { CrawlerOrchestratorService } from '@/crawler/crawler-orchestrator.service';
 import {
     GetSettingDecorators,
     CreateSettingDecorators,
@@ -27,7 +28,9 @@ export class SettingsController {
 
     constructor(
         private readonly settingsService: SettingsService,
-        private readonly globalSettingsService: GlobalSettingsService
+        private readonly globalSettingsService: GlobalSettingsService,
+        @Inject(forwardRef(() => CrawlerOrchestratorService))
+        private readonly orchestratorService: CrawlerOrchestratorService
     ) { }
 
     private validateKey(key: string): void {
@@ -56,13 +59,22 @@ export class SettingsController {
     @Put('global/orchestrator-monitoring')
     async updateGlobalOrchestratorMonitoring(@Body() data: { enabled: boolean }) {
         this.logger.log(`Updating global orchestrator monitoring to ${data.enabled}`);
+        const enabledValue = Boolean(data.enabled);
+
         await this.globalSettingsService.setGlobalSetting(
             SettingsKey.CRAWLER_ORCHESTRATOR_MONITORING_ENABLED,
-            { value: Boolean(data.enabled) }
+            { value: enabledValue }
         );
+
+        if (enabledValue) {
+            await this.orchestratorService.startMonitoringManually();
+        } else {
+            await this.orchestratorService.stopOrchestratorPublic();
+        }
+
         return {
-            message: `Global orchestrator monitoring ${data.enabled ? 'enabled' : 'disabled'}`,
-            enabled: Boolean(data.enabled)
+            message: `Global orchestrator monitoring ${enabledValue ? 'enabled' : 'disabled'}`,
+            enabled: enabledValue
         };
     }
 

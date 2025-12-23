@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { VillageConstructionQueueEntity } from './entities/village-construction-queue.entity';
 import { VillageEntity } from '../villages/entities/village.entity';
@@ -6,7 +6,6 @@ import { CreateConstructionQueueDto } from './dto/create-construction-queue.dto'
 import { VILLAGE_CONSTRUCTION_QUEUE_ENTITY_REPOSITORY } from './village-construction-queue.service.contracts';
 import { VILLAGES_ENTITY_REPOSITORY } from '../villages/villages.service.contracts';
 import { ConfigService } from '@nestjs/config';
-import { SettingsService } from '@/settings/settings.service';
 import { VillagesService } from '@/villages/villages.service';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
@@ -89,12 +88,13 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     constructor(
         @Inject(VILLAGE_CONSTRUCTION_QUEUE_ENTITY_REPOSITORY)
         private readonly queueRepository: Repository<VillageConstructionQueueEntity>,
+        @Inject(forwardRef(() => VillagesService))
         private readonly villagesService: VillagesService,
         @Inject(VILLAGES_ENTITY_REPOSITORY)
         private readonly villageRepository: Repository<VillageEntity>,
-        private settingsService: SettingsService,
         private plemionaCookiesService: PlemionaCookiesService,
         private configService: ConfigService,
+        @Inject(forwardRef(() => ServersService))
         private serversService: ServersService
     ) {
         this.credentials = {

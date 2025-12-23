@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SettingsService } from '@/settings/settings.service';
 import { ServersService } from '@/servers/servers.service';
@@ -22,7 +22,7 @@ import { Page } from 'playwright';
 import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
 import { GlobalSettingsService } from '@/settings/global-settings.service';
 import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execution-log.entity';
-import { CrawlerTask, ServerCrawlerPlan, MultiServerState } from './operations/query/get-multi-server-status.operation';
+import { CrawlerTask, ServerCrawlerPlan, MultiServerState, MultiServerStatusResponse } from './operations/query/get-multi-server-status.operation';
 import { updateServerTaskStatesOperation } from './operations/state-management/update-server-task-states.operation';
 import { findNextTaskToExecuteOperation } from './operations/scheduling/find-next-task-to-execute.operation';
 import { logDetailedTaskScheduleOperation } from './operations/monitoring/log-detailed-task-schedule.operation';
@@ -78,6 +78,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly plemionaCookiesService: PlemionaCookiesService,
         private readonly serversService: ServersService,
         private readonly configService: ConfigService,
+        @Inject(forwardRef(() => CrawlerService))
         private readonly crawlerService: CrawlerService,
         private readonly constructionQueueService: VillageConstructionQueueService,
         private readonly barbarianVillagesService: BarbarianVillagesService,
@@ -530,6 +531,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log('🛑 Multi-server crawler orchestrator stopped');
     }
 
+    public async stopOrchestratorPublic(): Promise<void> {
+        this.stopOrchestrator();
+    }
+
     /**
      * Public method to manually trigger scavenging for a specific server
      */
@@ -681,7 +686,23 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     /**
      * Gets status information for all servers
      */
-    public getMultiServerStatus(): any {
+    public async getMultiServerStatus(): Promise<MultiServerStatusResponse> {
+        const monitoringEnabled = await this.isMonitoringEnabled();
+
+        if (!monitoringEnabled) {
+            const baseStatus = getMultiServerStatusOperation({
+                multiServerState: this.multiServerState,
+                mainTimer: null,
+                monitoringTimer: null
+            });
+
+            return {
+                ...baseStatus,
+                schedulerActive: false,
+                monitoringActive: false
+            };
+        }
+
         return getMultiServerStatusOperation({
             multiServerState: this.multiServerState,
             mainTimer: this.mainTimer,

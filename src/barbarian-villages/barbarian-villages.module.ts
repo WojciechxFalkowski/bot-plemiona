@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from '../database/database.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -11,7 +11,7 @@ import { BarbarianVillagesService } from './barbarian-villages.service';
 import { BulkBarbarianVillagesService } from './bulk-barbarian-villages/bulk-barbarian-villages.service';
 
 @Module({
-  imports: [DatabaseModule, ConfigModule, SettingsModule, PlemionaCookiesModule, ServersModule, MiniAttackStrategiesModule],
+  imports: [DatabaseModule, ConfigModule, SettingsModule, PlemionaCookiesModule, forwardRef(() => ServersModule), MiniAttackStrategiesModule],
   controllers: [BarbarianVillagesController],
   providers: [...barbarianVillagesProviders, BarbarianVillagesService, BulkBarbarianVillagesService],
   exports: [BarbarianVillagesService],

@@ -103,7 +103,7 @@ export class CrawlerOrchestratorController {
             await this.orchestratorService.startMonitoringManually();
 
             // Get current status to show if orchestrator is now active
-            const status = this.orchestratorService.getMultiServerStatus();
+            const status = await this.orchestratorService.getMultiServerStatus();
             const orchestratorStatus = status.schedulerActive ? 'started' : 'stopped';
 
             return {
@@ -241,11 +241,11 @@ export class CrawlerOrchestratorController {
 
     @Get('status')
     @GetStatusDecorator()
-    getStatus() {
+    async getStatus() {
         this.logger.log('Multi-server orchestrator status requested');
 
         try {
-            const status = this.orchestratorService.getMultiServerStatus();
+            const status = await this.orchestratorService.getMultiServerStatus();
             return {
                 success: true,
                 data: status

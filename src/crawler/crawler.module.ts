@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CrawlerService } from './crawler.service';
 import { CrawlerController } from './crawler.controller';
 import { CrawlerOrchestratorService } from './crawler-orchestrator.service';
@@ -18,7 +18,7 @@ import { AdvancedScavengingModule } from '@/advanced-scavenging/advanced-scaveng
 import { CrawlerExecutionLogsModule } from '@/crawler-execution-logs/crawler-execution-logs.module';
 
 @Module({
-  imports: [SettingsModule, ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule, ScavengingLimitsModule, AdvancedScavengingModule, CrawlerExecutionLogsModule],
+  imports: [forwardRef(() => SettingsModule), ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule, ScavengingLimitsModule, AdvancedScavengingModule, CrawlerExecutionLogsModule],
   controllers: [CrawlerController, CrawlerOrchestratorController],
   providers: [CrawlerService, CrawlerOrchestratorService],
   exports: [CrawlerService, CrawlerOrchestratorService],

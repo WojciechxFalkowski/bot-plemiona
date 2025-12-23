@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, forwardRef } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Page } from 'playwright';
 import { ConfigService } from '@nestjs/config';
@@ -44,6 +44,7 @@ export class BarbarianVillagesService {
         private readonly settingsService: SettingsService,
         private readonly plemionaCookiesService: PlemionaCookiesService,
         private readonly configService: ConfigService,
+        @Inject(forwardRef(() => ServersService))
         private readonly serversService: ServersService,
         private readonly miniAttackStrategiesService: MiniAttackStrategiesService,
     ) {
