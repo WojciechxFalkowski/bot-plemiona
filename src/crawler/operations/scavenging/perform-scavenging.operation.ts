@@ -147,6 +147,8 @@ export async function performScavengingOperation(
                     const levelStatuses = await ScavengingUtils.getScavengingLevelStatuses(page);
                     const freeLevels = levelStatuses.filter(s => s.isAvailable);
                     const busyLevels = levelStatuses.filter(s => s.isBusy);
+                    const lockedLevels = levelStatuses.filter(s => s.isLocked);
+                    const unlockingLevels = levelStatuses.filter(s => s.isUnlocking);
 
                     if (freeLevels.length > 0) {
                         // Sprawdź czy wioska ma jednostki do wysłania
@@ -170,7 +172,42 @@ export async function performScavengingOperation(
                             logger.log(`✗ Village ${village.name} skipped - no enabled units available`);
                         }
                     } else {
-                        logger.log(`✗ Village ${village.name} skipped - ${busyLevels.length} busy levels, no free levels`);
+                        // Sprawdź czy to rzeczywiście "wszystkie sloty zablokowane" czy błąd pobierania danych
+                        if (levelStatuses.length === 0) {
+                            // Błąd: nie znaleziono żadnych kontenerów - oznacza błąd podczas pobierania danych
+                            logger.warn(
+                                `⚠️ Village ${village.name} - data collection error: no level containers found. ` +
+                                `Will retry with short interval.`
+                            );
+                            // Nadpisz dane wioski pustymi levels aby oznaczyć błąd
+                            const villageDataIndex = scavengingTimeData.villages.findIndex(
+                                v => v.villageId === village.id
+                            );
+                            if (villageDataIndex >= 0) {
+                                scavengingTimeData.villages[villageDataIndex].levels = [];
+                            }
+                            logger.log(`✗ Village ${village.name} skipped - data collection error (will retry shortly)`);
+                        } else if (lockedLevels.length === levelStatuses.length && levelStatuses.length === 4) {
+                            // Normalna sytuacja: wszystkie 4 sloty są zablokowane
+                            logger.log(
+                                `✗ Village ${village.name} skipped - all ${lockedLevels.length} levels locked (normal state)`
+                            );
+                        } else {
+                            // Błąd: nieprawidłowa liczba poziomów (powinno być 4) lub mieszany stan
+                            logger.warn(
+                                `⚠️ Village ${village.name} - unexpected state: ${levelStatuses.length} levels found ` +
+                                `(${busyLevels.length} busy, ${freeLevels.length} free, ${lockedLevels.length} locked, ${unlockingLevels.length} unlocking). ` +
+                                `Expected 4 locked levels. Will retry with short interval.`
+                            );
+                            // Nadpisz dane wioski pustymi levels aby oznaczyć błąd
+                            const villageDataIndex = scavengingTimeData.villages.findIndex(
+                                v => v.villageId === village.id
+                            );
+                            if (villageDataIndex >= 0) {
+                                scavengingTimeData.villages[villageDataIndex].levels = [];
+                            }
+                            logger.log(`✗ Village ${village.name} skipped - data collection error (will retry shortly)`);
+                        }
                     }
 
                     // Małe opóźnienie między wioskami
