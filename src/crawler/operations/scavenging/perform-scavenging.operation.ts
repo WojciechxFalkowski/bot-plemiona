@@ -120,12 +120,12 @@ export async function performScavengingOperation(
             scavengingTimeData.villages = [];
 
             // PRE-FILTERING: Sprawdź status scavenging dla wiosek z włączonym auto-scavenging
-            logger.log('=== PRE-FILTERING PHASE: Collecting scavenging status for auto-scavenging enabled villages ===');
+            logger.log('=== PRE-FILTERING PHASE: Collecting data for auto-scavenging enabled villages ===');
             const villagesToProcess: VillageResponseDto[] = [];
 
             for (let i = 0; i < villages.length; i++) {
                 const village = villages[i];
-                logger.log(`Pre-filtering village ${i + 1}/${villages.length}: ${village.name} (ID: ${village.id})`);
+                logger.log(`Pre-filtering village data for village ${i + 1}/${villages.length}: ${village.name} (ID: ${village.id})`);
 
                 try {
                     // Nawigacja do zakładki Zbieractwo dla sprawdzenia statusu
