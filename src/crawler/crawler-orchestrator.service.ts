@@ -265,6 +265,52 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Refreshes active servers list and updates scheduler
+     * Should be called when server status changes (enable/disable)
+     */
+    public async refreshActiveServersAndSchedule(): Promise<void> {
+        try {
+            const monitoringEnabled = await this.isMonitoringEnabled();
+            if (!monitoringEnabled) {
+                this.logger.debug('⚪ Global monitoring disabled - stopping scheduler after server status change');
+                this.stopScheduler();
+                return;
+            }
+
+            await this.refreshActiveServers();
+
+            if (this.multiServerState.activeServers.length === 0) {
+                this.logger.warn('⚠️ No active servers found - stopping scheduler after server status change');
+                this.stopScheduler();
+                return;
+            }
+
+            await this.updateAllServerTaskStates();
+            
+            // Check if orchestrator should be running
+            const hasOrchestratorEnabled = await this.hasAnyOrchestratorEnabled();
+            if (hasOrchestratorEnabled) {
+                if (!this.mainTimer) {
+                    this.logger.log('🟢 Refreshing scheduler after server status change...');
+                    this.scheduleNextExecution();
+                } else {
+                    // Re-schedule next execution with updated server list
+                    this.scheduleNextExecution();
+                }
+            } else {
+                if (this.mainTimer) {
+                    this.logger.log('🔴 Multi-server orchestrator disabled - stopping scheduler after server status change...');
+                    this.stopScheduler();
+                } else {
+                    this.logger.debug('⚪ Multi-server orchestrator disabled - monitoring...');
+                }
+            }
+        } catch (error) {
+            this.logger.error('❌ Error refreshing servers and scheduler:', error);
+        }
+    }
+
+    /**
      * Main scheduler that determines which task to execute next across all servers
      */
     private scheduleNextExecution(): void {
@@ -511,6 +557,17 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Clears all server plans and active servers from memory
+     */
+    private clearServerPlans(): void {
+        this.multiServerState.serverPlans.clear();
+        this.multiServerState.activeServers = [];
+        this.multiServerState.currentServerIndex = 0;
+        this.multiServerState.isRotating = false;
+        this.logger.log('🗑️ Server plans cleared from memory');
+    }
+
+    /**
      * Stops the crawler orchestrator
      */
     private stopOrchestrator(): void {
@@ -527,6 +584,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             clearInterval(this.memoryMonitoringTimer);
             this.memoryMonitoringTimer = null;
         }
+
+        this.clearServerPlans();
 
         this.logger.log('🛑 Multi-server crawler orchestrator stopped');
     }

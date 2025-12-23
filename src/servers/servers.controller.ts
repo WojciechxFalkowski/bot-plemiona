@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, HttpStatus, Logger, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, HttpStatus, Logger, ParseIntPipe, Inject, forwardRef } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ServersService } from './servers.service';
 import { CreateServerDto, UpdateServerDto, UpdateServerCookiesDto, ServerResponseDto, ServerCookiesResponseDto } from './dto';
+import { CrawlerOrchestratorService } from '@/crawler/crawler-orchestrator.service';
 import {
     GetAllServersDecorators,
     GetActiveServersDecorators,
@@ -22,7 +23,11 @@ import {
 export class ServersController {
     private readonly logger = new Logger(ServersController.name);
 
-    constructor(private readonly serversService: ServersService) { }
+    constructor(
+        private readonly serversService: ServersService,
+        @Inject(forwardRef(() => CrawlerOrchestratorService))
+        private readonly crawlerOrchestratorService: CrawlerOrchestratorService
+    ) { }
 
     @Get()
     @GetAllServersDecorators()
@@ -66,7 +71,17 @@ export class ServersController {
         @Body() updateServerDto: UpdateServerDto
     ): Promise<ServerResponseDto> {
         this.logger.log(`Updating server ID: ${id}`);
-        return this.serversService.update(id, updateServerDto);
+        const updatedServer = await this.serversService.update(id, updateServerDto);
+        
+        // Refresh scheduler if server status (isActive) was changed
+        if (updateServerDto.isActive !== undefined) {
+            this.logger.log(`Server ${id} isActive status changed - refreshing scheduler...`);
+            await this.crawlerOrchestratorService.refreshActiveServersAndSchedule().catch(err => {
+                this.logger.error(`Failed to refresh scheduler after server update: ${err.message}`);
+            });
+        }
+        
+        return updatedServer;
     }
 
     @Delete(':id')
