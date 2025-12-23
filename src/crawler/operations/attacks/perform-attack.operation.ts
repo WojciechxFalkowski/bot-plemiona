@@ -11,12 +11,68 @@ export interface AttackConfig {
     scheduleTime: number; // Time in minutes (e.g., 180 for 3 hours, 370 for 6 hours 10 minutes)
     marchTime: number;    // March time in minutes (how long troops take to reach target)
     type: 'attack' | 'support'; // Type of action: 'attack' or 'support'
+    attackType?: 'off' | 'fake' | 'nobleman'; // Detailed attack type for validation
+    metadata?: Record<string, unknown>; // Metadata for fake attacks (ram vs catapult)
 }
 
 export interface PerformAttackDependencies {
     logger: Logger;
     credentials: PlemionaCredentials;
     plemionaCookiesService: PlemionaCookiesService;
+}
+
+/**
+ * Mapuje typ ataku na listę wymaganych jednostek do walidacji
+ */
+function getRequiredUnitsForAttackType(
+    attackType?: 'off' | 'fake' | 'nobleman',
+    metadata?: Record<string, unknown>
+): string[] {
+    if (!attackType) {
+        // Domyślnie sprawdź wszystkie jednostki używane w performAttackOperation
+        return ['axe', 'light', 'ram', 'snob'];
+    }
+
+    switch (attackType) {
+        case 'off':
+            return ['axe', 'light', 'ram'];
+        case 'nobleman':
+            return ['axe', 'light', 'ram'];
+        case 'fake':
+            // Dla fejka sprawdź metadata - jeśli jest informacja o katapultach, użyj catapult, w przeciwnym razie ram
+            const useCatapult = metadata?.useCatapult === true || metadata?.catapult !== undefined;
+            return useCatapult ? ['axe', 'light', 'catapult'] : ['axe', 'light', 'ram'];
+        default:
+            return ['axe', 'light', 'ram', 'snob'];
+    }
+}
+
+/**
+ * Mapuje kod jednostki na polską nazwę
+ */
+function getUnitNamePL(unitCode: string): string {
+    const unitNames: Record<string, string> = {
+        axe: 'topory',
+        light: 'lekka kawaleria',
+        ram: 'tarany',
+        catapult: 'katapulty',
+        snob: 'szlachcice',
+    };
+    return unitNames[unitCode] || unitCode;
+}
+
+/**
+ * Mapuje kod jednostki na selektor inputa
+ */
+function getUnitInputSelector(unitCode: string): string {
+    const selectors: Record<string, string> = {
+        axe: '#unit_input_axe',
+        light: '#unit_input_light',
+        ram: '#unit_input_ram',
+        catapult: '#unit_input_catapult',
+        snob: '#unit_input_snob',
+    };
+    return selectors[unitCode] || `#unit_input_${unitCode}`;
 }
 
 /**
@@ -55,48 +111,65 @@ export async function performAttackOperation(
             // Wait for page to load completely
             await page.waitForTimeout(2000);
 
-            // Click on units_entry_all_axe to add all axe units
-            logger.log('Adding all axe units...');
-            const axeLink = page.locator('#units_entry_all_axe');
-            if (await axeLink.isVisible({ timeout: 5000 })) {
-                await axeLink.click();
-                await page.waitForTimeout(500);
-                logger.log('✓ All axe units added');
-            } else {
-                logger.warn('Axe units link not found or not visible');
+            // Określ wymagane jednostki na podstawie typu ataku
+            const requiredUnits = getRequiredUnitsForAttackType(config.attackType, config.metadata);
+            logger.log(`Required units for attack type ${config.attackType || 'default'}: ${requiredUnits.join(', ')}`);
+
+            // Mapowanie jednostek na linki "all"
+            const unitLinks: Record<string, string> = {
+                axe: '#units_entry_all_axe',
+                light: '#units_entry_all_light',
+                ram: '#units_entry_all_ram',
+                snob: '#units_entry_all_snob',
+            };
+
+            // Kliknij linki "all" tylko dla wymaganych jednostek (jeśli istnieją linki)
+            for (const unit of requiredUnits) {
+                const linkSelector = unitLinks[unit];
+                if (linkSelector) {
+                    logger.log(`Adding all ${unit} units...`);
+                    const unitLink = page.locator(linkSelector);
+                    if (await unitLink.isVisible({ timeout: 5000 })) {
+                        await unitLink.click();
+                        await page.waitForTimeout(500);
+                        logger.log(`✓ All ${unit} units added`);
+                    } else {
+                        logger.warn(`${unit} units link not found or not visible`);
+                    }
+                } else if (unit === 'catapult') {
+                    // Dla katapult nie ma linka "all", więc pomijamy kliknięcie
+                    logger.log(`Catapult units - no "all" link available, will validate input value directly`);
+                }
             }
 
-            // Click on units_entry_all_light to add all light cavalry units
-            logger.log('Adding all light cavalry units...');
-            const lightLink = page.locator('#units_entry_all_light');
-            if (await lightLink.isVisible({ timeout: 5000 })) {
-                await lightLink.click();
-                await page.waitForTimeout(500);
-                logger.log('✓ All light cavalry units added');
-            } else {
-                logger.warn('Light cavalry units link not found or not visible');
+            // Walidacja wartości jednostek przed wysłaniem ataku
+            const emptyUnits: string[] = [];
+            for (const unit of requiredUnits) {
+                const inputSelector = getUnitInputSelector(unit);
+                const unitInput = page.locator(inputSelector);
+                
+                if (await unitInput.isVisible({ timeout: 2000 })) {
+                    const inputValue = await unitInput.inputValue();
+                    const numericValue = parseInt(inputValue, 10) || 0;
+                    
+                    if (numericValue === 0) {
+                        emptyUnits.push(getUnitNamePL(unit));
+                        logger.warn(`Unit ${unit} has zero value`);
+                    } else {
+                        logger.log(`Unit ${unit} has value: ${numericValue}`);
+                    }
+                } else {
+                    logger.warn(`Input field for ${unit} not found or not visible`);
+                    // Jeśli pole nie istnieje, traktujemy to jako błąd
+                    emptyUnits.push(getUnitNamePL(unit));
+                }
             }
 
-            // Click on units_entry_all_ram to add all ram units
-            logger.log('Adding all ram units...');
-            const ramLink = page.locator('#units_entry_all_ram');
-            if (await ramLink.isVisible({ timeout: 5000 })) {
-                await ramLink.click();
-                await page.waitForTimeout(500);
-                logger.log('✓ All ram units added');
-            } else {
-                logger.warn('Ram units link not found or not visible');
-            }
-
-            // Click on units_entry_all_snob to add all snob units
-            logger.log('Adding all snob units...');
-            const snobLink = page.locator('#units_entry_all_snob');
-            if (await snobLink.isVisible({ timeout: 5000 })) {
-                await snobLink.click();
-                await page.waitForTimeout(500);
-                logger.log('✓ All snob units added');
-            } else {
-                logger.warn('Snob units link not found or not visible');
+            // Jeśli któraś wymagana jednostka ma wartość 0, rzuć błąd
+            if (emptyUnits.length > 0) {
+                const errorMessage = `Atak nie może zostać wysłany: następujące jednostki mają wartość zero: ${emptyUnits.join(', ')}`;
+                logger.error(errorMessage);
+                throw new Error(errorMessage);
             }
 
             // Click the attack button

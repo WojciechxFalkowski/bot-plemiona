@@ -20,6 +20,7 @@ import * as ghostCursor from 'ghost-cursor-playwright';
 import { NotificationsService } from '@/notifications/notifications.service';
 import { Page } from 'playwright';
 import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
+import { GlobalSettingsService } from '@/settings/global-settings.service';
 import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execution-log.entity';
 import { CrawlerTask, ServerCrawlerPlan, MultiServerState } from './operations/query/get-multi-server-status.operation';
 import { updateServerTaskStatesOperation } from './operations/state-management/update-server-task-states.operation';
@@ -85,7 +86,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly armyTrainingStrategiesService: ArmyTrainingStrategiesService,
         private readonly playerVillagesService: PlayerVillagesService,
         private readonly notificationsService: NotificationsService,
-        private readonly crawlerExecutionLogsService: CrawlerExecutionLogsService
+        private readonly crawlerExecutionLogsService: CrawlerExecutionLogsService,
+        private readonly globalSettingsService: GlobalSettingsService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -115,13 +117,30 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Starts monitoring and checks orchestrator status periodically
      */
     private async startMonitoring(): Promise<void> {
+        const monitoringEnabled = await this.isMonitoringEnabled();
+
+        if (!monitoringEnabled) {
+            this.logger.warn('🔌 Orchestrator monitoring disabled globally – not starting.');
+            this.stopMonitoringTimer();
+            this.stopScheduler();
+            return;
+        }
+
         this.logger.log('🔍 Starting multi-server orchestrator monitoring...');
 
         // Check immediately if orchestrator should start
         await this.checkAndStartOrchestrator();
 
         // Set up periodic monitoring
+        this.stopMonitoringTimer();
         this.monitoringTimer = setInterval(async () => {
+            const enabled = await this.isMonitoringEnabled();
+            if (!enabled) {
+                this.logger.warn('🔌 Monitoring disabled globally – stopping timers.');
+                this.stopMonitoringTimer();
+                this.stopScheduler();
+                return;
+            }
             await this.checkAndStartOrchestrator();
         }, this.MONITORING_INTERVAL);
     }
@@ -131,6 +150,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      */
     private async checkAndStartOrchestrator(): Promise<void> {
         try {
+            const monitoringEnabled = await this.isMonitoringEnabled();
+            if (!monitoringEnabled) {
+                this.logger.debug('⚪ Global monitoring disabled - skipping orchestrator check');
+                this.stopScheduler();
+                return;
+            }
             // Refresh active servers list
             await this.refreshActiveServers();
 
@@ -467,17 +492,17 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             const external = formatBytes(memUsage.external);
             const arrayBuffers = formatBytes(memUsage.arrayBuffers);
             const timestamp = new Date().toISOString();
-
+            const time = new Date().toLocaleTimeString();
             const table = `
 ┌─────────────────────┬──────────────┐
 │ Metric              │ Value        │
 ├─────────────────────┼──────────────┤
-│ RSS                 │ ${String(rss).padEnd(12)} MB │
-│ Heap Used           │ ${String(heapUsed).padEnd(12)} MB │
-│ Heap Total          │ ${String(heapTotal).padEnd(12)} MB │
-│ External            │ ${String(external).padEnd(12)} MB │
-│ Array Buffers       │ ${String(arrayBuffers).padEnd(12)} MB │
-│ Timestamp           │ ${timestamp.substring(0, 19)} │
+│ RSS                 │ ${String(rss).padEnd(9)} MB │
+│ Heap Used           │ ${String(heapUsed).padEnd(9)} MB │
+│ Heap Total          │ ${String(heapTotal).padEnd(9)} MB │
+│ External            │ ${String(external).padEnd(9)} MB │
+│ Array Buffers       │ ${String(arrayBuffers).padEnd(9)} MB │
+│ Timestamp           │ ${String(time).padEnd(12)} │
 └─────────────────────┴──────────────┘`;
 
             this.logger.log(`📊 Memory Usage:${table}`);
@@ -614,12 +639,32 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log('🔧 Manual monitoring start requested...');
 
         try {
-            await this.checkAndStartOrchestrator();
+            await this.startMonitoring();
             this.logDetailedTaskSchedule();
             this.logger.log('✅ Manual monitoring check completed');
         } catch (error) {
             this.logger.error('❌ Error during manual monitoring start:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Reads global monitoring flag
+     */
+    private async isMonitoringEnabled(): Promise<boolean> {
+        const setting = await this.globalSettingsService.getGlobalSetting<{ value: boolean }>(
+            SettingsKey.CRAWLER_ORCHESTRATOR_MONITORING_ENABLED
+        );
+        return setting?.value !== false;
+    }
+
+    /**
+     * Clears monitoring interval timer
+     */
+    private stopMonitoringTimer(): void {
+        if (this.monitoringTimer) {
+            clearInterval(this.monitoringTimer);
+            this.monitoringTimer = null;
         }
     }
 

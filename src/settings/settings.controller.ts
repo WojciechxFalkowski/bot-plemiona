@@ -2,6 +2,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus, Logger, ParseIntPipe } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
+import { GlobalSettingsService } from './global-settings.service';
 import { SettingsKey } from './settings-keys.enum';
 import { PlemionaCookieDto, PlemionaCookiesDto } from './dto';
 import {
@@ -24,7 +25,10 @@ import {
 export class SettingsController {
     private readonly logger = new Logger(SettingsController.name);
 
-    constructor(private readonly settingsService: SettingsService) { }
+    constructor(
+        private readonly settingsService: SettingsService,
+        private readonly globalSettingsService: GlobalSettingsService
+    ) { }
 
     private validateKey(key: string): void {
         if (!(key in SettingsKey)) {
@@ -39,6 +43,26 @@ export class SettingsController {
         return {
             keys,
             total: keys.length
+        };
+    }
+
+    @Get('global/orchestrator-monitoring')
+    async getGlobalOrchestratorMonitoring() {
+        this.logger.log('Getting global orchestrator monitoring setting');
+        const setting = await this.globalSettingsService.getGlobalSetting<{ value: boolean }>(SettingsKey.CRAWLER_ORCHESTRATOR_MONITORING_ENABLED);
+        return { enabled: setting?.value !== false };
+    }
+
+    @Put('global/orchestrator-monitoring')
+    async updateGlobalOrchestratorMonitoring(@Body() data: { enabled: boolean }) {
+        this.logger.log(`Updating global orchestrator monitoring to ${data.enabled}`);
+        await this.globalSettingsService.setGlobalSetting(
+            SettingsKey.CRAWLER_ORCHESTRATOR_MONITORING_ENABLED,
+            { value: Boolean(data.enabled) }
+        );
+        return {
+            message: `Global orchestrator monitoring ${data.enabled ? 'enabled' : 'disabled'}`,
+            enabled: Boolean(data.enabled)
         };
     }
 

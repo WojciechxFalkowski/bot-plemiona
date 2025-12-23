@@ -63,6 +63,8 @@ export async function executeScheduledAttackOperation(
       scheduleTime: 0, // nieużywane w scheduled attacks
       marchTime: 0, // nieużywane w scheduled attacks
       type: attack.attackType === ScheduledAttackType.SUPPORT ? 'support' : 'attack',
+      attackType: attack.attackType !== ScheduledAttackType.SUPPORT ? attack.attackType : undefined,
+      metadata: attack.metadata,
     };
 
     // Wywołaj odpowiednią operację
