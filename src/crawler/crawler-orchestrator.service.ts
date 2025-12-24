@@ -43,6 +43,7 @@ import { executeMiniAttacksTaskOperation } from './operations/execution/execute-
 import { executeArmyTrainingTaskOperation } from './operations/execution/execute-army-training-task.operation';
 import { executePlayerVillageAttacksTaskOperation } from './operations/execution/execute-player-village-attacks-task.operation';
 import { validateOrchestratorEnabledOperation } from './operations/validation/validate-orchestrator-enabled.operation';
+import { getInitialIntervalsOperation } from './operations/calculations/get-initial-intervals.operation';
 
 @Injectable()
 export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy {
@@ -799,5 +800,27 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             mainTimer: this.mainTimer,
             monitoringTimer: this.monitoringTimer
         });
+    }
+
+    /**
+     * Gets default intervals used when initializing server plans
+     * @returns Default intervals in milliseconds for all task types
+     */
+    public getDefaultIntervals(): {
+        constructionQueue: number;
+        scavenging: number;
+        miniAttacks: number;
+        playerVillageAttacks: number;
+        armyTraining: number;
+    } {
+        const intervals = getInitialIntervalsOperation();
+        
+        return {
+            constructionQueue: intervals.construction,
+            scavenging: 30000, // Hardcoded in initialize-server-plan.operation.ts
+            miniAttacks: intervals.miniAttack,
+            playerVillageAttacks: intervals.playerVillageAttack,
+            armyTraining: intervals.armyTraining
+        };
     }
 } 

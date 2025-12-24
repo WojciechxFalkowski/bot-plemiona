@@ -7,4 +7,5 @@ export { UpdateConstructionQueueSettingDecorator } from './update-construction-q
 export { UpdateMiniAttacksSettingDecorator } from './update-mini-attacks-setting.decorator';
 export { UpdateScavengingSettingDecorator } from './update-scavenging-setting.decorator';
 export { UpdateArmyTrainingSettingDecorator } from './update-army-training-setting.decorator';
-export { GetStatusDecorator } from './get-status.decorator'; 
+export { GetStatusDecorator } from './get-status.decorator';
+export { GetDefaultIntervalsDecorator } from './get-default-intervals.decorator'; 

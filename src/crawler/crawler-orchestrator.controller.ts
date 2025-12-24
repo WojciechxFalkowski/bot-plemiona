@@ -13,7 +13,8 @@ import {
     UpdateMiniAttacksSettingDecorator,
     UpdateScavengingSettingDecorator,
     UpdateArmyTrainingSettingDecorator,
-    GetStatusDecorator
+    GetStatusDecorator,
+    GetDefaultIntervalsDecorator
 } from './decorators';
 
 @ApiTags('Crawler Orchestrator')
@@ -261,6 +262,23 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error('Error getting multi-server status:', error);
             throw new InternalServerErrorException(`Failed to get status: ${error.message}`);
+        }
+    }
+
+    @Get('default-intervals')
+    @GetDefaultIntervalsDecorator()
+    async getDefaultIntervals() {
+        this.logger.log('Default intervals requested');
+
+        try {
+            const intervals = this.orchestratorService.getDefaultIntervals();
+            return {
+                success: true,
+                data: intervals
+            };
+        } catch (error) {
+            this.logger.error('Error getting default intervals:', error);
+            throw new InternalServerErrorException(`Failed to get default intervals: ${error.message}`);
         }
     }
 } 
