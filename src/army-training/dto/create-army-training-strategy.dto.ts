@@ -163,7 +163,7 @@ export class CreateArmyTrainingStrategyDto {
     is_active?: boolean;
 
     @ApiProperty({
-        description: 'Global max: total (InVillage + InQueue + new) across all units',
+        description: 'Max total per unit type (InVillage + InQueue). Each unit type can have up to this many units.',
         example: 200,
         required: false,
         nullable: true
@@ -171,7 +171,7 @@ export class CreateArmyTrainingStrategyDto {
     @IsOptional()
     @IsInt()
     @Min(1)
-    max_total_overall?: number | null;
+    max_total_per_unit?: number | null;
 
     @ApiProperty({
         description: 'Global per-unit cap: max InQueue allowed for any unit',

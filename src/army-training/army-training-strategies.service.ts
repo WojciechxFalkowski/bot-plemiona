@@ -34,7 +34,7 @@ export class ArmyTrainingStrategiesService {
             knight: createDto.knight ?? 0,
             snob: createDto.snob ?? 0,
             is_active: createDto.is_active ?? true,
-            max_total_overall: createDto.max_total_overall ?? null,
+            max_total_per_unit: createDto.max_total_per_unit ?? null,
             max_in_queue_per_unit_overall: createDto.max_in_queue_per_unit_overall ?? 10,
         });
 
@@ -116,7 +116,7 @@ export class ArmyTrainingStrategiesService {
         if (updateDto.knight !== undefined) strategy.knight = updateDto.knight;
         if (updateDto.snob !== undefined) strategy.snob = updateDto.snob;
         if (updateDto.is_active !== undefined) strategy.is_active = updateDto.is_active;
-        if (updateDto.max_total_overall !== undefined) strategy.max_total_overall = updateDto.max_total_overall;
+        if (updateDto.max_total_per_unit !== undefined) strategy.max_total_per_unit = updateDto.max_total_per_unit;
         if (updateDto.max_in_queue_per_unit_overall !== undefined) strategy.max_in_queue_per_unit_overall = updateDto.max_in_queue_per_unit_overall;
 
         const savedStrategy = await this.strategiesRepo.save(strategy);
@@ -151,7 +151,7 @@ export class ArmyTrainingStrategiesService {
         if (updateDto.knight !== undefined) strategy.knight = updateDto.knight;
         if (updateDto.snob !== undefined) strategy.snob = updateDto.snob;
         if (updateDto.is_active !== undefined) strategy.is_active = updateDto.is_active;
-        if (updateDto.max_total_overall !== undefined) strategy.max_total_overall = updateDto.max_total_overall;
+        if (updateDto.max_total_per_unit !== undefined) strategy.max_total_per_unit = updateDto.max_total_per_unit;
         if (updateDto.max_in_queue_per_unit_overall !== undefined) strategy.max_in_queue_per_unit_overall = updateDto.max_in_queue_per_unit_overall;
 
         const savedStrategy = await this.strategiesRepo.save(strategy);
@@ -216,7 +216,7 @@ export class ArmyTrainingStrategiesService {
             knight: strategy.knight,
             snob: strategy.snob,
             is_active: strategy.is_active,
-            max_total_overall: strategy.max_total_overall,
+            max_total_per_unit: strategy.max_total_per_unit,
             max_in_queue_per_unit_overall: strategy.max_in_queue_per_unit_overall,
             createdAt: strategy.createdAt,
             updatedAt: strategy.updatedAt,

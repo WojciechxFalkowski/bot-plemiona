@@ -57,9 +57,9 @@ export class ArmyTrainingStrategyEntity {
     @Column({ type: 'boolean', default: true })
     is_active: boolean;
 
-    // Global limits
+    // Per-unit limits
     @Column({ type: 'int', nullable: true })
-    max_total_overall: number | null;
+    max_total_per_unit: number | null;
 
     @Column({ type: 'int', default: 10 })
     max_in_queue_per_unit_overall: number;

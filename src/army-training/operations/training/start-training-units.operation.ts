@@ -54,9 +54,9 @@ export async function startTrainingUnitsOperation(
         logger.log(formattedTable);
 
         const requestedByUnitKey = calculateRequestedUnitsByKeyOperation(strategy);
-        const { remainingByMaxTotal: initialRemainingByMaxTotal, globalQueueCapPerUnit } = calculateGlobalQueueLimitsOperation(unitsInProduction, strategy);
+        const { globalQueueCapPerUnit } = calculateGlobalQueueLimitsOperation(strategy);
+        const maxTotalPerUnit = strategy.max_total_per_unit ?? null;
 
-        let remainingByMaxTotal = initialRemainingByMaxTotal;
         let anyTrained = false;
 
         for (const unit of unitsInProduction) {
@@ -68,22 +68,17 @@ export async function startTrainingUnitsOperation(
             const producible = unit.dynamicData.producibleCount ?? 0;
             const inQueue = unit.dynamicData.unitsInQueue ?? 0;
             const queueRemaining = Math.max(0, globalQueueCapPerUnit - inQueue);
+            const currentUnitTotal = (unit.dynamicData.unitsTotal ?? 0) + inQueue;
 
-            const grant = calculateUnitTrainingGrantOperation(requested, producible, inQueue, queueRemaining, remainingByMaxTotal);
+            const grant = calculateUnitTrainingGrantOperation(requested, producible, inQueue, queueRemaining, maxTotalPerUnit, currentUnitTotal);
             if (grant <= 0) continue;
 
             logger.log(`⚔️ Training ${grant} of ${unitKey} for village ${villageName.name}`);
             const result = await ArmyUtils.startTrainingUnitOnTrainPage(page, unitKey, grant);
             if (result.success) {
                 anyTrained = true;
-                remainingByMaxTotal = Math.max(0, remainingByMaxTotal - grant);
             } else {
                 logger.warn(`Failed to train ${unitKey}: ${result.error}`);
-            }
-
-            if (remainingByMaxTotal <= 0) {
-                logger.log('Reached global max_total_overall limit; stopping further recruitment');
-                break;
             }
         }
 
