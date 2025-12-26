@@ -1,7 +1,8 @@
 import { Controller, Post, Logger, Body, BadRequestException, InternalServerErrorException, NotFoundException, HttpException, Get, Param } from '@nestjs/common';
 import { CrawlerService } from './crawler.service';
 import { ScavengingTimeData, VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
-import { ApiOperation, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiParam } from '@nestjs/swagger';
+import { VillageUnitsData } from './pages/village-units-overview.page';
 
 // DTO for adding building to queue
 interface AddBuildingToQueueDto {
@@ -213,5 +214,92 @@ export class CrawlerController {
     }
 
     return villageData;
+  }
+
+  /**
+   * Gets village units data from overview table
+   * Extracts all villages with their units data from the combined overview table
+   */
+  @Get('village-units/:serverId')
+  @ApiOperation({
+    summary: 'Pobierz dane o jednostkach wojskowych wszystkich wiosek',
+    description: 'Wyciąga dane o jednostkach wojskowych ze strony przeglądu wiosek. Wymaga zalogowania i automatycznie obsługuje paginację.'
+  })
+  @ApiParam({
+    name: 'serverId',
+    description: 'ID serwera',
+    type: Number,
+    example: 1
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Dane o jednostkach wojskowych pobrane pomyślnie',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          villageId: { type: 'string', description: 'ID wioski' },
+          name: { type: 'string', description: 'Nazwa wioski' },
+          coordinates: { type: 'string', description: 'Koordynaty wioski (format: X|Y)' },
+          population: {
+            type: 'object',
+            properties: {
+              current: { type: 'number', description: 'Aktualna populacja' },
+              max: { type: 'number', description: 'Maksymalna populacja' }
+            }
+          },
+          units: {
+            type: 'object',
+            properties: {
+              spear: { type: 'number', description: 'Pikinier' },
+              sword: { type: 'number', description: 'Miecznik' },
+              axe: { type: 'number', description: 'Topornik' },
+              archer: { type: 'number', description: 'Łucznik (może nie być dostępny na wszystkich serwerach)' },
+              spy: { type: 'number', description: 'Zwiadowca' },
+              light: { type: 'number', description: 'Lekki kawalerzysta' },
+              heavy: { type: 'number', description: 'Ciężki kawalerzysta' },
+              ram: { type: 'number', description: 'Taran' },
+              catapult: { type: 'number', description: 'Katapulta' },
+              knight: { type: 'number', description: 'Rycerz' },
+              snob: { type: 'number', description: 'Szlachcic' }
+            }
+          },
+          traders: {
+            type: 'object',
+            properties: {
+              current: { type: 'number', description: 'Aktualna liczba kupców' },
+              max: { type: 'number', description: 'Maksymalna liczba kupców' }
+            }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Nieprawidłowe parametry żądania' })
+  @ApiResponse({ status: 500, description: 'Błąd serwera podczas wyciągania danych' })
+  public async getVillageUnits(@Param('serverId') serverId: number): Promise<VillageUnitsData[]> {
+    try {
+      this.logger.log(`Requested village units data for server: ${serverId}`);
+      
+      if (!serverId || isNaN(Number(serverId))) {
+        throw new BadRequestException('Invalid serverId parameter');
+      }
+      
+      const villagesData = await this.crawlerService.getVillageUnitsData(Number(serverId));
+      
+      this.logger.log(`Successfully returned units data for ${villagesData.length} villages`);
+      
+      return villagesData;
+      
+    } catch (error) {
+      this.logger.error(`Error getting village units data: ${error.message}`, error.stack);
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      
+      throw new InternalServerErrorException(`Failed to extract village units data: ${error.message}`);
+    }
   }
 } 

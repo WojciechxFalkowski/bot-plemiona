@@ -37,6 +37,7 @@ import { performScavengingOperation } from './operations/scavenging/perform-scav
 import { performScavengingForVillageOperation } from './operations/scavenging/perform-scavenging-for-village.operation';
 import { performAttackOperation, AttackConfig } from './operations/attacks/perform-attack.operation';
 import { performSupportOperation } from './operations/attacks/perform-support.operation';
+import { VillageUnitsOverviewPage, VillageUnitsData } from './pages/village-units-overview.page';
 
 // AttackConfig is now imported from perform-attack.operation.ts
 
@@ -404,5 +405,62 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
             credentials: this.credentials,
             plemionaCookiesService: this.plemionaCookiesService
         });
+    }
+
+    /**
+     * Extracts village units data from overview table
+     * Logs in, navigates to overview page and extracts all village units data
+     * @param serverId - ID of the server
+     * @returns Array of VillageUnitsData objects for all villages
+     */
+    public async getVillageUnitsData(serverId: number): Promise<VillageUnitsData[]> {
+        this.logger.log(`Extracting village units data for server ${serverId}`);
+        
+        const { browser, page } = await createBrowserPage({ headless: true });
+        
+        try {
+            // Get server information
+            const serverCode = await this.serversService.getServerCode(serverId);
+            const serverName = await this.serversService.getServerName(serverId);
+            
+            // Login and select world
+            const loginResult = await AuthUtils.loginAndSelectWorld(
+                page,
+                this.credentials,
+                this.plemionaCookiesService,
+                serverName
+            );
+            
+            if (!loginResult.success || !loginResult.worldSelected) {
+                throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+            }
+            
+            this.logger.log(`Login successful, extracting village units data`);
+            
+            // Get first village ID for navigation (we need any village ID to construct the URL)
+            const villages = await this.villagesService.findAll(serverId, false);
+            if (!villages || villages.length === 0) {
+                throw new Error(`No villages found for server ${serverId}`);
+            }
+            
+            const firstVillageId = villages[0].id;
+            
+            // Use VillageUnitsOverviewPage to extract data
+            const overviewPage = new VillageUnitsOverviewPage(page);
+            await overviewPage.navigate(serverCode, firstVillageId);
+            const villagesData = await overviewPage.extractVillageUnitsData();
+            
+            this.logger.log(`Successfully extracted units data for ${villagesData.length} villages`);
+            
+            return villagesData;
+            
+        } catch (error) {
+            this.logger.error(`Error extracting village units data: ${error.message}`, error.stack);
+            throw error;
+        } finally {
+            if (browser) {
+                await browser.close();
+            }
+        }
     }
 }
