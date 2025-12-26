@@ -9,6 +9,12 @@
 export * from './browser/create-browser-session.operation';
 export * from './browser/navigate-to-page.operation';
 
+// Cache operations
+export * from './cache/cache-village-units-data.operation';
+export * from './cache/get-cached-village-units-data.operation';
+export * from './cache/cleanup-expired-cache.operation';
+export * from './cache/clear-cache-for-server.operation';
+
 // Authentication operations
 export * from './authentication/login-and-select-world.operation';
 export * from './authentication/check-login-status.operation';

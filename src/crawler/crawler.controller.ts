@@ -1,7 +1,7 @@
-import { Controller, Post, Logger, Body, BadRequestException, InternalServerErrorException, NotFoundException, HttpException, Get, Param } from '@nestjs/common';
+import { Controller, Post, Logger, Body, BadRequestException, InternalServerErrorException, NotFoundException, HttpException, Get, Param, Query } from '@nestjs/common';
 import { CrawlerService } from './crawler.service';
 import { ScavengingTimeData, VillageScavengingData } from '@/utils/scavenging/scavenging.interfaces';
-import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiParam } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { VillageUnitsData } from './pages/village-units-overview.page';
 
 // DTO for adding building to queue
@@ -242,13 +242,6 @@ export class CrawlerController {
           villageId: { type: 'string', description: 'ID wioski' },
           name: { type: 'string', description: 'Nazwa wioski' },
           coordinates: { type: 'string', description: 'Koordynaty wioski (format: X|Y)' },
-          population: {
-            type: 'object',
-            properties: {
-              current: { type: 'number', description: 'Aktualna populacja' },
-              max: { type: 'number', description: 'Maksymalna populacja' }
-            }
-          },
           units: {
             type: 'object',
             properties: {
@@ -276,17 +269,32 @@ export class CrawlerController {
       }
     }
   })
+  @ApiQuery({
+    name: 'forceRefresh',
+    description: 'Jeśli true, pomija cache i pobiera świeże dane z gry',
+    required: false,
+    type: Boolean,
+    example: false
+  })
   @ApiResponse({ status: 400, description: 'Nieprawidłowe parametry żądania' })
   @ApiResponse({ status: 500, description: 'Błąd serwera podczas wyciągania danych' })
-  public async getVillageUnits(@Param('serverId') serverId: number): Promise<VillageUnitsData[]> {
+  public async getVillageUnits(
+    @Param('serverId') serverId: number,
+    @Query('forceRefresh') forceRefresh?: string
+  ): Promise<VillageUnitsData[]> {
     try {
-      this.logger.log(`Requested village units data for server: ${serverId}`);
+      const shouldForceRefresh = forceRefresh === 'true';
+      const logMessage = shouldForceRefresh 
+        ? `Requested village units data for server: ${serverId} (force refresh)`
+        : `Requested village units data for server: ${serverId} (cache allowed)`;
+      
+      this.logger.log(logMessage);
       
       if (!serverId || isNaN(Number(serverId))) {
         throw new BadRequestException('Invalid serverId parameter');
       }
       
-      const villagesData = await this.crawlerService.getVillageUnitsData(Number(serverId));
+      const villagesData = await this.crawlerService.getVillageUnitsData(Number(serverId), shouldForceRefresh);
       
       this.logger.log(`Successfully returned units data for ${villagesData.length} villages`);
       

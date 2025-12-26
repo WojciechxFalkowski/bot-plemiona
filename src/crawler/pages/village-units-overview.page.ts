@@ -8,10 +8,6 @@ export interface VillageUnitsData {
 	villageId: string;
 	name: string;
 	coordinates: string;
-	population: {
-		current: number;
-		max: number;
-	};
 	units: {
 		spear: number;      // Pikinier
 		sword: number;     // Miecznik
@@ -304,17 +300,6 @@ export class VillageUnitsOverviewPage {
 			const name = nameMatch ? nameMatch[1].trim() : fullNameText.trim();
 			const coordinates = nameMatch ? nameMatch[2] : '';
 			
-			// Extract population from format "224 (30)" or "9996 (30)"
-			// Population is in the column after building status icons (index 7, counting from 0)
-			const populationCell = row.locator('td').nth(7);
-			const populationText = await populationCell.textContent() || '';
-			const populationMatch = populationText.trim().match(/^(\d+)\s+\((\d+)\)$/);
-			
-			const population = {
-				current: populationMatch ? parseInt(populationMatch[1], 10) : 0,
-				max: populationMatch ? parseInt(populationMatch[2], 10) : 0
-			};
-			
 			// Extract units using the column map from header
 			// Initialize units object
 			const units: VillageUnitsData['units'] = {
@@ -403,7 +388,6 @@ export class VillageUnitsOverviewPage {
 				villageId,
 				name,
 				coordinates,
-				population,
 				units,
 				traders
 			};
@@ -420,15 +404,37 @@ export class VillageUnitsOverviewPage {
 	 */
 	async checkPagination(): Promise<boolean> {
 		try {
-			// Look for pagination table with paged-nav-item links
+			// Look for pagination links - check multiple possible selectors
+			const paginationLinks = this.page.locator('a.paged-nav-item');
+			const linkCount = await paginationLinks.count();
+			
+			if (linkCount > 0) {
+				this.logger.debug(`Found ${linkCount} pagination links`);
+				return true;
+			}
+			
+			// Also check for pagination table
 			const paginationTable = this.page.locator('table.vis').filter({ 
 				has: this.page.locator('.paged-nav-item')
 			});
 			
-			const isVisible = await paginationTable.isVisible({ timeout: 2000 });
-			return isVisible;
+			const isVisible = await paginationTable.isVisible({ timeout: 2000 }).catch(() => false);
+			if (isVisible) {
+				this.logger.debug('Found pagination table');
+				return true;
+			}
+			
+			// Check for any links with page parameter in href
+			const pageLinks = this.page.locator('a[href*="page="]');
+			const pageLinkCount = await pageLinks.count();
+			if (pageLinkCount > 0) {
+				this.logger.debug(`Found ${pageLinkCount} links with page parameter`);
+				return true;
+			}
+			
+			return false;
 		} catch (error) {
-			// If pagination table is not found, assume no pagination
+			this.logger.debug(`Error checking pagination: ${error.message}`);
 			return false;
 		}
 	}
@@ -443,11 +449,48 @@ export class VillageUnitsOverviewPage {
 		
 		try {
 			// First, try to find and use "wszystkie" (all) link if available
-			const allLink = this.page.locator('a.paged-nav-item').filter({ 
-				hasText: '[wszystkie]'
-			});
+			// Check multiple possible text patterns
+			const allLinkPatterns = [
+				'a.paged-nav-item:has-text("[wszystkie]")',
+				'a.paged-nav-item:has-text("wszystkie")',
+				'a[href*="page=-1"]',
+				'a.paged-nav-item[href*="page=-1"]'
+			];
 			
-			if (await allLink.count() > 0 && await allLink.isVisible({ timeout: 2000 })) {
+			let allLink: Locator | null = null;
+			
+			for (const pattern of allLinkPatterns) {
+				try {
+					const link = this.page.locator(pattern).first();
+					if (await link.count() > 0 && await link.isVisible({ timeout: 2000 }).catch(() => false)) {
+						allLink = link;
+						this.logger.log(`Found "wszystkie" link using pattern: ${pattern}`);
+						break;
+					}
+				} catch (error) {
+					// Try next pattern
+					continue;
+				}
+			}
+			
+			// Also try searching by text content
+			if (!allLink) {
+				const allPaginationLinks = await this.page.locator('a.paged-nav-item').all();
+				for (const link of allPaginationLinks) {
+					const linkText = await link.textContent();
+					const href = await link.getAttribute('href');
+					
+					if (linkText && (linkText.toLowerCase().includes('wszystkie') || href?.includes('page=-1'))) {
+						if (await link.isVisible({ timeout: 2000 }).catch(() => false)) {
+							allLink = link;
+							this.logger.log(`Found "wszystkie" link by text/href: "${linkText}" / "${href}"`);
+							break;
+						}
+					}
+				}
+			}
+			
+			if (allLink) {
 				this.logger.log('Found "wszystkie" link, loading all villages on one page');
 				
 				// Click the "wszystkie" link
@@ -468,58 +511,94 @@ export class VillageUnitsOverviewPage {
 			
 			// Get all page links (excluding current page and "wszystkie")
 			const pageLinks = await this.page.locator('a.paged-nav-item').all();
-			const pageNumbers: number[] = [];
+			const pageNumbers: Set<number> = new Set();
+			
+			this.logger.debug(`Found ${pageLinks.length} pagination links to process`);
 			
 			for (const link of pageLinks) {
-				const linkText = await link.textContent();
-				// Extract page number from link text like "[2]" or from href like "page=1"
-				const textMatch = linkText?.match(/\[(\d+)\]/);
-				if (textMatch) {
-					const pageNum = parseInt(textMatch[1], 10);
-					if (!pageNumbers.includes(pageNum)) {
-						pageNumbers.push(pageNum);
-					}
-				} else {
-					// Try to extract from href
+				try {
+					const linkText = await link.textContent();
 					const href = await link.getAttribute('href');
+					
+					this.logger.debug(`Processing link: text="${linkText}", href="${href}"`);
+					
+					// Extract page number from link text like "[2]" or "2"
+					const textMatch = linkText?.match(/\[?(\d+)\]?/);
+					if (textMatch) {
+						const pageNum = parseInt(textMatch[1], 10);
+						if (pageNum > 0) {
+							pageNumbers.add(pageNum);
+						}
+					}
+					
+					// Also try to extract from href like "page=1" or "page=2"
 					if (href) {
-						const hrefMatch = href.match(/page=(\d+)/);
+						const hrefMatch = href.match(/[?&]page=(\d+)/);
 						if (hrefMatch && hrefMatch[1] !== '-1') {
 							const pageNum = parseInt(hrefMatch[1], 10);
-							if (!pageNumbers.includes(pageNum)) {
-								pageNumbers.push(pageNum);
+							if (pageNum > 0) {
+								pageNumbers.add(pageNum);
 							}
 						}
 					}
+				} catch (error) {
+					this.logger.debug(`Error processing pagination link: ${error.message}`);
+					// Continue with other links
 				}
 			}
 			
-			// Sort page numbers
-			pageNumbers.sort((a, b) => a - b);
+			// Convert to sorted array
+			const sortedPageNumbers = Array.from(pageNumbers).sort((a, b) => a - b);
+			this.logger.log(`Found ${sortedPageNumbers.length} pages to process: ${sortedPageNumbers.join(', ')}`);
 			
 			// Parse current page first
 			this.logger.log('Parsing current page (page 1)');
 			const currentPageVillages = await this.parseCurrentPage();
 			allVillages.push(...currentPageVillages);
+			this.logger.log(`Loaded ${currentPageVillages.length} villages from current page`);
 			
 			// Parse each numbered page
-			for (const pageNum of pageNumbers) {
+			for (const pageNum of sortedPageNumbers) {
+				// Skip page 1 as we already parsed it
+				if (pageNum === 1) {
+					continue;
+				}
+				
 				this.logger.log(`Parsing page ${pageNum}`);
 				
-				// Find and click the page link
-				const pageLink = this.page.locator('a.paged-nav-item').filter({ 
+				// Try multiple ways to find the page link
+				let pageLink: Locator | null = null;
+				
+				// Try by text
+				const linkByText = this.page.locator('a.paged-nav-item').filter({ 
 					hasText: `[${pageNum}]`
 				}).first();
 				
-				if (await pageLink.count() > 0 && await pageLink.isVisible({ timeout: 2000 })) {
-					await pageLink.click();
-					await this.page.waitForLoadState('networkidle', { timeout: 15000 });
-					await this.waitForTableLoad();
-					
-					const pageVillages = await this.parseCurrentPage();
-					allVillages.push(...pageVillages);
-					
-					this.logger.log(`Loaded ${pageVillages.length} villages from page ${pageNum}`);
+				if (await linkByText.count() > 0 && await linkByText.isVisible({ timeout: 2000 }).catch(() => false)) {
+					pageLink = linkByText;
+				} else {
+					// Try by href
+					const linkByHref = this.page.locator(`a.paged-nav-item[href*="page=${pageNum}"]`).first();
+					if (await linkByHref.count() > 0 && await linkByHref.isVisible({ timeout: 2000 }).catch(() => false)) {
+						pageLink = linkByHref;
+					}
+				}
+				
+				if (pageLink) {
+					try {
+						await pageLink.click();
+						await this.page.waitForLoadState('networkidle', { timeout: 15000 });
+						await this.waitForTableLoad();
+						
+						const pageVillages = await this.parseCurrentPage();
+						allVillages.push(...pageVillages);
+						
+						this.logger.log(`Loaded ${pageVillages.length} villages from page ${pageNum}`);
+					} catch (error) {
+						this.logger.warn(`Could not find or click link for page ${pageNum}: ${error.message}`);
+					}
+				} else {
+					this.logger.warn(`Page link for page ${pageNum} not found or not visible`);
 				}
 			}
 			

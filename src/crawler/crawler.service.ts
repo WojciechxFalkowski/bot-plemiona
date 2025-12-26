@@ -38,6 +38,10 @@ import { performScavengingForVillageOperation } from './operations/scavenging/pe
 import { performAttackOperation, AttackConfig } from './operations/attacks/perform-attack.operation';
 import { performSupportOperation } from './operations/attacks/perform-support.operation';
 import { VillageUnitsOverviewPage, VillageUnitsData } from './pages/village-units-overview.page';
+// Cache operations
+import { cacheVillageUnitsDataOperation } from './operations/cache/cache-village-units-data.operation';
+import { getCachedVillageUnitsDataOperation } from './operations/cache/get-cached-village-units-data.operation';
+import { clearCacheForServerOperation } from './operations/cache/clear-cache-for-server.operation';
 
 // AttackConfig is now imported from perform-attack.operation.ts
 
@@ -53,6 +57,11 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
         lastCollected: new Date(),
         villages: []
     };
+
+    // Cache for village units data
+    private readonly CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+    private readonly villageUnitsCache = new Map<number, any>();
+    private cacheCleanupInterval: NodeJS.Timeout | null = null;
 
     // Attack configurations
     private readonly attackConfigs: AttackConfig[] = [
@@ -108,6 +117,7 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
      */
     async onModuleInit() {
         this.logger.log('CrawlerService initialized (auto-start disabled - managed by orchestrator)');
+        this.startCacheCleanup();
         // this.scheduleAllAttacks();
     }
 
@@ -116,9 +126,35 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
      */
     async onModuleDestroy() {
         this.logger.log('CrawlerService is being destroyed - cleaning up resources...');
+        // Stop cache cleanup interval
+        if (this.cacheCleanupInterval) {
+            clearInterval(this.cacheCleanupInterval);
+        }
         // Reset scavenging time data to free memory using operation
         resetScavengingDataOperation({ scavengingTimeData: this.scavengingTimeData });
         this.logger.log('CrawlerService cleanup completed');
+    }
+
+    /**
+     * Starts periodic cache cleanup
+     */
+    private startCacheCleanup(): void {
+        this.cacheCleanupInterval = setInterval(() => {
+            const now = new Date();
+            const expiredKeys: number[] = [];
+
+            for (const [serverId, cached] of this.villageUnitsCache.entries()) {
+                const cacheAge = now.getTime() - cached.cachedAt.getTime();
+                if (cacheAge > this.CACHE_TTL) {
+                    expiredKeys.push(serverId);
+                }
+            }
+
+            if (expiredKeys.length > 0) {
+                expiredKeys.forEach(key => this.villageUnitsCache.delete(key));
+                this.logger.debug(`Cleaned up ${expiredKeys.length} expired cache entries`);
+            }
+        }, 60000); // Check every minute
     }
 
     /**
@@ -409,12 +445,30 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
     /**
      * Extracts village units data from overview table
-     * Logs in, navigates to overview page and extracts all village units data
+     * Uses cache if available and not forcing refresh
      * @param serverId - ID of the server
+     * @param forceRefresh - If true, bypass cache and scrape fresh data
      * @returns Array of VillageUnitsData objects for all villages
      */
-    public async getVillageUnitsData(serverId: number): Promise<VillageUnitsData[]> {
-        this.logger.log(`Extracting village units data for server ${serverId}`);
+    public async getVillageUnitsData(serverId: number, forceRefresh: boolean = false): Promise<VillageUnitsData[]> {
+        this.logger.log(`Extracting village units data for server ${serverId} (forceRefresh: ${forceRefresh})`);
+        
+        // Check cache first unless forcing refresh
+        if (!forceRefresh) {
+            const cached = getCachedVillageUnitsDataOperation(serverId, {
+                villageUnitsCache: this.villageUnitsCache,
+                cacheTtl: this.CACHE_TTL,
+                logger: this.logger
+            });
+
+            if (cached) {
+                this.logger.log(`Returning cached data for server ${serverId} (${cached.data.length} villages)`);
+                return cached.data;
+            }
+        }
+
+        // If cache miss or force refresh, scrape fresh data
+        this.logger.log(`Scraping fresh village units data for server ${serverId}`);
         
         const { browser, page } = await createBrowserPage({ headless: true });
         
@@ -452,6 +506,12 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
             
             this.logger.log(`Successfully extracted units data for ${villagesData.length} villages`);
             
+            // Cache the fresh data
+            cacheVillageUnitsDataOperation(serverId, villagesData, {
+                villageUnitsCache: this.villageUnitsCache,
+                logger: this.logger
+            });
+            
             return villagesData;
             
         } catch (error) {
@@ -462,5 +522,16 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                 await browser.close();
             }
         }
+    }
+
+    /**
+     * Clears cache for a specific server
+     * @param serverId - Server ID
+     */
+    public clearCacheForServer(serverId: number): void {
+        clearCacheForServerOperation(serverId, {
+            villageUnitsCache: this.villageUnitsCache,
+            logger: this.logger
+        });
     }
 }
