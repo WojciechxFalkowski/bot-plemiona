@@ -22,12 +22,14 @@ export interface GetBuildingStatesDependencies {
  * @param serverId ID serwera
  * @param villageName Nazwa wioski
  * @param deps Zależności potrzebne do wykonania operacji
+ * @param forceRefresh Jeśli true, usuwa cache przed sprawdzeniem (wymusza scraping)
  * @returns Dane o stanach budynków
  */
 export async function getBuildingStatesOperation(
     serverId: number,
     villageName: string,
-    deps: GetBuildingStatesDependencies
+    deps: GetBuildingStatesDependencies,
+    forceRefresh?: boolean
 ): Promise<{
     villageInfo: VillageResponseDto;
     buildingLevels: BuildingLevels;
@@ -42,6 +44,13 @@ export async function getBuildingStatesOperation(
     const village = await villagesService.findByName(serverId, villageName);
     if (!village) {
         throw new NotFoundException(`Village with name "${villageName}" not found`);
+    }
+
+    // Jeśli forceRefresh, usuń cache przed sprawdzeniem
+    if (forceRefresh) {
+        const cacheKey = `${serverId}-${village.id}`;
+        getCachedVillageBuildingStatesDeps.buildingStatesCache.delete(cacheKey);
+        logger.log(`Force refresh requested - cleared cache for village "${villageName}"`);
     }
 
     // Build maxLevels map from TRIBAL_WARS_BUILDINGS

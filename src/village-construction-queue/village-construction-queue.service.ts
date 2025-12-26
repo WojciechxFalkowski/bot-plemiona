@@ -210,10 +210,20 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
     }
 
     /**
+     * Usuwa cache dla konkretnej wioski
+     */
+    public clearCacheForVillage(serverId: number, villageId: string): void {
+        const cacheKey = `${serverId}-${villageId}`;
+        this.buildingStatesCache.delete(cacheKey);
+        this.logger.log(`Cleared cache for village ${villageId} on server ${serverId}`);
+    }
+
+    /**
      * Pobiera stany budynków dla wioski z cache wraz z maxLevels i kolejką z bazy danych
      * Jeśli cache nie istnieje, wykonuje zapytanie do gry (Playwright)
+     * @param forceRefresh Jeśli true, usuwa cache przed sprawdzeniem (wymusza scraping)
      */
-    public async getBuildingStates(serverId: number, villageName: string) {
+    public async getBuildingStates(serverId: number, villageName: string, forceRefresh?: boolean) {
         return getBuildingStatesOperation(serverId, villageName, {
             logger: this.logger,
             villagesService: this.villagesService,
@@ -244,7 +254,7 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
                     }
                 }
             }
-        });
+        }, forceRefresh);
     }
 
     /**

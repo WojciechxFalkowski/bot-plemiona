@@ -190,7 +190,8 @@ export class VillageConstructionQueueController {
     @HttpCode(HttpStatus.OK)
     async getBuildingStates(
         @Param('villageName') villageName: string,
-        @Query('serverId') serverId: number
+        @Query('serverId') serverId: number,
+        @Query('forceRefresh') forceRefresh?: string
     ): Promise<{
         villageInfo: VillageResponseDto;
         buildingLevels: BuildingLevels;
@@ -208,10 +209,15 @@ export class VillageConstructionQueueController {
             throw new BadRequestException('Village name is required');
         }
 
-        this.logger.log(`Request to get building states for village "${villageName}"`);
+        const shouldForceRefresh = forceRefresh === 'true';
+        const logMessage = shouldForceRefresh 
+            ? `Request to force refresh and get building states for village "${villageName}"`
+            : `Request to get building states for village "${villageName}"`;
+
+        this.logger.log(logMessage);
 
         try {
-            const result = await this.constructionQueueService.getBuildingStates(serverId, villageName);
+            const result = await this.constructionQueueService.getBuildingStates(serverId, villageName, shouldForceRefresh);
             this.logger.log(`Successfully retrieved building states for village "${villageName}" with ${result.databaseQueue.length} items in database queue`);
             return result;
         } catch (error) {
