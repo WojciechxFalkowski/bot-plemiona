@@ -88,4 +88,74 @@ export class TroopDispatchPage {
         await this.page.waitForTimeout(1000);
         this.logger.log('Attack sequence completed successfully');
     }
+
+    /**
+     * Fills the support form with specific spear and sword unit counts
+     * @param spearCount - Number of spearmen to send
+     * @param swordCount - Number of swordsmen to send
+     */
+    public async fillSupportUnits(spearCount: number, swordCount: number): Promise<void> {
+        this.logger.log(`Filling support units: ${spearCount} spear, ${swordCount} sword`);
+
+        // Fill spear input
+        const spearInput = this.page.locator('#unit_input_spear');
+        if (await spearInput.isVisible({ timeout: 3000 })) {
+            await spearInput.fill(spearCount.toString());
+            this.logger.debug(`Filled spear: ${spearCount}`);
+        } else {
+            this.logger.warn('Spear input field not visible');
+            throw new Error('Spear input field not visible on troop dispatch page');
+        }
+
+        await this.page.waitForTimeout(300);
+
+        // Fill sword input
+        const swordInput = this.page.locator('#unit_input_sword');
+        if (await swordInput.isVisible({ timeout: 3000 })) {
+            await swordInput.fill(swordCount.toString());
+            this.logger.debug(`Filled sword: ${swordCount}`);
+        } else {
+            this.logger.warn('Sword input field not visible');
+            throw new Error('Sword input field not visible on troop dispatch page');
+        }
+
+        await this.page.waitForTimeout(300);
+        this.logger.log('Support units filled successfully');
+    }
+
+    /**
+     * Confirms the support sequence by clicking support button and then confirm button
+     * Uses #target_support instead of #target_attack
+     */
+    public async confirmSupportSequence(): Promise<void> {
+        this.logger.log('Clicking support button (#target_support)...');
+        
+        const supportButton = this.page.locator('#target_support');
+        if (await supportButton.isVisible({ timeout: 5000 })) {
+            await supportButton.click();
+            this.logger.debug('Support button clicked');
+        } else {
+            this.logger.error('Support button not visible');
+            throw new Error('Support button (#target_support) not visible on page');
+        }
+
+        // Wait for confirmation page to load
+        await this.page.waitForLoadState('networkidle', { timeout: 10000 });
+        await this.page.waitForTimeout(1000);
+        this.logger.debug('Confirmation page loaded');
+
+        // Click confirm button
+        this.logger.log('Clicking confirmation button (#troop_confirm_submit)...');
+        const confirmButton = this.page.locator('#troop_confirm_submit');
+        if (await confirmButton.isVisible({ timeout: 5000 })) {
+            await confirmButton.click();
+            this.logger.debug('Confirmation button clicked');
+        } else {
+            this.logger.error('Confirmation button not visible');
+            throw new Error('Confirmation button (#troop_confirm_submit) not visible on page');
+        }
+
+        await this.page.waitForTimeout(1000);
+        this.logger.log('Support sequence completed successfully');
+    }
 }

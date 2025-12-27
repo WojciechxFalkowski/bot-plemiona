@@ -20,6 +20,7 @@ import { PlayerVillagesModule } from './player-villages/player-villages.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdvancedScavengingModule } from './advanced-scavenging/advanced-scavenging.module';
 import { ScheduledAttacksModule } from './scheduled-attacks/scheduled-attacks.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { ScheduledAttacksModule } from './scheduled-attacks/scheduled-attacks.mo
     NotificationsModule,
     AdvancedScavengingModule,
     ScheduledAttacksModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
