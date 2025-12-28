@@ -22,9 +22,10 @@ import { Page } from 'playwright';
 import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
 import { GlobalSettingsService } from '@/settings/global-settings.service';
 import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execution-log.entity';
-import { CrawlerTask, ServerCrawlerPlan, MultiServerState, MultiServerStatusResponse } from './operations/query/get-multi-server-status.operation';
+import { CrawlerTask, ServerCrawlerPlan, MultiServerState, MultiServerStatusResponse, ManualTask, ManualTaskType } from './operations/query/get-multi-server-status.operation';
 import { updateServerTaskStatesOperation } from './operations/state-management/update-server-task-states.operation';
-import { findNextTaskToExecuteOperation } from './operations/scheduling/find-next-task-to-execute.operation';
+import { findNextTaskToExecuteOperation, NextTaskResult } from './operations/scheduling/find-next-task-to-execute.operation';
+import { addManualTaskOperation, AddManualTaskResult, getManualTaskByIdOperation, cleanupCompletedManualTasksOperation } from './operations/manual-tasks/add-manual-task.operation';
 import { logDetailedTaskScheduleOperation } from './operations/monitoring/log-detailed-task-schedule.operation';
 import { refreshActiveServersOperation } from './operations/state-management/refresh-active-servers.operation';
 import { initializeServerPlanOperation } from './operations/state-management/initialize-server-plan.operation';
@@ -320,6 +321,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             this.mainTimer = null;
         }
 
+        // Cleanup old completed manual tasks (older than 1 hour)
+        cleanupCompletedManualTasksOperation(60 * 60 * 1000, {
+            multiServerState: this.multiServerState,
+            logger: this.logger
+        });
+
         const nextTask = this.findNextTaskToExecute();
 
         if (!nextTask) {
@@ -330,22 +337,33 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             return;
         }
 
-        const { task, serverId, taskType } = nextTask;
-        const delay = Math.max(0, task.nextExecutionTime.getTime() - Date.now());
-        const plan = this.multiServerState.serverPlans.get(serverId)!;
+        const { task, serverId, taskType, isManualTask } = nextTask;
+
+        // Calculate delay based on task type
+        let delay: number;
+        if (isManualTask) {
+            // Manual tasks run immediately when ready
+            delay = Math.max(0, (task as ManualTask).scheduledFor.getTime() - Date.now());
+        } else {
+            delay = Math.max(0, (task as CrawlerTask).nextExecutionTime.getTime() - Date.now());
+        }
+
+        // Get server info for logging (manual tasks may not have a server plan)
+        const plan = this.multiServerState.serverPlans.get(serverId);
+        const serverInfo = plan ? plan.serverCode : `server ${serverId}`;
 
         this.logDetailedTaskSchedule();
-        this.logger.log(`⏰ Next task: ${taskType} on server ${plan.serverCode} in ${Math.round(delay / 1000)}s`);
+        this.logger.log(`⏰ Next task: ${taskType} on ${serverInfo} in ${Math.round(delay / 1000)}s`);
 
         this.mainTimer = setTimeout(async () => {
-            await this.executeServerTask(serverId, taskType);
+            await this.executeServerTask(serverId, taskType, nextTask);
         }, delay);
     }
 
     /**
      * Finds the next task to execute across all servers
      */
-    private findNextTaskToExecute(): { task: CrawlerTask; serverId: number; taskType: string } | null {
+    private findNextTaskToExecute(): NextTaskResult | null {
         return findNextTaskToExecuteOperation({
             multiServerState: this.multiServerState
         });
@@ -354,12 +372,15 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     /**
      * Executes a task for a specific server
      */
-    private async executeServerTask(serverId: number, taskType: string): Promise<void> {
-        const plan = this.multiServerState.serverPlans.get(serverId);
-        if (!plan) {
-            this.logger.error(`❌ No plan found for server ${serverId}`);
-            this.scheduleNextExecution();
-            return;
+    private async executeServerTask(serverId: number, taskType: string, nextTaskResult?: NextTaskResult): Promise<void> {
+        // For manual tasks, we don't need a server plan
+        if (!nextTaskResult?.isManualTask) {
+            const plan = this.multiServerState.serverPlans.get(serverId);
+            if (!plan) {
+                this.logger.error(`❌ No plan found for server ${serverId}`);
+                this.scheduleNextExecution();
+                return;
+            }
         }
 
         await executeServerTaskOperation(serverId, taskType, {
@@ -377,7 +398,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             armyTrainingStrategiesService: this.armyTrainingStrategiesService,
             settingsService: this.settingsService,
             logger: this.logger
-        });
+        }, nextTaskResult);
 
         // Schedule next execution
         this.scheduleNextExecution();
@@ -822,5 +843,75 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             playerVillageAttacks: intervals.playerVillageAttack,
             armyTraining: intervals.armyTraining
         };
+    }
+
+    // ========================
+    // Manual Task Queue Methods
+    // ========================
+
+    /**
+     * Queues a manual task for execution
+     * Manual tasks are executed ASAP but don't interrupt scheduled tasks
+     * 
+     * @param type Type of manual task
+     * @param serverId Server ID for the task
+     * @param payload Task-specific payload data
+     * @returns Result with taskId, queuePosition, and estimatedWaitTime
+     */
+    public queueManualTask(
+        type: ManualTaskType,
+        serverId: number,
+        payload: unknown
+    ): AddManualTaskResult {
+        const result = addManualTaskOperation(
+            { type, serverId, payload },
+            { multiServerState: this.multiServerState, logger: this.logger }
+        );
+
+        // Reschedule to pick up the new manual task if needed
+        this.scheduleNextExecution();
+
+        return result;
+    }
+
+    /**
+     * Gets all tasks currently in the manual task queue
+     * @returns Array of manual tasks
+     */
+    public getManualTaskQueue(): ManualTask[] {
+        return [...this.multiServerState.manualTaskQueue];
+    }
+
+    /**
+     * Gets a specific manual task by its ID
+     * @param taskId Task ID to find
+     * @returns Manual task or null if not found
+     */
+    public getManualTaskStatus(taskId: string): ManualTask | null {
+        return getManualTaskByIdOperation(taskId, {
+            multiServerState: this.multiServerState
+        });
+    }
+
+    /**
+     * Gets the number of pending manual tasks
+     * @returns Count of pending tasks
+     */
+    public getPendingManualTasksCount(): number {
+        return this.multiServerState.manualTaskQueue.filter(t => t.status === 'pending').length;
+    }
+
+    /**
+     * Estimates wait time for a new manual task
+     * Based on current queue position and average task duration
+     * @returns Estimated wait time in seconds
+     */
+    public getEstimatedWaitTimeForNewTask(): number {
+        const pendingCount = this.getPendingManualTasksCount();
+        const executingCount = this.multiServerState.manualTaskQueue.filter(t => t.status === 'executing').length;
+        
+        // Assume ~60 seconds per task as a rough estimate
+        const averageTaskDuration = 60;
+        return (pendingCount + executingCount) * averageTaskDuration;
     }
 } 

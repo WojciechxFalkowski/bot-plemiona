@@ -111,4 +111,8 @@ export * from './utilities/minutes-to-milliseconds.operation';
 export * from './utilities/format-execution-time.operation';
 export * from './utilities/format-memory-usage.operation';
 
+// Manual tasks operations
+export * from './manual-tasks/add-manual-task.operation';
+export * from './manual-tasks/execute-manual-task.operation';
+
 

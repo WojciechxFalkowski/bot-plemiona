@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { ServerCrawlerPlan, MultiServerState } from '../query/get-multi-server-status.operation';
+import { ServerCrawlerPlan, MultiServerState, ManualTask } from '../query/get-multi-server-status.operation';
 import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
 import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execution-log.entity';
 import { executeConstructionQueueTaskOperation, ExecuteConstructionQueueTaskDependencies } from './execute-construction-queue-task.operation';
@@ -13,6 +13,8 @@ import { updateNextMiniAttackTimeOperation, UpdateNextMiniAttackTimeDependencies
 import { updateNextPlayerVillageAttackTimeOperation, UpdateNextPlayerVillageAttackTimeDependencies } from '../scheduling/update-next-player-village-attack-time.operation';
 import { updateNextArmyTrainingTimeOperation, UpdateNextArmyTrainingTimeDependencies } from '../scheduling/update-next-army-training-time.operation';
 import { updateNextExecutionTimeForFailedTaskOperation, UpdateNextExecutionTimeForFailedTaskDependencies } from '../scheduling/update-next-execution-time-for-failed-task.operation';
+import { executeManualTaskOperation, ExecuteManualTaskDependencies } from '../manual-tasks/execute-manual-task.operation';
+import { NextTaskResult } from '../scheduling/find-next-task-to-execute.operation';
 
 export interface ExecuteServerTaskDependencies
     extends ExecuteConstructionQueueTaskDependencies,
@@ -25,7 +27,8 @@ export interface ExecuteServerTaskDependencies
         UpdateNextMiniAttackTimeDependencies,
         UpdateNextPlayerVillageAttackTimeDependencies,
         UpdateNextArmyTrainingTimeDependencies,
-        UpdateNextExecutionTimeForFailedTaskDependencies {
+        UpdateNextExecutionTimeForFailedTaskDependencies,
+        Omit<ExecuteManualTaskDependencies, 'multiServerState' | 'logger'> {
     multiServerState: MultiServerState;
     crawlerExecutionLogsService: CrawlerExecutionLogsService;
     crawlerService: any; // CrawlerService - need to get scavengingTimeData
@@ -33,17 +36,129 @@ export interface ExecuteServerTaskDependencies
 }
 
 /**
- * Executes a task for a specific server
+ * Executes a manual task from the queue
+ * @param task The manual task to execute
+ * @param deps Dependencies needed for execution
+ */
+async function executeManualTask(
+    task: ManualTask,
+    deps: ExecuteServerTaskDependencies
+): Promise<void> {
+    const { multiServerState, crawlerExecutionLogsService, logger } = deps;
+    const taskType = `Manual: ${task.type}`;
+
+    logger.log(`🔧 Executing manual task: ${task.type} (taskId=${task.id})`);
+
+    // Visible START banner
+    const runId = `Manual_${task.type}-${task.id}`;
+    const startTs = Date.now();
+    const startedAt = new Date(startTs);
+    logger.warn('══════════════════════════════════════════════════════════════════════════════');
+    logger.warn(`🟩 START | ${taskType} | Server ${task.serverId} | runId=${runId}`);
+    logger.warn(`⏱️ Started at: ${startedAt.toLocaleString()}`);
+    logger.warn('══════════════════════════════════════════════════════════════════════════════');
+
+    // Create execution log entry
+    let executionLogId: number | null = null;
+    try {
+        const executionLog = await crawlerExecutionLogsService.logExecution({
+            serverId: task.serverId,
+            villageId: null,
+            title: taskType,
+            description: `Manual task ID: ${task.id}`,
+            startedAt: startedAt,
+        });
+        executionLogId = executionLog.id;
+    } catch (logError) {
+        logger.error(`❌ Failed to create execution log:`, logError);
+    }
+
+    try {
+        // Execute the manual task using the dedicated operation
+        const manualTaskDeps: ExecuteManualTaskDependencies = {
+            multiServerState,
+            logger,
+            credentials: deps.credentials,
+            plemionaCookiesService: deps.plemionaCookiesService,
+            serversService: deps.serversService,
+            crawlerService: deps.crawlerService,
+        };
+
+        const result = await executeManualTaskOperation(task, manualTaskDeps);
+
+        const durationMs = Date.now() - startTs;
+        const endedAt = new Date();
+
+        if (result.success) {
+            logger.warn('══════════════════════════════════════════════════════════════════════════════');
+            logger.warn(`🟦 END   | ${taskType} | Server ${task.serverId} | runId=${runId}`);
+            logger.warn(`✅ Status: success | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
+            logger.warn(`🕒 Ended at: ${endedAt.toLocaleString()}`);
+            logger.warn('══════════════════════════════════════════════════════════════════════════════');
+
+            if (executionLogId !== null) {
+                try {
+                    await crawlerExecutionLogsService.updateExecutionLog(executionLogId, {
+                        endedAt: endedAt,
+                        status: ExecutionStatus.SUCCESS,
+                        description: `Manual task completed successfully`,
+                    });
+                } catch (logError) {
+                    logger.error(`❌ Failed to update execution log:`, logError);
+                }
+            }
+        } else {
+            throw new Error(result.error || 'Manual task failed');
+        }
+
+    } catch (error) {
+        const durationMs = Date.now() - startTs;
+        const endedAt = new Date();
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        logger.warn('══════════════════════════════════════════════════════════════════════════════');
+        logger.warn(`🟥 END   | ${taskType} | Server ${task.serverId} | runId=${runId}`);
+        logger.warn(`❌ Status: error   | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
+        logger.warn(`🕒 Ended at: ${endedAt.toLocaleString()}`);
+        logger.warn('══════════════════════════════════════════════════════════════════════════════');
+
+        logger.error(`❌ Error executing manual task ${task.type}:`, error);
+
+        if (executionLogId !== null) {
+            try {
+                await crawlerExecutionLogsService.updateExecutionLog(executionLogId, {
+                    endedAt: endedAt,
+                    status: ExecutionStatus.ERROR,
+                    description: errorMessage,
+                });
+            } catch (logError) {
+                logger.error(`❌ Failed to update execution log:`, logError);
+            }
+        }
+    }
+}
+
+/**
+ * Executes a task for a specific server (regular or manual)
  * @param serverId ID of the server
  * @param taskType Type of task to execute
  * @param deps Dependencies needed for execution
+ * @param nextTaskResult Optional task result from findNextTaskToExecute (for manual task detection)
  */
 export async function executeServerTaskOperation(
     serverId: number,
     taskType: string,
-    deps: ExecuteServerTaskDependencies
+    deps: ExecuteServerTaskDependencies,
+    nextTaskResult?: NextTaskResult
 ): Promise<void> {
     const { multiServerState, crawlerExecutionLogsService, crawlerService, logger } = deps;
+
+    // Check if this is a manual task
+    if (nextTaskResult?.isManualTask) {
+        await executeManualTask(nextTaskResult.task, deps);
+        return;
+    }
+
     const plan = multiServerState.serverPlans.get(serverId);
 
     if (!plan) {

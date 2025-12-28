@@ -7,6 +7,40 @@ export interface CrawlerTask {
     name: string;
 }
 
+/**
+ * Types of manual tasks that can be queued
+ */
+export type ManualTaskType = 'sendSupport' | 'fetchVillageUnits';
+
+/**
+ * Status of a manual task
+ */
+export type ManualTaskStatus = 'pending' | 'executing' | 'completed' | 'failed';
+
+/**
+ * Manual task that can be queued for execution
+ */
+export interface ManualTask {
+    /** Unique identifier (UUID) */
+    id: string;
+    /** Type of manual task */
+    type: ManualTaskType;
+    /** Server ID for which the task should be executed */
+    serverId: number;
+    /** Task-specific payload (e.g., SendSupportDto) */
+    payload: unknown;
+    /** When the task was added to queue */
+    queuedAt: Date;
+    /** When the task should be executed (usually now) */
+    scheduledFor: Date;
+    /** Current status of the task */
+    status: ManualTaskStatus;
+    /** Error message if task failed */
+    error?: string;
+    /** When the task completed (success or failure) */
+    completedAt?: Date;
+}
+
 export interface ServerCrawlerPlan {
     serverId: number;
     serverCode: string;
@@ -35,6 +69,8 @@ export interface MultiServerState {
     activeServers: ServerResponseDto[];
     serverPlans: Map<number, ServerCrawlerPlan>;
     isRotating: boolean;
+    /** Queue of manual tasks waiting for execution */
+    manualTaskQueue: ManualTask[];
 }
 
 export interface GetMultiServerStatusDependencies {
@@ -43,12 +79,29 @@ export interface GetMultiServerStatusDependencies {
     monitoringTimer: NodeJS.Timeout | null;
 }
 
+/**
+ * Response structure for manual task queue status
+ */
+export interface ManualTaskQueueStatus {
+    totalPending: number;
+    tasks: Array<{
+        id: string;
+        type: ManualTaskType;
+        serverId: number;
+        status: ManualTaskStatus;
+        queuedAt: Date;
+        scheduledFor: Date;
+    }>;
+}
+
 export interface MultiServerStatusResponse {
     activeServersCount: number;
     currentServerIndex: number;
     isRotating: boolean;
     schedulerActive: boolean;
     monitoringActive: boolean;
+    /** Manual task queue status */
+    manualTaskQueue: ManualTaskQueueStatus;
     servers: Array<{
         serverId: number;
         serverCode: string;
@@ -138,12 +191,25 @@ export function getMultiServerStatusOperation(
         }
     }));
 
+    const manualTaskQueueStatus: ManualTaskQueueStatus = {
+        totalPending: multiServerState.manualTaskQueue.filter(t => t.status === 'pending').length,
+        tasks: multiServerState.manualTaskQueue.map(task => ({
+            id: task.id,
+            type: task.type,
+            serverId: task.serverId,
+            status: task.status,
+            queuedAt: task.queuedAt,
+            scheduledFor: task.scheduledFor
+        }))
+    };
+
     return {
         activeServersCount: multiServerState.activeServers.length,
         currentServerIndex: multiServerState.currentServerIndex,
         isRotating: multiServerState.isRotating,
         schedulerActive: !!mainTimer,
         monitoringActive: !!monitoringTimer,
+        manualTaskQueue: manualTaskQueueStatus,
         servers: serverStatuses
     };
 }

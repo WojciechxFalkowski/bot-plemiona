@@ -1,13 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ServersService } from '@/servers';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SendSupportDto } from './dto';
 import { sendSupportOperation, SendSupportResult } from './operations';
+import { CrawlerOrchestratorService } from '@/crawler/crawler-orchestrator.service';
 
 /**
- * Response DTO for send support endpoint
+ * Response DTO for send support endpoint (direct execution - legacy)
  */
 export interface SendSupportResponseDto {
   success: boolean;
@@ -26,8 +27,26 @@ export interface SendSupportResponseDto {
 }
 
 /**
+ * Response DTO for queued support request
+ */
+export interface QueuedSupportResponseDto {
+  /** Unique task ID for tracking */
+  taskId: string;
+  /** Position in the manual task queue (1-based) */
+  queuePosition: number;
+  /** Estimated wait time in seconds */
+  estimatedWaitTime: number;
+  /** Status message */
+  message: string;
+  /** Total allocations queued */
+  totalAllocations: number;
+  /** Target village ID */
+  targetVillageId: number;
+}
+
+/**
  * Service for sending support troops to target villages
- * Acts as an orchestrator, delegating to operations
+ * Queues support requests via CrawlerOrchestratorService for coordinated execution
  */
 @Injectable()
 export class SupportService {
@@ -38,6 +57,8 @@ export class SupportService {
     private readonly configService: ConfigService,
     private readonly serversService: ServersService,
     private readonly plemionaCookiesService: PlemionaCookiesService,
+    @Inject(forwardRef(() => CrawlerOrchestratorService))
+    private readonly crawlerOrchestratorService: CrawlerOrchestratorService,
   ) {
     // Initialize credentials from ConfigService
     this.credentials = {
@@ -46,18 +67,85 @@ export class SupportService {
   }
 
   /**
-   * Sends support troops to a target village from multiple source villages
+   * Queues support troops dispatch to a target village
+   * The task will be executed by the orchestrator when it's safe to do so
    * 
    * @param dto - Send support request data
-   * @returns Result with success/failure status for each allocation
+   * @returns Queue confirmation with task ID and position
    */
-  async sendSupport(dto: SendSupportDto): Promise<SendSupportResponseDto> {
-    this.logger.log(`=== Support dispatch request received ===`);
+  async queueSupport(dto: SendSupportDto): Promise<QueuedSupportResponseDto> {
+    this.logger.log(`=== Support dispatch request received (queuing) ===`);
     this.logger.log(`Server ID: ${dto.serverId}`);
     this.logger.log(`Target village ID: ${dto.targetVillageId}`);
     this.logger.log(`Total allocations: ${dto.allocations.length}`);
     this.logger.log(`Total packages: ${dto.totalPackages}`);
     this.logger.log(`Package size: ${dto.packageSize}`);
+
+    // Log allocation summary
+    const totalSpear = dto.allocations.reduce((sum, a) => sum + a.spearToSend, 0);
+    const totalSword = dto.allocations.reduce((sum, a) => sum + a.swordToSend, 0);
+    this.logger.log(`Total troops to queue: ${totalSpear} spear, ${totalSword} sword`);
+
+    // Validate server exists
+    const serverCode = await this.serversService.getServerCode(dto.serverId);
+    const serverName = await this.serversService.getServerName(dto.serverId);
+
+    if (!serverCode || !serverName) {
+      this.logger.error(`Server not found: ${dto.serverId}`);
+      throw new Error(`Serwer o ID ${dto.serverId} nie został znaleziony`);
+    }
+
+    this.logger.log(`Server info: ${serverName} (${serverCode})`);
+
+    // Queue the task via orchestrator
+    const queueResult = this.crawlerOrchestratorService.queueManualTask(
+      'sendSupport',
+      dto.serverId,
+      dto,
+    );
+
+    // Build response message
+    let message: string;
+    if (queueResult.queuePosition === 1) {
+      message = `Zadanie wysłania wsparcia dodane do kolejki. Rozpocznie się wkrótce.`;
+    } else {
+      message = `Zadanie dodane do kolejki na pozycji ${queueResult.queuePosition}. Szacowany czas oczekiwania: ~${queueResult.estimatedWaitTime} sekund.`;
+    }
+
+    this.logger.log(`Support dispatch queued: taskId=${queueResult.taskId}, position=${queueResult.queuePosition}`);
+
+    return {
+      taskId: queueResult.taskId,
+      queuePosition: queueResult.queuePosition,
+      estimatedWaitTime: queueResult.estimatedWaitTime,
+      message,
+      totalAllocations: dto.allocations.length,
+      targetVillageId: dto.targetVillageId,
+    };
+  }
+
+  /**
+   * Gets the status of a queued support task
+   * 
+   * @param taskId - Task ID to check
+   * @returns Task status or null if not found
+   */
+  getTaskStatus(taskId: string) {
+    return this.crawlerOrchestratorService.getManualTaskStatus(taskId);
+  }
+
+  /**
+   * Sends support troops directly (legacy - for testing/emergency use)
+   * WARNING: This bypasses the queue and may interfere with other browser sessions
+   * 
+   * @param dto - Send support request data
+   * @returns Result with success/failure status for each allocation
+   */
+  async sendSupportDirect(dto: SendSupportDto): Promise<SendSupportResponseDto> {
+    this.logger.warn(`=== DIRECT support dispatch (bypassing queue) ===`);
+    this.logger.log(`Server ID: ${dto.serverId}`);
+    this.logger.log(`Target village ID: ${dto.targetVillageId}`);
+    this.logger.log(`Total allocations: ${dto.allocations.length}`);
 
     // Log allocation summary
     const totalSpear = dto.allocations.reduce((sum, a) => sum + a.spearToSend, 0);
@@ -82,7 +170,7 @@ export class SupportService {
 
     this.logger.log(`Server info: ${serverName} (${serverCode})`);
 
-    // Call the operation
+    // Call the operation directly
     const result: SendSupportResult = await sendSupportOperation(
       {
         serverId: dto.serverId,

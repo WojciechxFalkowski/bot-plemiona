@@ -67,6 +67,20 @@ export class AuthUtils {
 
             // Wait for world page to load
             await page.waitForLoadState('networkidle', { timeout });
+            
+            // Verify we're actually on the game page and not redirected to session_expired
+            const currentUrl = page.url();
+            if (currentUrl.includes('session_expired')) {
+                this.logger.warn('Session expired detected after world selection - cookies are stale');
+                throw new Error('SESSION_EXPIRED: Cookies are stale, need to re-login');
+            }
+            
+            // Verify we're on a game page (should contain /game.php or be on the world subdomain)
+            if (!currentUrl.includes('/game.php') && !currentUrl.match(/pl\d+\.plemiona\.pl/)) {
+                this.logger.warn(`Unexpected URL after world selection: ${currentUrl}`);
+                throw new Error(`SESSION_INVALID: Unexpected redirect to ${currentUrl}`);
+            }
+            
             this.logger.log('World page loaded successfully.');
 
         } catch (error) {

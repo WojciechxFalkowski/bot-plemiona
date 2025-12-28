@@ -2,8 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
   Min,
   ValidateNested,
@@ -111,5 +113,15 @@ export class SendSupportDto {
   @IsNumber()
   @Min(1)
   packageSize!: number;
+
+  @ApiProperty({
+    description: 'Czy uruchomić przeglądarkę w trybie headless (bez okna). Domyślnie true.',
+    example: true,
+    required: false,
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  headless?: boolean;
 }
 

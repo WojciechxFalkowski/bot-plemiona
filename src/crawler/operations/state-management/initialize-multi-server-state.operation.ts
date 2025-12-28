@@ -20,7 +20,8 @@ export function initializeMultiServerStateOperation(
         currentServerIndex: 0,
         activeServers: [],
         serverPlans: new Map(),
-        isRotating: false
+        isRotating: false,
+        manualTaskQueue: []
     };
 
     logger.log('Multi-server state initialized');

@@ -1,2 +1,6 @@
-export * from './send-support.decorator';
+export {
+  SendSupportDecorators,
+  SendSupportDirectDecorators,
+  GetTaskStatusDecorators,
+} from './send-support.decorator';
 

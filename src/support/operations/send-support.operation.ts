@@ -40,6 +40,8 @@ export interface SendSupportConfig {
   serverName: string;
   targetVillageId: number;
   allocations: VillageAllocationDto[];
+  /** Whether to run browser in headless mode (default: true) */
+  headless?: boolean;
 }
 
 /**
@@ -86,8 +88,9 @@ export async function sendSupportOperation(
 
   try {
     // Create browser session
-    logger.log('Creating browser session...');
-    const browserSession = await createBrowserPage({ headless: false });
+    const headlessMode = config.headless ?? true;
+    logger.log(`Creating browser session (headless: ${headlessMode})...`);
+    const browserSession = await createBrowserPage({ headless: headlessMode });
     browser = browserSession.browser;
     page = browserSession.page;
     logger.debug('Browser session created');

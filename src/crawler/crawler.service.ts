@@ -467,61 +467,80 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
             }
         }
 
-        // If cache miss or force refresh, scrape fresh data
+        // If cache miss or force refresh, scrape fresh data with retry logic
         this.logger.log(`Scraping fresh village units data for server ${serverId}`);
         
-        const { browser, page } = await createBrowserPage({ headless: true });
+        const MAX_RETRIES = 2;
+        const RETRY_DELAY_MS = 3000;
+        let lastError: Error | null = null;
         
-        try {
-            // Get server information
-            const serverCode = await this.serversService.getServerCode(serverId);
-            const serverName = await this.serversService.getServerName(serverId);
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            const { browser, page } = await createBrowserPage({ headless: true });
             
-            // Login and select world
-            const loginResult = await AuthUtils.loginAndSelectWorld(
-                page,
-                this.credentials,
-                this.plemionaCookiesService,
-                serverName
-            );
-            
-            if (!loginResult.success || !loginResult.worldSelected) {
-                throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
-            }
-            
-            this.logger.log(`Login successful, extracting village units data`);
-            
-            // Get first village ID for navigation (we need any village ID to construct the URL)
-            const villages = await this.villagesService.findAll(serverId, false);
-            if (!villages || villages.length === 0) {
-                throw new Error(`No villages found for server ${serverId}`);
-            }
-            
-            const firstVillageId = villages[0].id;
-            
-            // Use VillageUnitsOverviewPage to extract data
-            const overviewPage = new VillageUnitsOverviewPage(page);
-            await overviewPage.navigate(serverCode, firstVillageId);
-            const villagesData = await overviewPage.extractVillageUnitsData();
-            
-            this.logger.log(`Successfully extracted units data for ${villagesData.length} villages`);
-            
-            // Cache the fresh data
-            cacheVillageUnitsDataOperation(serverId, villagesData, {
-                villageUnitsCache: this.villageUnitsCache,
-                logger: this.logger
-            });
-            
-            return villagesData;
-            
-        } catch (error) {
-            this.logger.error(`Error extracting village units data: ${error.message}`, error.stack);
-            throw error;
-        } finally {
-            if (browser) {
-                await browser.close();
+            try {
+                if (attempt > 1) {
+                    this.logger.log(`Retry attempt ${attempt}/${MAX_RETRIES} for village units data`);
+                }
+                
+                // Get server information
+                const serverCode = await this.serversService.getServerCode(serverId);
+                const serverName = await this.serversService.getServerName(serverId);
+                
+                // Login and select world
+                const loginResult = await AuthUtils.loginAndSelectWorld(
+                    page,
+                    this.credentials,
+                    this.plemionaCookiesService,
+                    serverName
+                );
+                
+                if (!loginResult.success || !loginResult.worldSelected) {
+                    throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+                }
+                
+                this.logger.log(`Login successful, extracting village units data`);
+                
+                // Get first village ID for navigation (we need any village ID to construct the URL)
+                const villages = await this.villagesService.findAll(serverId, false);
+                if (!villages || villages.length === 0) {
+                    throw new Error(`No villages found for server ${serverId}`);
+                }
+                
+                const firstVillageId = villages[0].id;
+                
+                // Use VillageUnitsOverviewPage to extract data
+                const overviewPage = new VillageUnitsOverviewPage(page);
+                await overviewPage.navigate(serverCode, firstVillageId);
+                const villagesData = await overviewPage.extractVillageUnitsData();
+                
+                this.logger.log(`Successfully extracted units data for ${villagesData.length} villages`);
+                
+                // Cache the fresh data
+                cacheVillageUnitsDataOperation(serverId, villagesData, {
+                    villageUnitsCache: this.villageUnitsCache,
+                    logger: this.logger
+                });
+                
+                return villagesData;
+                
+            } catch (error) {
+                lastError = error;
+                this.logger.error(`Attempt ${attempt}/${MAX_RETRIES} failed: ${error.message}`);
+                
+                if (attempt < MAX_RETRIES) {
+                    this.logger.log(`Waiting ${RETRY_DELAY_MS}ms before retry...`);
+                    await this.delay(RETRY_DELAY_MS);
+                }
+            } finally {
+                if (browser) {
+                    await browser.close();
+                }
             }
         }
+        
+        // All retries exhausted
+        this.logger.error(`All ${MAX_RETRIES} attempts failed for village units data`, lastError?.stack);
+        throw lastError || new Error('Failed to extract village units data after retries');
     }
 
     /**
@@ -532,6 +551,16 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
         clearCacheForServerOperation(serverId, {
             villageUnitsCache: this.villageUnitsCache,
             logger: this.logger
+        });
+    }
+
+    /**
+     * Utility method for async delay
+     * @param ms - Milliseconds to wait
+     */
+    private delay(ms: number): Promise<void> {
+        return new Promise((resolve) => {
+            global.setTimeout(resolve, ms);
         });
     }
 }

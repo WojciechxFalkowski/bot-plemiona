@@ -56,10 +56,51 @@ export class VillageUnitsOverviewPage {
 			
 			await this.page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
 			
+			// Check for session expiry BEFORE waiting for table
+			const currentUrl = this.page.url();
+			if (currentUrl.includes('session_expired')) {
+				this.logger.warn(`Session expired - redirected to: ${currentUrl}`);
+				throw new Error('SESSION_EXPIRED: Session was invalidated, need to re-login');
+			}
+			
+			// Check if we were redirected away from the game
+			if (!currentUrl.includes('/game.php')) {
+				this.logger.warn(`Unexpected redirect to: ${currentUrl}`);
+				throw new Error(`SESSION_INVALID: Redirected away from game to ${currentUrl}`);
+			}
+			
 			await this.page.waitForSelector('#combined_table', { timeout: 10000 });
 			this.logger.log('Village units overview page loaded');
 		} catch (error) {
 			this.logger.error(`Failed to navigate to village units overview: ${error.message}`);
+			
+			// Only take screenshot for non-session errors (session errors are expected and handled by retry)
+			if (!error.message?.includes('SESSION_')) {
+				const timestamp = Date.now();
+				const screenshotPath = `village_units_nav_error_${serverCode}_${timestamp}.png`;
+				try {
+					await this.page.screenshot({ path: screenshotPath, fullPage: true });
+					this.logger.error(`Debug screenshot saved: ${screenshotPath}`);
+					
+					// Log current URL and page title for additional context
+					const currentUrl = this.page.url();
+					const pageTitle = await this.page.title();
+					this.logger.error(`Current URL: ${currentUrl}`);
+					this.logger.error(`Page title: ${pageTitle}`);
+					
+					// Check for common error indicators
+					const bodyText = await this.page.locator('body').textContent().catch(() => '');
+					if (bodyText?.includes('wylogowany') || bodyText?.includes('logged out')) {
+						this.logger.error('Session appears to be logged out');
+					}
+					if (bodyText?.includes('błąd') || bodyText?.includes('error')) {
+						this.logger.error('Page contains error message');
+					}
+				} catch (screenshotError) {
+					this.logger.warn(`Could not take debug screenshot: ${screenshotError.message}`);
+				}
+			}
+			
 			throw new Error(`Navigation failed: ${error.message}`);
 		}
 	}

@@ -119,12 +119,21 @@ export function logDetailedTaskScheduleOperation(
     // Log next scheduled task
     const nextTask = findNextTaskToExecuteOperation({ multiServerState });
     if (nextTask) {
-        const plan = multiServerState.serverPlans.get(nextTask.serverId)!;
-        const timeString = formatExecutionTimeOperation(nextTask.task.nextExecutionTime.getTime() - now.getTime());
+        const plan = multiServerState.serverPlans.get(nextTask.serverId);
+        const serverInfo = plan ? `${plan.serverCode} (${plan.serverName})` : `server ${nextTask.serverId}`;
+
+        // Handle both manual tasks and regular tasks
+        let executionTime: Date;
+        if (nextTask.isManualTask) {
+            executionTime = nextTask.task.scheduledFor;
+        } else {
+            executionTime = (nextTask.task as CrawlerTask).nextExecutionTime;
+        }
+        const timeString = formatExecutionTimeOperation(executionTime.getTime() - now.getTime());
 
         logger.log('🎯 NEXT SCHEDULED TASK:');
-        logger.log(`  ${nextTask.taskType} - ${plan.serverCode} (${plan.serverName})`);
-        logger.log(`  ⏰ Execution time: ${nextTask.task.nextExecutionTime.toLocaleString()} (in ${timeString})`);
+        logger.log(`  ${nextTask.taskType} - ${serverInfo}`);
+        logger.log(`  ⏰ Execution time: ${executionTime.toLocaleString()} (in ${timeString})`);
     }
 
     logger.warn('📋 ============== END TASK SCHEDULE ==============');
