@@ -3,7 +3,7 @@ import { Repository } from 'typeorm';
 import { VillageEntity } from './entities/village.entity';
 import { VILLAGES_ENTITY_REPOSITORY } from './villages.service.contracts';
 import { VillagesSyncResult } from './contracts/villages.contract';
-import { VillageResponseDto, VillageToggleResponseDto, CreateVillageDto, UpdateVillageDto } from './dto';
+import { VillageResponseDto, VillageToggleResponseDto, VillageBulkToggleResponseDto, CreateVillageDto, UpdateVillageDto } from './dto';
 import { ConfigService } from '@nestjs/config';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
@@ -19,6 +19,8 @@ import {
     toggleAutoBuildingOperation,
     toggleAutoScavengingByNameOperation,
     toggleAutoBuildingByNameOperation,
+    bulkSetAutoScavengingOperation,
+    bulkSetAutoBuildingOperation,
     createVillageOperation,
     updateVillageOperation,
     deleteVillageOperation,
@@ -109,6 +111,20 @@ export class VillagesService {
 
     async toggleAutoBuildingByName(serverId: number, name: string): Promise<VillageToggleResponseDto> {
         return toggleAutoBuildingByNameOperation(serverId, name, {
+            villageRepository: this.villageRepository,
+            logger: this.logger
+        });
+    }
+
+    async bulkSetAutoScavenging(serverId: number, enabled: boolean): Promise<VillageBulkToggleResponseDto> {
+        return bulkSetAutoScavengingOperation(serverId, enabled, {
+            villageRepository: this.villageRepository,
+            logger: this.logger
+        });
+    }
+
+    async bulkSetAutoBuilding(serverId: number, enabled: boolean): Promise<VillageBulkToggleResponseDto> {
+        return bulkSetAutoBuildingOperation(serverId, enabled, {
             villageRepository: this.villageRepository,
             logger: this.logger
         });

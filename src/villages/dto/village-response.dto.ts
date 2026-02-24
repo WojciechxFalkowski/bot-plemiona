@@ -21,4 +21,8 @@ export class VillageToggleResponseDto {
     id: string;
     isAutoBuildEnabled?: boolean;
     isAutoScavengingEnabled?: boolean;
+}
+
+export class VillageBulkToggleResponseDto {
+    updatedCount: number;
 } 

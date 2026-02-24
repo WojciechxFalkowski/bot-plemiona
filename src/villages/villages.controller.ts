@@ -1,7 +1,7 @@
-import { Controller, Get, Put, Post, Param, Logger, Body, Delete, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Put, Post, Patch, Param, Logger, Body, Delete, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { VillagesService } from './villages.service';
-import { VillageResponseDto, VillageToggleResponseDto, CreateVillageDto, UpdateVillageDto } from './dto';
+import { VillageResponseDto, VillageToggleResponseDto, VillageBulkToggleResponseDto, CreateVillageDto, UpdateVillageDto, BulkToggleDto } from './dto';
 import { VillageEntity } from './entities/village.entity';
 
 @ApiTags('Villages')
@@ -236,6 +236,58 @@ export class VillagesController {
             this.logger.error(`Failed to refresh village data for server ${serverId}:`, error);
             throw error;
         }
+    }
+
+    /**
+     * PATCH /villages/:serverId/bulk-settings/auto-scavenging - Set auto-scavenging for all villages
+     */
+    @Patch(':serverId/bulk-settings/auto-scavenging')
+    @ApiOperation({
+        summary: 'Ustaw zbieractwo dla wszystkich wiosek',
+        description: 'Włącza lub wyłącza auto-scavenging dla wszystkich wiosek na serwerze'
+    })
+    @ApiParam({
+        name: 'serverId',
+        description: 'Server ID',
+        type: 'number',
+        example: 1
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Zaktualizowano ustawienia'
+    })
+    async bulkSetAutoScavenging(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: BulkToggleDto
+    ): Promise<VillageBulkToggleResponseDto> {
+        this.logger.log(`PATCH /villages/${serverId}/bulk-settings/auto-scavenging - Bulk set auto-scavenging to ${dto.enabled}`);
+        return this.villagesService.bulkSetAutoScavenging(serverId, dto.enabled);
+    }
+
+    /**
+     * PATCH /villages/:serverId/bulk-settings/auto-building - Set auto-building for all villages
+     */
+    @Patch(':serverId/bulk-settings/auto-building')
+    @ApiOperation({
+        summary: 'Ustaw auto-budowanie dla wszystkich wiosek',
+        description: 'Włącza lub wyłącza auto-building dla wszystkich wiosek na serwerze'
+    })
+    @ApiParam({
+        name: 'serverId',
+        description: 'Server ID',
+        type: 'number',
+        example: 1
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Zaktualizowano ustawienia'
+    })
+    async bulkSetAutoBuilding(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: BulkToggleDto
+    ): Promise<VillageBulkToggleResponseDto> {
+        this.logger.log(`PATCH /villages/${serverId}/bulk-settings/auto-building - Bulk set auto-building to ${dto.enabled}`);
+        return this.villagesService.bulkSetAutoBuilding(serverId, dto.enabled);
     }
 
     /**

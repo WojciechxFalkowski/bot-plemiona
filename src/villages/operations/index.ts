@@ -10,6 +10,8 @@ export * from './toggle/toggle-auto-scavenging.operation';
 export * from './toggle/toggle-auto-building.operation';
 export * from './toggle/toggle-auto-scavenging-by-name.operation';
 export * from './toggle/toggle-auto-building-by-name.operation';
+export * from './toggle/bulk-set-auto-scavenging.operation';
+export * from './toggle/bulk-set-auto-building.operation';
 
 // CRUD operations
 export * from './crud/create-village.operation';
