@@ -121,8 +121,8 @@ export async function processVillageScavengingOperation(
         const villageUnitsConfig = await advancedScavengingService.getVillageUnitsConfig(serverId, village.id);
         const enabledUnits = villageUnitsConfig.units;
 
-        // Pobierz limity dla wszystkich jednostek
-        const unitLimits = await scavengingLimitsService.findByServerAndVillage(serverId, village.id);
+        // Pobierz efektywny limit: wioska ma pierwszeństwo, fallback na limit globalny
+        const unitLimits = await scavengingLimitsService.getEffectiveLimit(serverId, village.id);
 
         // Oblicz dystrybucję wojsk dla tej wioski
         const dispatchPlan = ScavengingUtils.calculateTroopDistribution(

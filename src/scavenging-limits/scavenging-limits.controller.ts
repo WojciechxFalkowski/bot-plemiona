@@ -2,10 +2,38 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query, BadRequestExc
 import { ScavengingLimitsService } from './scavenging-limits.service';
 import { CreateScavengingLimitDto } from './dto/create-scavenging-limit.dto';
 import { UpdateScavengingLimitDto } from './dto/update-scavenging-limit.dto';
+import { GlobalScavengingLimitDto } from './dto/global-scavenging-limit.dto';
 
 @Controller('scavenging-limits')
 export class ScavengingLimitsController {
     constructor(private readonly scavengingLimitsService: ScavengingLimitsService) {}
+
+    @Get('global')
+    findGlobalLimit(@Query('serverId') serverId: string) {
+        if (!serverId) {
+            throw new BadRequestException('serverId query parameter is required');
+        }
+        return this.scavengingLimitsService.findGlobalLimit(+serverId);
+    }
+
+    @Post('global')
+    createOrUpdateGlobalLimit(
+        @Query('serverId') serverId: string,
+        @Body() body: GlobalScavengingLimitDto,
+    ) {
+        if (!serverId) {
+            throw new BadRequestException('serverId query parameter is required');
+        }
+        return this.scavengingLimitsService.createOrUpdateGlobalLimit(+serverId, body);
+    }
+
+    @Delete('global')
+    deleteGlobalLimit(@Query('serverId') serverId: string) {
+        if (!serverId) {
+            throw new BadRequestException('serverId query parameter is required');
+        }
+        return this.scavengingLimitsService.deleteGlobalLimit(+serverId);
+    }
 
     @Post()
     create(@Body() createScavengingLimitDto: CreateScavengingLimitDto) {

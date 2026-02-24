@@ -104,6 +104,32 @@ export class AdvancedScavengingService {
   }
 
   /**
+   * Masowo aktualizuje konfigurację jednostek dla wszystkich wiosek serwera
+   * Aktualizuje tylko przekazane pola jednostek (partial update)
+   */
+  async batchUpdateUnitsConfig(
+    serverId: number,
+    units: { spear?: boolean; sword?: boolean; axe?: boolean; archer?: boolean; light?: boolean; marcher?: boolean; heavy?: boolean },
+  ): Promise<{ updatedCount: number; skippedCount: number }> {
+    const configs = await this.getServerVillagesUnitsConfig(serverId);
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    for (const config of configs) {
+      try {
+        const updateDto = { units };
+        await this.updateVillageUnitsConfig(serverId, config.villageId, updateDto);
+        updatedCount++;
+      } catch {
+        skippedCount++;
+      }
+    }
+
+    this.logger.log(`Batch update for server ${serverId}: ${updatedCount} updated, ${skippedCount} skipped`);
+    return { updatedCount, skippedCount };
+  }
+
+  /**
    * Ręcznie wyzwala zbieractwo dla konkretnej wioski
    */
   async triggerScavengingForVillage(

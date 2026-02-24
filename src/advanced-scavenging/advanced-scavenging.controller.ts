@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { AdvancedScavengingService } from './advanced-scavenging.service';
 import { VillageUnitsConfigDto } from './dto/village-units-config.dto';
 import { UpdateVillageUnitsConfigDto } from './dto/update-village-units-config.dto';
+import { BatchUpdateVillageUnitsConfigDto } from './dto/batch-update-village-units-config.dto';
 import {
   GetVillageUnitsConfigDecorators,
   UpdateVillageUnitsConfigDecorators,
@@ -61,6 +62,14 @@ export class AdvancedScavengingController {
       throw new BadRequestException('villageId parameter is required');
     }
     return this.advancedScavengingService.getVillageUnitsConfig(serverId, villageId);
+  }
+
+  @Put(':serverId/batch-units')
+  async batchUpdateUnitsConfig(
+    @Param('serverId', ParseIntPipe) serverId: number,
+    @Body() updateDto: BatchUpdateVillageUnitsConfigDto,
+  ): Promise<{ updatedCount: number; skippedCount: number }> {
+    return this.advancedScavengingService.batchUpdateUnitsConfig(serverId, updateDto.units);
   }
 
   @Put(':serverId/village/:villageId')

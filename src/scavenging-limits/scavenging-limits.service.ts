@@ -1,9 +1,10 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { ScavengingLimitEntity } from './entities/scavenging-limit.entity';
+import { ServerScavengingLimitEntity } from './entities/server-scavenging-limit.entity';
 import { CreateScavengingLimitDto } from './dto/create-scavenging-limit.dto';
 import { UpdateScavengingLimitDto } from './dto/update-scavenging-limit.dto';
-import { SCAVENGING_LIMITS_ENTITY_REPOSITORY } from './scavenging-limits.contracts';
+import { SCAVENGING_LIMITS_ENTITY_REPOSITORY, SERVER_SCAVENGING_LIMITS_ENTITY_REPOSITORY } from './scavenging-limits.contracts';
 
 @Injectable()
 export class ScavengingLimitsService {
@@ -12,6 +13,8 @@ export class ScavengingLimitsService {
     constructor(
         @Inject(SCAVENGING_LIMITS_ENTITY_REPOSITORY)
         private readonly scavengingLimitsRepository: Repository<ScavengingLimitEntity>,
+        @Inject(SERVER_SCAVENGING_LIMITS_ENTITY_REPOSITORY)
+        private readonly serverScavengingLimitsRepository: Repository<ServerScavengingLimitEntity>,
     ) {}
 
     /**
@@ -132,5 +135,81 @@ export class ScavengingLimitsService {
         } else {
             this.logger.log(`Deleted scavenging limit with id ${id}`);
         }
+    }
+
+    /**
+     * Pobiera limit globalny dla serwera (z tabeli server_scavenging_limits)
+     */
+    async findGlobalLimit(serverId: number): Promise<ServerScavengingLimitEntity | null> {
+        return this.serverScavengingLimitsRepository.findOne({
+            where: { serverId },
+        });
+    }
+
+    /**
+     * Tworzy lub aktualizuje limit globalny dla serwera
+     */
+    async createOrUpdateGlobalLimit(
+        serverId: number,
+        limits: {
+            maxSpearUnits?: number | null;
+            maxSwordUnits?: number | null;
+            maxAxeUnits?: number | null;
+            maxArcherUnits?: number | null;
+            maxLightUnits?: number | null;
+            maxMarcherUnits?: number | null;
+            maxHeavyUnits?: number | null;
+        },
+    ): Promise<ServerScavengingLimitEntity> {
+        const existing = await this.findGlobalLimit(serverId);
+        if (existing) {
+            if (limits.maxSpearUnits !== undefined) existing.maxSpearUnits = limits.maxSpearUnits;
+            if (limits.maxSwordUnits !== undefined) existing.maxSwordUnits = limits.maxSwordUnits;
+            if (limits.maxAxeUnits !== undefined) existing.maxAxeUnits = limits.maxAxeUnits;
+            if (limits.maxArcherUnits !== undefined) existing.maxArcherUnits = limits.maxArcherUnits;
+            if (limits.maxLightUnits !== undefined) existing.maxLightUnits = limits.maxLightUnits;
+            if (limits.maxMarcherUnits !== undefined) existing.maxMarcherUnits = limits.maxMarcherUnits;
+            if (limits.maxHeavyUnits !== undefined) existing.maxHeavyUnits = limits.maxHeavyUnits;
+            const updated = await this.serverScavengingLimitsRepository.save(existing);
+            this.logger.log(`Updated global scavenging limit for server ${serverId}`);
+            return updated;
+        }
+        const newLimit = this.serverScavengingLimitsRepository.create({
+            serverId,
+            maxSpearUnits: limits.maxSpearUnits ?? null,
+            maxSwordUnits: limits.maxSwordUnits ?? null,
+            maxAxeUnits: limits.maxAxeUnits ?? null,
+            maxArcherUnits: limits.maxArcherUnits ?? null,
+            maxLightUnits: limits.maxLightUnits ?? null,
+            maxMarcherUnits: limits.maxMarcherUnits ?? null,
+            maxHeavyUnits: limits.maxHeavyUnits ?? null,
+        });
+        const created = await this.serverScavengingLimitsRepository.save(newLimit);
+        this.logger.log(`Created global scavenging limit for server ${serverId}`);
+        return created;
+    }
+
+    /**
+     * Usuwa limit globalny dla serwera
+     */
+    async deleteGlobalLimit(serverId: number): Promise<void> {
+        const result = await this.serverScavengingLimitsRepository.delete({ serverId });
+        if (result.affected === 0) {
+            this.logger.warn(`No global scavenging limit found to delete for server ${serverId}`);
+        } else {
+            this.logger.log(`Deleted global scavenging limit for server ${serverId}`);
+        }
+    }
+
+    /**
+     * Zwraca efektywny limit dla wioski: limit wioski jeśli istnieje, w przeciwnym razie limit globalny
+     */
+    async getEffectiveLimit(
+        serverId: number,
+        villageId: string,
+    ): Promise<ScavengingLimitEntity | ServerScavengingLimitEntity | null> {
+        const villageLimit = await this.findByServerAndVillage(serverId, villageId);
+        if (villageLimit) return villageLimit;
+        return this.findGlobalLimit(serverId);
     }
 }
