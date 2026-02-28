@@ -1,8 +1,9 @@
-import { Controller, Get, Logger, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Logger, Query, BadRequestException, ParseIntPipe } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { TwDatabaseService } from './tw-database.service';
-import { VisitAttackPlannerDecorators } from './decorators';
+import { VisitAttackPlannerDecorators, GetAttacksDecorators, GetAttacksSummaryDecorators } from './decorators';
 import { ServersService } from '@/servers/servers.service';
+import { TwDatabaseAttackStatus } from './entities/tw-database-attack.entity';
 
 /**
  * Controller for TWDatabase (twdatabase.online) integration.
@@ -44,5 +45,32 @@ export class TwDatabaseController {
         const isHeadless = headless !== undefined ? headless !== 'false' : process.env.NODE_ENV === 'production';
         this.logger.log(`Manual trigger: visit TWDatabase Attack Planner for server ${serverId} (headless=${isHeadless})`);
         return this.twDatabaseService.visitAttackPlanner(serverId, isHeadless);
+    }
+
+    /**
+     * GET endpoint - returns attacks for a server with optional status filter.
+     */
+    @Get('attacks')
+    @GetAttacksDecorators()
+    async getAttacks(
+        @Query('serverId', ParseIntPipe) serverId: number,
+        @Query('status') statusStr?: string
+    ) {
+        let status: TwDatabaseAttackStatus | undefined;
+        if (statusStr && ['pending', 'sent', 'failed'].includes(statusStr)) {
+            status = statusStr as TwDatabaseAttackStatus;
+        }
+        const attacks = await this.twDatabaseService.getAttacks(serverId, status);
+        return { success: true, data: attacks };
+    }
+
+    /**
+     * GET endpoint - returns attack counts per status for sidebar indicator.
+     */
+    @Get('attacks/summary')
+    @GetAttacksSummaryDecorators()
+    async getAttacksSummary(@Query('serverId', ParseIntPipe) serverId: number) {
+        const summary = await this.twDatabaseService.getAttacksSummary(serverId);
+        return { success: true, data: summary };
     }
 }

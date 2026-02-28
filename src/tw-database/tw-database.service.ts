@@ -1,8 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { promises as fs } from 'fs';
-import { join } from 'path';
 import { Repository } from 'typeorm';
+import { ServersService } from '@/servers/servers.service';
 import { createBrowserPage } from '@/utils/browser.utils';
 import { SettingsService } from '@/settings/settings.service';
 import { SettingsKey } from '@/settings/settings-keys.enum';
@@ -20,7 +19,11 @@ import { sendFakeAttackOperation } from './operations/send-fake-attack.operation
 import { sendBurzakAttackOperation } from './operations/send-burzak-attack.operation';
 import { clearSentInTwDatabaseOperation } from './operations/clear-sent-in-twdatabase.operation';
 import { FejkMethodsConfigService } from './fejk-methods-config.service';
-import { TwDatabaseAttackEntity, TwDatabaseAttackStatus } from './entities/tw-database-attack.entity';
+import {
+    TwDatabaseAttackEntity,
+    TwDatabaseAttackStatus
+} from './entities/tw-database-attack.entity';
+import { TwDatabaseAttackDetailsEntity } from './entities/tw-database-attack-details.entity';
 import { TW_DATABASE_ATTACK_ENTITY_REPOSITORY } from './tw-database.service.contracts';
 
 /** URL of TWDatabase Attack Planner page - will be used in crawler (e.g. every 30 min) */
@@ -38,8 +41,6 @@ export interface VisitAttackPlannerResult {
     url: string;
     durationMs: number;
     message: string;
-    /** Path to saved JSON file (when table was scraped) */
-    savedToFile?: string;
 }
 
 /**
@@ -58,6 +59,7 @@ export class TwDatabaseService {
         private readonly fejkMethodsConfig: FejkMethodsConfigService,
         private readonly settingsService: SettingsService,
         private readonly encryptionService: EncryptionService,
+        private readonly serversService: ServersService,
         @Inject(TW_DATABASE_ATTACK_ENTITY_REPOSITORY)
         private readonly attackRepo: Repository<TwDatabaseAttackEntity>
     ) {
@@ -145,7 +147,6 @@ export class TwDatabaseService {
                     loggedIn = true;
                 }
 
-                let savedToFile: string | undefined;
                 const attacksToProcess: { row: FilteredAttackRow; fingerprint: string }[] = [];
 
                 if (loggedIn) {
@@ -162,26 +163,40 @@ export class TwDatabaseService {
                         attackRepo: this.attackRepo,
                         logger: this.logger
                     });
-                    this.logTableDataToConsole(tableData);
-                    savedToFile = await this.saveTableDataToJson(tableData);
-                    if (savedToFile) {
-                        this.logger.log(`Dane zapisane do pliku: ${savedToFile}`);
-                    }
 
                     const filtered = filterAttacksToSendOperation(tableData.rows, { logger: this.logger });
 
                     for (const row of filtered) {
                         const fingerprint = computeAttackFingerprintOperation(row);
-                        const existing = await this.attackRepo.findOne({ where: { fingerprint } });
+                        const serverId = await this.resolveServerIdFromAkcjaUrl(row['AKCJA'] ?? '');
+                        const existing = await this.attackRepo.findOne({
+                            where: { fingerprint },
+                            relations: ['details']
+                        });
+                        const detailsData = this.mapRowToDetails(row);
                         if (existing) {
-                            existing.rawData = row;
+                            existing.serverId = serverId;
+                            if (existing.details) {
+                                Object.assign(existing.details, detailsData);
+                            } else {
+                                existing.details = this.attackRepo.manager.create(TwDatabaseAttackDetailsEntity, {
+                                    ...detailsData,
+                                    attackId: existing.id
+                                });
+                            }
                             await this.attackRepo.save(existing);
                         } else {
-                            await this.attackRepo.save({
+                            const attack = this.attackRepo.create({
                                 fingerprint,
-                                rawData: row,
+                                serverId,
                                 status: TwDatabaseAttackStatus.PENDING
                             });
+                            const savedAttack = await this.attackRepo.save(attack);
+                            const details = this.attackRepo.manager.create(TwDatabaseAttackDetailsEntity, {
+                                ...detailsData,
+                                attackId: savedAttack.id
+                            });
+                            await this.attackRepo.manager.save(TwDatabaseAttackDetailsEntity, details);
                         }
                     }
 
@@ -295,8 +310,7 @@ export class TwDatabaseService {
                     durationMs,
                     message: loggedIn
                         ? `Zalogowano pomyślnie w ${durationMs}ms`
-                        : `Strona załadowana (logowanie nieudane lub brak credentials) w ${durationMs}ms`,
-                    savedToFile
+                        : `Strona załadowana (logowanie nieudane lub brak credentials) w ${durationMs}ms`
                 };
             } finally {
                 await browser.close();
@@ -320,57 +334,68 @@ export class TwDatabaseService {
     }
 
     /**
-     * Saves scraped table data to JSON file in data/tw-database/
-     * @returns Absolute path to saved file or undefined on error
+     * Gets attacks for a server with optional status filter.
+     * @param serverId - Required server ID
+     * @param status - Optional: pending | sent | failed
      */
-    private async saveTableDataToJson(data: {
-        columns: string[];
-        rows: Record<string, string>[];
-        rowCount: number;
-    }): Promise<string | undefined> {
+    async getAttacks(
+        serverId: number,
+        status?: TwDatabaseAttackStatus
+    ): Promise<(TwDatabaseAttackEntity & { details: TwDatabaseAttackDetailsEntity })[]> {
+        const qb = this.attackRepo
+            .createQueryBuilder('attack')
+            .leftJoinAndSelect('attack.details', 'details')
+            .where('attack.serverId = :serverId', { serverId });
+        if (status) {
+            qb.andWhere('attack.status = :status', { status });
+        }
+        qb.orderBy('attack.createdAt', 'DESC');
+        return qb.getMany() as Promise<(TwDatabaseAttackEntity & { details: TwDatabaseAttackDetailsEntity })[]>;
+    }
+
+    /**
+     * Returns attack counts per status for a server. Used for sidebar status indicator.
+     * @param serverId - Required server ID
+     */
+    async getAttacksSummary(serverId: number): Promise<{ pending: number; sent: number; failed: number }> {
+        const [pending, sent, failed] = await Promise.all([
+            this.attackRepo.count({ where: { serverId, status: TwDatabaseAttackStatus.PENDING } }),
+            this.attackRepo.count({ where: { serverId, status: TwDatabaseAttackStatus.SENT } }),
+            this.attackRepo.count({ where: { serverId, status: TwDatabaseAttackStatus.FAILED } })
+        ]);
+        return { pending, sent, failed };
+    }
+
+    /**
+     * Resolves server ID from AKCJA URL (e.g. https://pl222.plemiona.pl/... -> servers.id for pl222)
+     */
+    private async resolveServerIdFromAkcjaUrl(akcjaUrl: string): Promise<number | null> {
+        const match = (akcjaUrl || '').trim().match(/https?:\/\/(pl\d+)\.plemiona\.pl/);
+        if (!match) return null;
         try {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const fileName = `attack-planner-${timestamp}.json`;
-            const outputDir = join(process.cwd(), 'data', 'tw-database');
-            await fs.mkdir(outputDir, { recursive: true });
-            const filePath = join(outputDir, fileName);
-            const jsonContent = JSON.stringify(
-                {
-                    scrapedAt: new Date().toISOString(),
-                    source: TW_DATABASE_ATTACK_PLANNER_URL,
-                    columns: data.columns,
-                    rowCount: data.rowCount,
-                    rows: data.rows
-                },
-                null,
-                2
-            );
-            await fs.writeFile(filePath, jsonContent, 'utf-8');
-            return filePath;
-        } catch (error) {
-            this.logger.error('Error saving table data to JSON:', error);
-            return undefined;
+            const server = await this.serversService.findByCode(match[1]);
+            return server?.id ?? null;
+        } catch {
+            return null;
         }
     }
 
     /**
-     * Logs scraped table data to console - all columns and each row
+     * Maps scraped row to TwDatabaseAttackDetailsEntity fields
      */
-    private logTableDataToConsole(data: {
-        columns: string[];
-        rows: Record<string, string>[];
-        rowCount: number;
-    }): void {
-        this.logger.log('========== TWDatabase Attack Planner - Table Data ==========');
-        this.logger.log(`Kolumny (${data.columns.length}): ${data.columns.join(' | ')}`);
-        this.logger.log(`Liczba wierszy: ${data.rowCount}`);
-        this.logger.log('------------------------------------------------------------');
-        data.rows.forEach((row, index) => {
-            const line = data.columns
-                .map(col => `${col}: ${row[col] ?? ''}`)
-                .join(' | ');
-            this.logger.log(`[${index + 1}] ${line}`);
-        });
-        this.logger.log('========== Koniec tabeli ==========');
+    private mapRowToDetails(row: FilteredAttackRow): Omit<TwDatabaseAttackDetailsEntity, 'attackId' | 'attack'> {
+        return {
+            lp: (row['LP.'] ?? '').trim() || null,
+            etykietaAtaku: (row['ETYKIETA ATAKU'] ?? '').trim() || null,
+            dataWyjsciaOd: (row['DATA WYJŚCIA OD'] ?? '').trim() || null,
+            dataWyjsciaDo: (row['DATA WYJŚCIA DO'] ?? '').trim() || null,
+            wioskaWysylajaca: (row['WIOSKA WYSYŁAJĄCA'] ?? '').trim() || null,
+            wioskaDocelowa: (row['WIOSKA DOCELOWA'] ?? '').trim() || null,
+            atakowanyGracz: (row['ATAKOWANY GRACZ'] ?? '').trim() || null,
+            dataDotarcia: (row['DATA DOTARCIA'] ?? '').trim() || null,
+            czasDoWysylki: (row['CZAS DO WYSYŁKI'] ?? '').trim() || null,
+            akcjaUrl: (row['AKCJA'] ?? '').trim() || null,
+            attackType: row.attackType ?? null
+        };
     }
 }

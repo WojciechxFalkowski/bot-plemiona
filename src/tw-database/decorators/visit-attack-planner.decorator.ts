@@ -33,7 +33,6 @@ export function VisitAttackPlannerDecorators() {
                     url: { type: 'string' },
                     durationMs: { type: 'number' },
                     message: { type: 'string' },
-                    savedToFile: { type: 'string', nullable: true, description: 'Ścieżka do zapisanego pliku JSON' },
                 },
             },
         }),

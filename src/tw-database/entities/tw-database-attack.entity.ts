@@ -1,4 +1,16 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import {
+    Entity,
+    Column,
+    PrimaryGeneratedColumn,
+    CreateDateColumn,
+    UpdateDateColumn,
+    Index,
+    ManyToOne,
+    JoinColumn,
+    OneToOne
+} from 'typeorm';
+import { ServerEntity } from '@/servers/entities/server.entity';
+import { TwDatabaseAttackDetailsEntity } from './tw-database-attack-details.entity';
 
 export enum TwDatabaseAttackStatus {
     PENDING = 'pending',
@@ -9,6 +21,7 @@ export enum TwDatabaseAttackStatus {
 @Entity('tw_database_attacks')
 @Index(['fingerprint'], { unique: true })
 @Index(['status'])
+@Index(['serverId'])
 export class TwDatabaseAttackEntity {
     @PrimaryGeneratedColumn()
     id: number;
@@ -16,8 +29,15 @@ export class TwDatabaseAttackEntity {
     @Column({ type: 'varchar', length: 64, unique: true })
     fingerprint: string;
 
-    @Column({ type: 'json' })
-    rawData: Record<string, string>;
+    @Column({ type: 'int', nullable: true })
+    serverId: number | null;
+
+    @ManyToOne(() => ServerEntity, { onDelete: 'SET NULL', nullable: true })
+    @JoinColumn({ name: 'serverId' })
+    server: ServerEntity | null;
+
+    @OneToOne(() => TwDatabaseAttackDetailsEntity, details => details.attack, { cascade: true })
+    details: TwDatabaseAttackDetailsEntity;
 
     @Column({ type: 'enum', enum: TwDatabaseAttackStatus, default: TwDatabaseAttackStatus.PENDING })
     status: TwDatabaseAttackStatus;
