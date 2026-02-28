@@ -21,6 +21,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AdvancedScavengingModule } from './advanced-scavenging/advanced-scavenging.module';
 import { ScheduledAttacksModule } from './scheduled-attacks/scheduled-attacks.module';
 import { SupportModule } from './support/support.module';
+import { TwDatabaseModule } from './tw-database/tw-database.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { SupportModule } from './support/support.module';
     AdvancedScavengingModule,
     ScheduledAttacksModule,
     SupportModule,
+    TwDatabaseModule,
   ],
   controllers: [AppController],
   providers: [AppService],

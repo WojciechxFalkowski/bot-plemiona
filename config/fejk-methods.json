@@ -1,0 +1,18 @@
+{
+  "method1": {
+    "minSpyInVillage": 500,
+    "units": {
+      "spy": 50,
+      "siege": 1
+    },
+    "siegeUnits": ["ram", "catapult"]
+  },
+  "method2": {
+    "units": {
+      "axe": 16,
+      "light": 16,
+      "siege": 4
+    },
+    "siegeUnits": ["ram", "catapult"]
+  }
+}

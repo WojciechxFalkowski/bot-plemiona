@@ -46,6 +46,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Scraped/crawled data (TWDatabase export etc.)
+data/
+
 # Runtime data
 pids
 *.pid
