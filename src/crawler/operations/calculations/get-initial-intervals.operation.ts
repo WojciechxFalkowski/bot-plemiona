@@ -6,6 +6,7 @@ export interface InitialIntervals {
     miniAttack: number;
     playerVillageAttack: number;
     armyTraining: number;
+    twDatabase: number;
 }
 
 /**
@@ -18,7 +19,8 @@ export function getInitialIntervalsOperation(): InitialIntervals {
         construction: 10000, // 10 seconds
         miniAttack: 20000, // 20 seconds
         playerVillageAttack: 5000, // 5 seconds
-        armyTraining: 30000 // 30 seconds
+        armyTraining: 30000, // 30 seconds
+        twDatabase: 30 * 60 * 1000 // 30 minutes
     };
 }
 

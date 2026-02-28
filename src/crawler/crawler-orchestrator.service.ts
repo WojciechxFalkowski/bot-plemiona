@@ -42,9 +42,12 @@ import { executeScavengingTaskOperation } from './operations/execution/execute-s
 import { executeConstructionQueueTaskOperation } from './operations/execution/execute-construction-queue-task.operation';
 import { executeMiniAttacksTaskOperation } from './operations/execution/execute-mini-attacks-task.operation';
 import { executeArmyTrainingTaskOperation } from './operations/execution/execute-army-training-task.operation';
+import { executeTwDatabaseTaskOperation } from './operations/execution/execute-tw-database-task.operation';
 import { executePlayerVillageAttacksTaskOperation } from './operations/execution/execute-player-village-attacks-task.operation';
 import { validateOrchestratorEnabledOperation } from './operations/validation/validate-orchestrator-enabled.operation';
 import { getInitialIntervalsOperation } from './operations/calculations/get-initial-intervals.operation';
+import { TwDatabaseService } from '@/tw-database/tw-database.service';
+import { EncryptionService } from '@/utils/encryption/encryption.service';
 
 @Injectable()
 export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy {
@@ -90,7 +93,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly playerVillagesService: PlayerVillagesService,
         private readonly notificationsService: NotificationsService,
         private readonly crawlerExecutionLogsService: CrawlerExecutionLogsService,
-        private readonly globalSettingsService: GlobalSettingsService
+        private readonly globalSettingsService: GlobalSettingsService,
+        private readonly twDatabaseService: TwDatabaseService,
+        private readonly encryptionService: EncryptionService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -257,7 +262,9 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             await updateServerTaskStatesOperation(serverId, {
                 multiServerState: this.multiServerState,
                 logger: this.logger,
-                settingsService: this.settingsService
+                settingsService: this.settingsService,
+                encryptionService: this.encryptionService,
+                configService: this.configService
             });
             this.logDetailedTaskSchedule();
             this.scheduleNextExecution();
@@ -396,6 +403,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             playerVillagesService: this.playerVillagesService,
             armyTrainingService: this.armyTrainingService,
             armyTrainingStrategiesService: this.armyTrainingStrategiesService,
+            twDatabaseService: this.twDatabaseService,
             settingsService: this.settingsService,
             logger: this.logger
         }, nextTaskResult);
@@ -471,6 +479,16 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         await executeArmyTrainingTaskOperation(serverId, {
             armyTrainingService: this.armyTrainingService,
             armyTrainingStrategiesService: this.armyTrainingStrategiesService,
+            logger: this.logger
+        });
+    }
+
+    /**
+     * Executes TW Database visit attack planner for a server
+     */
+    private async executeTwDatabaseTask(serverId: number): Promise<void> {
+        await executeTwDatabaseTaskOperation(serverId, {
+            twDatabaseService: this.twDatabaseService,
             logger: this.logger
         });
     }
@@ -729,6 +747,26 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Public method to manually trigger TW Database for a specific server
+     */
+    public async triggerTwDatabase(serverId: number): Promise<void> {
+        const plan = this.multiServerState.serverPlans.get(serverId);
+        if (!plan) {
+            throw new Error(`Server ${serverId} not found`);
+        }
+
+        this.logger.log(`Manually triggering TW Database for server ${plan.serverCode}...`);
+
+        try {
+            await this.executeTwDatabaseTask(serverId);
+            this.logger.log(`Manual TW Database completed successfully for server ${plan.serverCode}`);
+        } catch (error) {
+            this.logger.error(`Error during TW Database for server ${plan.serverCode}:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Public method to manually trigger player village attacks for a specific server
      */
     public async triggerPlayerVillageAttacks(serverId: number): Promise<void> {
@@ -833,15 +871,17 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         miniAttacks: number;
         playerVillageAttacks: number;
         armyTraining: number;
+        twDatabase: number;
     } {
         const intervals = getInitialIntervalsOperation();
-        
+
         return {
             constructionQueue: intervals.construction,
             scavenging: 30000, // Hardcoded in initialize-server-plan.operation.ts
             miniAttacks: intervals.miniAttack,
             playerVillageAttacks: intervals.playerVillageAttack,
-            armyTraining: intervals.armyTraining
+            armyTraining: intervals.armyTraining,
+            twDatabase: intervals.twDatabase
         };
     }
 

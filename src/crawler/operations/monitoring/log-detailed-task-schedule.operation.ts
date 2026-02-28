@@ -82,6 +82,15 @@ export function logDetailedTaskScheduleOperation(
                 nextExecution: plan.armyTraining.nextExecutionTime,
                 timeUntilExecution: plan.armyTraining.nextExecutionTime.getTime() - now.getTime(),
                 lastExecuted: plan.armyTraining.lastExecuted
+            },
+            {
+                serverCode: plan.serverCode,
+                serverName: plan.serverName,
+                taskType: 'TW Database',
+                enabled: plan.twDatabase.enabled,
+                nextExecution: plan.twDatabase.nextExecutionTime,
+                timeUntilExecution: plan.twDatabase.nextExecutionTime.getTime() - now.getTime(),
+                lastExecuted: plan.twDatabase.lastExecuted
             }
         );
     }

@@ -4,13 +4,20 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { Repository } from 'typeorm';
 import { createBrowserPage } from '@/utils/browser.utils';
+import { SettingsService } from '@/settings/settings.service';
+import { SettingsKey } from '@/settings/settings-keys.enum';
+import { EncryptionService } from '@/utils/encryption/encryption.service';
 import { AuthUtils } from '@/utils/auth/auth.utils';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { scrapeAttackPlannerTableOperation } from './operations/scrape-attack-planner-table.operation';
-import { filterAttacksToSendOperation } from './operations/filter-attacks-to-send.operation';
+import {
+    filterAttacksToSendOperation,
+    type FilteredAttackRow
+} from './operations/filter-attacks-to-send.operation';
 import { computeAttackFingerprintOperation } from './operations/compute-attack-fingerprint.operation';
 import { sendFakeAttackOperation } from './operations/send-fake-attack.operation';
+import { sendBurzakAttackOperation } from './operations/send-burzak-attack.operation';
 import { clearSentInTwDatabaseOperation } from './operations/clear-sent-in-twdatabase.operation';
 import { FejkMethodsConfigService } from './fejk-methods-config.service';
 import { TwDatabaseAttackEntity, TwDatabaseAttackStatus } from './entities/tw-database-attack.entity';
@@ -49,6 +56,8 @@ export class TwDatabaseService {
         private readonly configService: ConfigService,
         private readonly plemionaCookiesService: PlemionaCookiesService,
         private readonly fejkMethodsConfig: FejkMethodsConfigService,
+        private readonly settingsService: SettingsService,
+        private readonly encryptionService: EncryptionService,
         @Inject(TW_DATABASE_ATTACK_ENTITY_REPOSITORY)
         private readonly attackRepo: Repository<TwDatabaseAttackEntity>
     ) {
@@ -58,9 +67,23 @@ export class TwDatabaseService {
     }
 
     /**
-     * Gets TWDatabase credentials from environment (TW_DATABASE_LOGIN, TW_DATABASE_PASSWORD)
+     * Gets TWDatabase credentials. Priority: settings (per server) > env (TW_DATABASE_LOGIN, TW_DATABASE_PASSWORD).
      */
-    getCredentials(): TwDatabaseCredentials {
+    async getCredentials(serverId: number): Promise<TwDatabaseCredentials> {
+        const setting = await this.settingsService.getSetting<{
+            login?: string;
+            passwordEncrypted?: string;
+        }>(serverId, SettingsKey.TW_DATABASE);
+
+        if (setting?.login && setting?.passwordEncrypted && this.encryptionService.isAvailable()) {
+            try {
+                const password = this.encryptionService.decrypt(setting.passwordEncrypted);
+                return { login: setting.login, password };
+            } catch {
+                this.logger.warn(`Could not decrypt TW Database password for server ${serverId}, falling back to env`);
+            }
+        }
+
         return {
             login: this.configService.get<string>('TW_DATABASE_LOGIN') ?? '',
             password: this.configService.get<string>('TW_DATABASE_PASSWORD') ?? ''
@@ -71,15 +94,17 @@ export class TwDatabaseService {
      * Opens TWDatabase Attack Planner, scrapes table, saves to DB, navigates to first fejk's place URL.
      * Two tabs: Tab 1 TWDatabase, Tab 2 Plemiona. Logs in once per site.
      *
-     * @param headless - Run browser in headless mode (default: true)
+     * @param serverId - Server ID for credentials lookup
+     * @param headless - Run browser in headless mode (default: NODE_ENV === 'production')
      * @returns Result with page title and duration
      */
-    async visitAttackPlanner(headless = true): Promise<VisitAttackPlannerResult> {
+    async visitAttackPlanner(serverId: number, headless?: boolean): Promise<VisitAttackPlannerResult> {
+        const isHeadless = headless ?? process.env.NODE_ENV === 'production';
         const startTime = Date.now();
         this.logger.log(`Opening TWDatabase Attack Planner: ${TW_DATABASE_ATTACK_PLANNER_URL}`);
 
         try {
-            const { browser, context, page } = await createBrowserPage({ headless });
+            const { browser, context, page } = await createBrowserPage({ headless: isHeadless });
 
             try {
                 // Add Plemiona cookies before any navigation (for Tab 2)
@@ -103,7 +128,7 @@ export class TwDatabaseService {
                 const isLoginPage = finalUrl.includes('/Account/Login');
                 if (isLoginPage) {
                     this.logger.log('Login page detected - attempting to log in...');
-                    const { login, password } = this.getCredentials();
+                    const { login, password } = await this.getCredentials(serverId);
                     if (!login || !password) {
                         this.logger.warn('TWDatabase credentials not configured (TW_DATABASE_LOGIN, TW_DATABASE_PASSWORD)');
                     } else {
@@ -121,7 +146,7 @@ export class TwDatabaseService {
                 }
 
                 let savedToFile: string | undefined;
-                const attacksToProcess: { row: Record<string, string>; fingerprint: string }[] = [];
+                const attacksToProcess: { row: FilteredAttackRow; fingerprint: string }[] = [];
 
                 if (loggedIn) {
                     await page.goto(TW_DATABASE_ATTACK_PLANNER_URL, {
@@ -189,17 +214,28 @@ export class TwDatabaseService {
                                 serverName
                             );
                             if (loginResult.success && loginResult.worldSelected) {
-                                this.logger.log(`Processing ${attacksToProcess.length} fejk(s)`);
+                                this.logger.log(`Processing ${attacksToProcess.length} attack(s)`);
 
                                 for (let i = 0; i < attacksToProcess.length; i++) {
                                     const { row, fingerprint } = attacksToProcess[i];
-                                    this.logger.log(`[${i + 1}/${attacksToProcess.length}] Sending fejk: ${row['WIOSKA WYSYŁAJĄCA']} -> ${row['WIOSKA DOCELOWA']}`);
-                                    const result = await sendFakeAttackOperation({
-                                        page: tab2,
-                                        attackRow: row,
-                                        fejkConfig: this.fejkMethodsConfig.getConfig(),
-                                        logger: this.logger
-                                    });
+                                    const attackLabel = row.attackType === 'fejk' ? 'fejk' : 'burzak';
+                                    this.logger.log(
+                                        `[${i + 1}/${attacksToProcess.length}] Sending ${attackLabel}: ${row['WIOSKA WYSYŁAJĄCA']} -> ${row['WIOSKA DOCELOWA']}`
+                                    );
+
+                                    const result =
+                                        row.attackType === 'fejk'
+                                            ? await sendFakeAttackOperation({
+                                                  page: tab2,
+                                                  attackRow: row,
+                                                  fejkConfig: this.fejkMethodsConfig.getConfig(),
+                                                  logger: this.logger
+                                              })
+                                            : await sendBurzakAttackOperation({
+                                                  page: tab2,
+                                                  attackRow: row,
+                                                  logger: this.logger
+                                              });
 
                                     const entity = await this.attackRepo.findOne({ where: { fingerprint } });
                                     if (entity) {
@@ -209,12 +245,16 @@ export class TwDatabaseService {
                                             entity.failureReason = null;
                                             entity.clearedFromTwDatabase = false;
                                             await this.attackRepo.save(entity);
-                                            this.logger.log(`[${i + 1}/${attacksToProcess.length}] Fejk sent successfully`);
+                                            this.logger.log(
+                                                `[${i + 1}/${attacksToProcess.length}] ${attackLabel} sent successfully`
+                                            );
                                         } else {
                                             entity.status = TwDatabaseAttackStatus.FAILED;
                                             entity.failureReason = result.error ?? 'Unknown error';
                                             await this.attackRepo.save(entity);
-                                            this.logger.warn(`[${i + 1}/${attacksToProcess.length}] Fejk failed: ${result.error}`);
+                                            this.logger.warn(
+                                                `[${i + 1}/${attacksToProcess.length}] ${attackLabel} failed: ${result.error}`
+                                            );
                                         }
                                     }
 
@@ -232,7 +272,9 @@ export class TwDatabaseService {
                         await tab2.close();
                     }
                 } else {
-                    this.logger.log('Brak fejków do wysłania (SPÓŹNIONY/teraz) lub wszystkie już wysłane');
+                    this.logger.log(
+                        'Brak ataków do wysłania (fejk/burzak SPÓŹNIONY/teraz) lub wszystkie już wysłane'
+                    );
                 }
 
                 if (loggedIn) {

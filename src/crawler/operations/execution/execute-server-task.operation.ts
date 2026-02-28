@@ -7,11 +7,13 @@ import { executeScavengingTaskOperation, ExecuteScavengingTaskDependencies } fro
 import { executeMiniAttacksTaskOperation, ExecuteMiniAttacksTaskDependencies } from './execute-mini-attacks-task.operation';
 import { executePlayerVillageAttacksTaskOperation, ExecutePlayerVillageAttacksTaskDependencies } from './execute-player-village-attacks-task.operation';
 import { executeArmyTrainingTaskOperation, ExecuteArmyTrainingTaskDependencies } from './execute-army-training-task.operation';
+import { executeTwDatabaseTaskOperation, ExecuteTwDatabaseTaskDependencies } from './execute-tw-database-task.operation';
 import { updateNextConstructionTimeOperation, UpdateNextConstructionTimeDependencies } from '../scheduling/update-next-construction-time.operation';
 import { updateNextScavengingTimeOperation, UpdateNextScavengingTimeDependencies } from '../scheduling/update-next-scavenging-time.operation';
 import { updateNextMiniAttackTimeOperation, UpdateNextMiniAttackTimeDependencies } from '../scheduling/update-next-mini-attack-time.operation';
 import { updateNextPlayerVillageAttackTimeOperation, UpdateNextPlayerVillageAttackTimeDependencies } from '../scheduling/update-next-player-village-attack-time.operation';
 import { updateNextArmyTrainingTimeOperation, UpdateNextArmyTrainingTimeDependencies } from '../scheduling/update-next-army-training-time.operation';
+import { updateNextTwDatabaseTimeOperation } from '../scheduling/update-next-tw-database-time.operation';
 import { updateNextExecutionTimeForFailedTaskOperation, UpdateNextExecutionTimeForFailedTaskDependencies } from '../scheduling/update-next-execution-time-for-failed-task.operation';
 import { executeManualTaskOperation, ExecuteManualTaskDependencies } from '../manual-tasks/execute-manual-task.operation';
 import { NextTaskResult } from '../scheduling/find-next-task-to-execute.operation';
@@ -22,6 +24,7 @@ export interface ExecuteServerTaskDependencies
         ExecuteMiniAttacksTaskDependencies,
         ExecutePlayerVillageAttacksTaskDependencies,
         ExecuteArmyTrainingTaskDependencies,
+        ExecuteTwDatabaseTaskDependencies,
         UpdateNextConstructionTimeDependencies,
         Omit<UpdateNextScavengingTimeDependencies, 'scavengingTimeData'>,
         UpdateNextMiniAttackTimeDependencies,
@@ -223,6 +226,10 @@ export async function executeServerTaskOperation(
             case 'Army Training':
                 await executeArmyTrainingTaskOperation(serverId, deps);
                 await updateNextArmyTrainingTimeOperation(plan, serverId, deps);
+                break;
+            case 'TW Database':
+                await executeTwDatabaseTaskOperation(serverId, deps);
+                updateNextTwDatabaseTimeOperation(plan);
                 break;
             default:
                 logger.error(`❌ Unknown task type: ${taskType}`);

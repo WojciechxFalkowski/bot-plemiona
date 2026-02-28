@@ -22,6 +22,7 @@ import { AdvancedScavengingModule } from './advanced-scavenging/advanced-scaveng
 import { ScheduledAttacksModule } from './scheduled-attacks/scheduled-attacks.module';
 import { SupportModule } from './support/support.module';
 import { TwDatabaseModule } from './tw-database/tw-database.module';
+import { EncryptionModule } from './utils/encryption/encryption.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { TwDatabaseModule } from './tw-database/tw-database.module';
     ScheduledAttacksModule,
     SupportModule,
     TwDatabaseModule,
+    EncryptionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

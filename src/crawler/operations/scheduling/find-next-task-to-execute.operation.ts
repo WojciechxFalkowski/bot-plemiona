@@ -74,7 +74,8 @@ function findNextRegularTask(
             { task: plan.scavenging, type: 'Scavenging' },
             { task: plan.miniAttacks, type: 'Mini Attacks' },
             { task: plan.playerVillageAttacks, type: 'Player Village Attacks' },
-            { task: plan.armyTraining, type: 'Army Training' }
+            { task: plan.armyTraining, type: 'Army Training' },
+            { task: plan.twDatabase, type: 'TW Database' }
         ];
 
         for (const { task, type } of tasks) {

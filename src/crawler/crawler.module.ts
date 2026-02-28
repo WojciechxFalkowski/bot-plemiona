@@ -16,9 +16,10 @@ import { NotificationsModule } from '@/notifications/notifications.module';
 import { ScavengingLimitsModule } from '@/scavenging-limits/scavenging-limits.module';
 import { AdvancedScavengingModule } from '@/advanced-scavenging/advanced-scavenging.module';
 import { CrawlerExecutionLogsModule } from '@/crawler-execution-logs/crawler-execution-logs.module';
+import { TwDatabaseModule } from '@/tw-database/tw-database.module';
 
 @Module({
-  imports: [forwardRef(() => SettingsModule), ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule, ScavengingLimitsModule, AdvancedScavengingModule, CrawlerExecutionLogsModule],
+  imports: [forwardRef(() => SettingsModule), ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule, ScavengingLimitsModule, AdvancedScavengingModule, CrawlerExecutionLogsModule, TwDatabaseModule],
   controllers: [CrawlerController, CrawlerOrchestratorController],
   providers: [CrawlerService, CrawlerOrchestratorService],
   exports: [CrawlerService, CrawlerOrchestratorService],

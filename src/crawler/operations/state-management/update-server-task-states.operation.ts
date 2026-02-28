@@ -5,14 +5,18 @@ import { validateConstructionQueueEnabledOperation } from '../validation/validat
 import { validateMiniAttacksEnabledOperation } from '../validation/validate-mini-attacks-enabled.operation';
 import { validateArmyTrainingEnabledOperation } from '../validation/validate-army-training-enabled.operation';
 import { validatePlayerVillageAttacksEnabledOperation } from '../validation/validate-player-village-attacks-enabled.operation';
+import { validateTwDatabaseEnabledOperation } from '../validation/validate-tw-database-enabled.operation';
 import { calculateRandomConstructionIntervalOperation } from '../calculations/calculate-random-construction-interval.operation';
 import { calculateRandomMiniAttackIntervalOperation } from '../calculations/calculate-random-mini-attack-interval.operation';
 import { calculateRandomArmyTrainingIntervalOperation } from '../calculations/calculate-random-army-training-interval.operation';
+import { calculateRandomTwDatabaseIntervalOperation } from '../calculations/calculate-random-tw-database-interval.operation';
 
 export interface UpdateServerTaskStatesDependencies {
     multiServerState: MultiServerState;
     logger: Logger;
     settingsService: any; // SettingsService
+    encryptionService: any; // EncryptionService
+    configService: any; // ConfigService
 }
 
 /**
@@ -40,7 +44,8 @@ export async function updateServerTaskStatesOperation(
             scavenging: plan.scavenging.enabled,
             miniAttacks: plan.miniAttacks.enabled,
             playerVillageAttacks: plan.playerVillageAttacks.enabled,
-            armyTraining: plan.armyTraining.enabled
+            armyTraining: plan.armyTraining.enabled,
+            twDatabase: plan.twDatabase.enabled
         };
 
         // Update enabled states for all tasks
@@ -49,6 +54,7 @@ export async function updateServerTaskStatesOperation(
         plan.miniAttacks.enabled = await validateMiniAttacksEnabledOperation(serverId, deps);
         plan.playerVillageAttacks.enabled = await validatePlayerVillageAttacksEnabledOperation(serverId, deps);
         plan.armyTraining.enabled = await validateArmyTrainingEnabledOperation(serverId, deps);
+        plan.twDatabase.enabled = await validateTwDatabaseEnabledOperation(serverId, deps);
 
         // If task was just enabled (disabled -> enabled), set new nextExecutionTime
         if (!previousStates.constructionQueue && plan.constructionQueue.enabled) {
@@ -83,7 +89,13 @@ export async function updateServerTaskStatesOperation(
             logger.log(`🔄 Army training enabled for ${plan.serverCode}, next execution: ${plan.armyTraining.nextExecutionTime.toLocaleString()}`);
         }
 
-        logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}`);
+        if (!previousStates.twDatabase && plan.twDatabase.enabled) {
+            const delay = calculateRandomTwDatabaseIntervalOperation();
+            plan.twDatabase.nextExecutionTime = new Date(Date.now() + delay);
+            logger.log(`🔄 TW Database enabled for ${plan.serverCode}, next execution: ${plan.twDatabase.nextExecutionTime.toLocaleString()}`);
+        }
+
+        logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}, TwDatabase=${plan.twDatabase.enabled}`);
     } catch (error) {
         logger.error(`❌ Error updating task states for server ${serverId}:`, error);
         throw error;

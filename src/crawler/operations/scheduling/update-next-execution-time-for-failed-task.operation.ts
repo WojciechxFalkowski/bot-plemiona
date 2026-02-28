@@ -29,6 +29,9 @@ export function updateNextExecutionTimeForFailedTaskOperation(
         case 'Army Training':
             plan.armyTraining.nextExecutionTime = new Date(Date.now() + retryDelay);
             break;
+        case 'TW Database':
+            plan.twDatabase.nextExecutionTime = new Date(Date.now() + retryDelay);
+            break;
     }
 
     deps.logger.log(`⏰ Updated next execution time for failed ${taskType} on server ${plan.serverCode}`);

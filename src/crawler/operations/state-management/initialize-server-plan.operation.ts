@@ -62,6 +62,12 @@ export function initializeServerPlanOperation(
             name: 'Army Training',
             villageId: null
         },
+        twDatabase: {
+            nextExecutionTime: new Date(now.getTime() + intervals.twDatabase),
+            enabled: false,
+            lastExecuted: null,
+            name: 'TW Database'
+        },
         lastSuccessfulExecution: null
     };
 

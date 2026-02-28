@@ -8,14 +8,18 @@ import {
     TriggerConstructionQueueDecorator,
     TriggerMiniAttacksDecorator,
     TriggerArmyTrainingDecorator,
+    TriggerTwDatabaseDecorator,
     StartMonitoringDecorator,
     UpdateConstructionQueueSettingDecorator,
     UpdateMiniAttacksSettingDecorator,
     UpdateScavengingSettingDecorator,
     UpdateArmyTrainingSettingDecorator,
+    UpdateTwDatabaseSettingDecorator,
+    GetTwDatabaseSettingDecorator,
     GetStatusDecorator,
     GetDefaultIntervalsDecorator
 } from './decorators';
+import { EncryptionService } from '@/utils/encryption/encryption.service';
 
 @ApiTags('Crawler Orchestrator')
 @Controller('crawler-orchestrator')
@@ -24,7 +28,8 @@ export class CrawlerOrchestratorController {
 
     constructor(
         private readonly orchestratorService: CrawlerOrchestratorService,
-        private readonly settingsService: SettingsService
+        private readonly settingsService: SettingsService,
+        private readonly encryptionService: EncryptionService
     ) { }
 
     @Post(':serverId/trigger-scavenging')
@@ -100,6 +105,23 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error during manual army training trigger for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Army training failed: ${error.message}`);
+        }
+    }
+
+    @Post(':serverId/trigger-tw-database')
+    @TriggerTwDatabaseDecorator()
+    async triggerTwDatabase(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Manual TW Database trigger requested for server ${serverId}`);
+
+        try {
+            await this.orchestratorService.triggerTwDatabase(serverId);
+            return {
+                success: true,
+                message: `TW Database completed successfully for server ${serverId}`
+            };
+        } catch (error) {
+            this.logger.error(`Error during manual TW Database trigger for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`TW Database failed: ${error.message}`);
         }
     }
 
@@ -245,6 +267,86 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error updating army training setting for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Failed to update army training setting: ${error.message}`);
+        }
+    }
+
+    @Get('settings/:serverId/tw-database')
+    @GetTwDatabaseSettingDecorator()
+    async getTwDatabaseSetting(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Getting TW Database setting for server ${serverId}`);
+
+        try {
+            const setting = await this.settingsService.getSetting<{
+                enabled?: boolean;
+                login?: string;
+                passwordEncrypted?: string;
+            }>(serverId, SettingsKey.TW_DATABASE);
+
+            let password = '';
+            if (setting?.passwordEncrypted && this.encryptionService.isAvailable()) {
+                try {
+                    password = this.encryptionService.decrypt(setting.passwordEncrypted);
+                } catch {
+                    this.logger.warn(`Could not decrypt TW Database password for server ${serverId}`);
+                }
+            }
+
+            return {
+                success: true,
+                enabled: setting?.enabled ?? false,
+                login: setting?.login ?? '',
+                password
+            };
+        } catch (error) {
+            this.logger.error(`Error getting TW Database setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Failed to get TW Database setting: ${error.message}`);
+        }
+    }
+
+    @Post('settings/:serverId/tw-database')
+    @UpdateTwDatabaseSettingDecorator()
+    async updateTwDatabaseSetting(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: { value?: boolean; login?: string; password?: string }
+    ) {
+        this.logger.log(`Updating TW Database setting for server ${serverId}`);
+
+        try {
+            const existing = await this.settingsService.getSetting<{
+                enabled?: boolean;
+                login?: string;
+                passwordEncrypted?: string;
+            }>(serverId, SettingsKey.TW_DATABASE);
+
+            const enabled = dto.value !== undefined ? dto.value : (existing?.enabled ?? false);
+            const login = dto.login !== undefined ? dto.login : (existing?.login ?? '');
+            let passwordEncrypted = existing?.passwordEncrypted ?? '';
+
+            if (dto.password !== undefined && dto.password !== '') {
+                if (!this.encryptionService.isAvailable()) {
+                    throw new InternalServerErrorException('ENCRYPTION_KEY is not configured - cannot store password');
+                }
+                passwordEncrypted = this.encryptionService.encrypt(dto.password);
+            }
+
+            await this.settingsService.setSetting(serverId, SettingsKey.TW_DATABASE, {
+                enabled,
+                login,
+                passwordEncrypted
+            });
+
+            await this.orchestratorService.updateServerTaskStates(serverId);
+
+            return {
+                success: true,
+                message: `TW Database setting updated for server ${serverId}`,
+                setting: { serverId, enabled, login }
+            };
+        } catch (error) {
+            this.logger.error(`Error updating TW Database setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(
+                `Failed to update TW Database setting: ${error instanceof Error ? error.message : String(error)}`
+            );
         }
     }
 
