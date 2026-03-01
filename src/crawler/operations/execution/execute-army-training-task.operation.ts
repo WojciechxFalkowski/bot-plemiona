@@ -1,11 +1,33 @@
 import { Logger } from '@nestjs/common';
 import { ArmyTrainingService } from '@/army-training/army-training.service';
 import { ArmyTrainingStrategiesService } from '@/army-training/army-training-strategies.service';
+import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 
 export interface ExecuteArmyTrainingTaskDependencies {
     armyTrainingService: ArmyTrainingService;
     armyTrainingStrategiesService: ArmyTrainingStrategiesService;
     logger: Logger;
+    executionLogId?: number | null;
+    crawlerActivityLogsService?: CrawlerActivityLogsService;
+}
+
+function buildActivityContext(
+    serverId: number,
+    deps: ExecuteArmyTrainingTaskDependencies
+): { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> } | undefined {
+    const { executionLogId, crawlerActivityLogsService } = deps;
+    if (executionLogId == null || !crawlerActivityLogsService) return undefined;
+    return {
+        logActivity: async (evt) =>
+            crawlerActivityLogsService.logActivity({
+                executionLogId: executionLogId!,
+                serverId,
+                operationType: 'Army Training',
+                eventType: evt.eventType,
+                message: evt.message,
+            }),
+    };
 }
 
 /**
@@ -18,6 +40,7 @@ export async function executeArmyTrainingTaskOperation(
     deps: ExecuteArmyTrainingTaskDependencies
 ): Promise<void> {
     const { armyTrainingService, armyTrainingStrategiesService, logger } = deps;
+    const activityContext = buildActivityContext(serverId, deps);
     logger.log(`🚀 Executing army training for server ${serverId}`);
 
     try {
@@ -38,8 +61,12 @@ export async function executeArmyTrainingTaskOperation(
                 await armyTrainingService.startTrainingUnits(strategy, serverId);
                 logger.log(`✅ Army training completed for village ${strategy.villageId} on server ${serverId}`);
             } catch (villageError) {
+                const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                 logger.error(`❌ Error executing army training for village ${strategy.villageId} on server ${serverId}:`, villageError);
-                // Continue with next village instead of stopping
+                await activityContext?.logActivity({
+                    eventType: CrawlerActivityEventType.ERROR,
+                    message: `Błąd szkolenia w wiosce ${strategy.villageId}: ${errorMsg}`,
+                });
             }
         }
 

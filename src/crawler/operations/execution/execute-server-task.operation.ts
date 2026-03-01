@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ServerCrawlerPlan, MultiServerState, ManualTask } from '../query/get-multi-server-status.operation';
 import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
+import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execution-log.entity';
 import { executeConstructionQueueTaskOperation, ExecuteConstructionQueueTaskDependencies } from './execute-construction-queue-task.operation';
 import { executeScavengingTaskOperation, ExecuteScavengingTaskDependencies } from './execute-scavenging-task.operation';
@@ -34,6 +35,7 @@ export interface ExecuteServerTaskDependencies
         Omit<ExecuteManualTaskDependencies, 'multiServerState' | 'logger'> {
     multiServerState: MultiServerState;
     crawlerExecutionLogsService: CrawlerExecutionLogsService;
+    crawlerActivityLogsService: CrawlerActivityLogsService;
     crawlerService: any; // CrawlerService - need to get scavengingTimeData
     logger: Logger;
 }
@@ -85,6 +87,8 @@ async function executeManualTask(
             plemionaCookiesService: deps.plemionaCookiesService,
             serversService: deps.serversService,
             crawlerService: deps.crawlerService,
+            executionLogId,
+            crawlerActivityLogsService: deps.crawlerActivityLogsService,
         };
 
         const result = await executeManualTaskOperation(task, manualTaskDeps);
@@ -141,18 +145,25 @@ async function executeManualTask(
     }
 }
 
+export interface ExecuteServerTaskOptions {
+    /** When true, execution log description is set to "Uruchomienie ręczne" for filtering/display */
+    triggeredManually?: boolean;
+}
+
 /**
  * Executes a task for a specific server (regular or manual)
  * @param serverId ID of the server
  * @param taskType Type of task to execute
  * @param deps Dependencies needed for execution
  * @param nextTaskResult Optional task result from findNextTaskToExecute (for manual task detection)
+ * @param options Optional: triggeredManually to mark execution log as manual trigger
  */
 export async function executeServerTaskOperation(
     serverId: number,
     taskType: string,
     deps: ExecuteServerTaskDependencies,
-    nextTaskResult?: NextTaskResult
+    nextTaskResult?: NextTaskResult,
+    options?: ExecuteServerTaskOptions
 ): Promise<void> {
     const { multiServerState, crawlerExecutionLogsService, crawlerService, logger } = deps;
 
@@ -193,7 +204,7 @@ export async function executeServerTaskOperation(
             serverId: serverId,
             villageId: villageId,
             title: taskType,
-            description: null,
+            description: options?.triggeredManually ? 'Uruchomienie ręczne' : null,
             startedAt: startedAt,
         });
         executionLogId = executionLog.id;
@@ -201,14 +212,20 @@ export async function executeServerTaskOperation(
         logger.error(`❌ Failed to create execution log:`, logError);
     }
 
+    const taskDepsWithActivity = {
+        ...deps,
+        executionLogId,
+        crawlerActivityLogsService: deps.crawlerActivityLogsService
+    };
+
     try {
         switch (taskType) {
             case 'Construction Queue':
-                await executeConstructionQueueTaskOperation(serverId, deps);
+                await executeConstructionQueueTaskOperation(serverId, taskDepsWithActivity);
                 updateNextConstructionTimeOperation(plan, deps);
                 break;
             case 'Scavenging':
-                await executeScavengingTaskOperation(serverId, deps);
+                await executeScavengingTaskOperation(serverId, taskDepsWithActivity);
                 const scavengingData = crawlerService.getScavengingTimeData();
                 updateNextScavengingTimeOperation(plan, {
                     scavengingTimeData: scavengingData,
@@ -216,19 +233,19 @@ export async function executeServerTaskOperation(
                 });
                 break;
             case 'Mini Attacks':
-                await executeMiniAttacksTaskOperation(serverId, deps);
+                await executeMiniAttacksTaskOperation(serverId, taskDepsWithActivity);
                 await updateNextMiniAttackTimeOperation(plan, serverId, deps);
                 break;
             case 'Player Village Attacks':
-                await executePlayerVillageAttacksTaskOperation(serverId, deps);
+                await executePlayerVillageAttacksTaskOperation(serverId, taskDepsWithActivity);
                 await updateNextPlayerVillageAttackTimeOperation(plan, serverId, deps);
                 break;
             case 'Army Training':
-                await executeArmyTrainingTaskOperation(serverId, deps);
+                await executeArmyTrainingTaskOperation(serverId, taskDepsWithActivity);
                 await updateNextArmyTrainingTimeOperation(plan, serverId, deps);
                 break;
             case 'TW Database':
-                await executeTwDatabaseTaskOperation(serverId, deps);
+                await executeTwDatabaseTaskOperation(serverId, taskDepsWithActivity);
                 updateNextTwDatabaseTimeOperation(plan);
                 break;
             default:

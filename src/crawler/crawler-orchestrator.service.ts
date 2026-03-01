@@ -47,6 +47,7 @@ import { executePlayerVillageAttacksTaskOperation } from './operations/execution
 import { validateOrchestratorEnabledOperation } from './operations/validation/validate-orchestrator-enabled.operation';
 import { getInitialIntervalsOperation } from './operations/calculations/get-initial-intervals.operation';
 import { TwDatabaseService } from '@/tw-database/tw-database.service';
+import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { EncryptionService } from '@/utils/encryption/encryption.service';
 
 @Injectable()
@@ -93,6 +94,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly playerVillagesService: PlayerVillagesService,
         private readonly notificationsService: NotificationsService,
         private readonly crawlerExecutionLogsService: CrawlerExecutionLogsService,
+        private readonly crawlerActivityLogsService: CrawlerActivityLogsService,
         private readonly globalSettingsService: GlobalSettingsService,
         private readonly twDatabaseService: TwDatabaseService,
         private readonly encryptionService: EncryptionService
@@ -393,6 +395,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         await executeServerTaskOperation(serverId, taskType, {
             multiServerState: this.multiServerState,
             crawlerExecutionLogsService: this.crawlerExecutionLogsService,
+            crawlerActivityLogsService: this.crawlerActivityLogsService,
             crawlerService: this.crawlerService,
             constructionQueueService: this.constructionQueueService,
             miniAttackStrategiesService: this.miniAttackStrategiesService,
@@ -673,7 +676,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         }
 
         try {
-            await this.executeScavengingTask(serverId);
+            await this.executeServerTaskManually(serverId, 'Scavenging');
             this.logger.log(`✅ Manual scavenging completed successfully for server ${plan.serverCode}`);
             return {
                 serverCode: plan.serverCode,
@@ -698,7 +701,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log(`🔧 Manually triggering construction queue for server ${plan.serverCode}...`);
 
         try {
-            await this.executeConstructionQueueTask(serverId);
+            await this.executeServerTaskManually(serverId, 'Construction Queue');
             this.logger.log(`✅ Manual construction queue completed successfully for server ${plan.serverCode}`);
         } catch (error) {
             this.logger.error(`❌ Error during manual construction queue for server ${plan.serverCode}:`, error);
@@ -718,7 +721,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log(`🔧 Manually triggering mini attacks for server ${plan.serverCode}...`);
 
         try {
-            await this.executeMiniAttacksTask(serverId);
+            await this.executeServerTaskManually(serverId, 'Mini Attacks');
             this.logger.log(`✅ Manual mini attacks completed successfully for server ${plan.serverCode}`);
         } catch (error) {
             this.logger.error(`❌ Error during manual mini attacks for server ${plan.serverCode}:`, error);
@@ -738,7 +741,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log(`🔧 Manually triggering army training for server ${plan.serverCode}...`);
 
         try {
-            await this.executeArmyTrainingTask(serverId);
+            await this.executeServerTaskManually(serverId, 'Army Training');
             this.logger.log(`✅ Manual army training completed successfully for server ${plan.serverCode}`);
         } catch (error) {
             this.logger.error(`❌ Error during manual army training for server ${plan.serverCode}:`, error);
@@ -747,7 +750,34 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
-     * Public method to manually trigger TW Database for a specific server
+     * Executes a task via executeServerTaskOperation with triggeredManually flag.
+     * Used by all manual trigger methods to ensure execution logs and activity events are created.
+     */
+    private async executeServerTaskManually(serverId: number, taskType: 'Construction Queue' | 'Scavenging' | 'Mini Attacks' | 'Army Training' | 'TW Database'): Promise<void> {
+        const deps = {
+            multiServerState: this.multiServerState,
+            crawlerExecutionLogsService: this.crawlerExecutionLogsService,
+            crawlerActivityLogsService: this.crawlerActivityLogsService,
+            crawlerService: this.crawlerService,
+            constructionQueueService: this.constructionQueueService,
+            miniAttackStrategiesService: this.miniAttackStrategiesService,
+            serversService: this.serversService,
+            barbarianVillagesService: this.barbarianVillagesService,
+            credentials: this.credentials,
+            plemionaCookiesService: this.plemionaCookiesService,
+            playerVillagesService: this.playerVillagesService,
+            armyTrainingService: this.armyTrainingService,
+            armyTrainingStrategiesService: this.armyTrainingStrategiesService,
+            twDatabaseService: this.twDatabaseService,
+            settingsService: this.settingsService,
+            logger: this.logger
+        };
+        await executeServerTaskOperation(serverId, taskType, deps, undefined, { triggeredManually: true });
+    }
+
+    /**
+     * Public method to manually trigger TW Database for a specific server.
+     * Uses executeServerTaskOperation so execution log and activity events are created.
      */
     public async triggerTwDatabase(serverId: number): Promise<void> {
         const plan = this.multiServerState.serverPlans.get(serverId);
@@ -758,7 +788,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         this.logger.log(`Manually triggering TW Database for server ${plan.serverCode}...`);
 
         try {
-            await this.executeTwDatabaseTask(serverId);
+            await this.executeServerTaskManually(serverId, 'TW Database');
             this.logger.log(`Manual TW Database completed successfully for server ${plan.serverCode}`);
         } catch (error) {
             this.logger.error(`Error during TW Database for server ${plan.serverCode}:`, error);

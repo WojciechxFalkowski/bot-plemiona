@@ -288,8 +288,16 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
      * Loguje się tylko raz na początku dla wszystkich wiosek.
      * Delegates to performScavengingOperation
      * @param serverId ID serwera
+     * @param activityContext Opcjonalny kontekst do logowania zdarzeń (activity log)
      */
-    public async performScavenging(serverId: number): Promise<void> {
+    public async performScavenging(
+        serverId: number,
+        activityContext?: {
+            executionLogId: number | null;
+            serverId: number;
+            logActivity: (evt: { eventType: string; message: string }) => Promise<void>;
+        }
+    ): Promise<void> {
         return await performScavengingOperation(serverId, {
             logger: this.logger,
             credentials: this.credentials,
@@ -299,7 +307,8 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
             advancedScavengingService: this.advancedScavengingService,
             scavengingLimitsService: this.scavengingLimitsService,
             settingsService: this.settingsService,
-            scavengingTimeData: this.scavengingTimeData
+            scavengingTimeData: this.scavengingTimeData,
+            activityContext
         });
     }
 

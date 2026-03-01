@@ -7,6 +7,29 @@ import { AdvancedScavengingService } from '@/advanced-scavenging/advanced-scaven
 import { ScavengingLimitsService } from '@/scavenging-limits/scavenging-limits.service';
 import { levelSelectors, unitInputNames, unitOrder } from '../../../utils/scavenging.config';
 import { updateVillageStateAfterDispatchOperation } from './update-village-state-after-dispatch.operation';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import type { ScavengingUnit } from '../../../utils/scavenging.config';
+
+const UNIT_NAMES_PL: Record<ScavengingUnit, string> = {
+    spear: 'pikinierów',
+    sword: 'mieczników',
+    axe: 'toporników',
+    archer: 'łuczników',
+    light: 'zwiadowców',
+    marcher: 'łuczników konnych',
+    heavy: 'ciężkiej kawalerii',
+};
+
+function formatDispatchUnits(dispatchUnits: Partial<Record<string, number>>): string {
+    const parts: string[] = [];
+    for (const unit of unitOrder) {
+        const count = dispatchUnits[unit] || 0;
+        if (count > 0) {
+            parts.push(`${count} ${UNIT_NAMES_PL[unit]}`);
+        }
+    }
+    return parts.join(', ') || '0 jednostek';
+}
 
 export interface ProcessVillageScavengingDependencies {
     page: Page;
@@ -14,6 +37,11 @@ export interface ProcessVillageScavengingDependencies {
     advancedScavengingService: AdvancedScavengingService;
     scavengingLimitsService: ScavengingLimitsService;
     scavengingTimeData: ScavengingTimeData;
+    activityContext?: {
+        executionLogId: number | null;
+        serverId: number;
+        logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+    };
 }
 
 /**
@@ -85,7 +113,7 @@ export async function processVillageScavengingOperation(
     serverCode: string,
     deps: ProcessVillageScavengingDependencies
 ): Promise<number> {
-    const { page, logger, advancedScavengingService, scavengingLimitsService, scavengingTimeData } = deps;
+    const { page, logger, advancedScavengingService, scavengingLimitsService, scavengingTimeData, activityContext } = deps;
 
     try {
         // Nawigacja do zakładki Zbieractwo dla konkretnej wioski
@@ -270,6 +298,11 @@ export async function processVillageScavengingOperation(
                     if (verificationStatus?.isBusy) {
                         logger.log(`✓ Level ${levelPlan.level} successfully dispatched (now busy)`);
                         villageSuccessfulDispatches++;
+                        const unitsStr = formatDispatchUnits(levelPlan.dispatchUnits);
+                        await activityContext?.logActivity({
+                            eventType: CrawlerActivityEventType.SUCCESS,
+                            message: `Zbieractwo wysłane: ${village.name} (${unitsStr}) -> poziom ${levelPlan.level}`,
+                        });
                     } else if (verificationStatus?.isAvailable) {
                         logger.warn(`✗ Level ${levelPlan.level} dispatch failed - still available. Adding to retry list.`);
                         failedDispatchLevels.set(levelPlan.level, levelPlan);
@@ -346,6 +379,11 @@ export async function processVillageScavengingOperation(
                         if (finalStatus?.isBusy) {
                             logger.log(`Round 2: ✓ Level ${level} successfully dispatched`);
                             villageSuccessfulDispatches++;
+                            const unitsStr = formatDispatchUnits(levelPlan.dispatchUnits);
+                            await activityContext?.logActivity({
+                                eventType: CrawlerActivityEventType.SUCCESS,
+                                message: `Zbieractwo wysłane: ${village.name} (${unitsStr}) -> poziom ${level}`,
+                            });
                         } else {
                             logger.warn(`Round 2: ✗ Level ${level} still failed after retry`);
                         }

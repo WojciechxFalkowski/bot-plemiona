@@ -5,6 +5,13 @@ import { createBrowserSessionOperation, CreateBrowserSessionDependencies } from 
 import { processSingleBuildingOperation, ProcessSingleBuildingDependencies } from './process-single-building.operation';
 import { scrapeVillageBuildingDataOperation, ScrapeVillageBuildingDataDependencies } from '../scraping/scrape-village-building-data.operation';
 import { ServersService } from '@/servers';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+
+export interface ConstructionQueueActivityContext {
+    executionLogId: number | null;
+    serverId: number;
+    logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+}
 
 export interface ProcessAndCheckConstructionQueueDependencies {
     logger: any;
@@ -13,6 +20,7 @@ export interface ProcessAndCheckConstructionQueueDependencies {
     createBrowserSessionDeps: CreateBrowserSessionDependencies;
     processSingleBuildingDeps: ProcessSingleBuildingDependencies;
     scrapeVillageBuildingDataDeps: ScrapeVillageBuildingDataDependencies;
+    activityContext?: ConstructionQueueActivityContext;
 }
 
 /**
@@ -34,7 +42,8 @@ export async function processAndCheckConstructionQueueOperation(
         getOldestBuildingPerVillageDeps,
         createBrowserSessionDeps,
         processSingleBuildingDeps,
-        scrapeVillageBuildingDataDeps
+        scrapeVillageBuildingDataDeps,
+        activityContext
     } = deps;
 
     logger.log('🔄 Processing construction queue from database...');
@@ -83,12 +92,40 @@ export async function processAndCheckConstructionQueueOperation(
                         const result = await processSingleBuildingOperation(serverCode, building, page, processSingleBuildingDeps);
                         if (result.success) {
                             successCount++;
+                            const villageName = building.village?.name || building.villageId;
+                            if (result.reason === 'Already built') {
+                                await activityContext?.logActivity({
+                                    eventType: CrawlerActivityEventType.SUCCESS,
+                                    message: `Zbudowano: ${building.buildingName} (poziom ${building.targetLevel}) w ${villageName}`,
+                                });
+                            } else if (result.reason === 'Successfully added') {
+                                await activityContext?.logActivity({
+                                    eventType: CrawlerActivityEventType.INFO,
+                                    message: `Rozpoczęto budowę: ${building.buildingName} (poziom ${building.targetLevel}) w ${villageName}`,
+                                });
+                            } else if (result.reason === 'Already in game queue') {
+                                await activityContext?.logActivity({
+                                    eventType: CrawlerActivityEventType.INFO,
+                                    message: `W kolejce budowy: ${building.buildingName} (poziom ${building.targetLevel}) w ${villageName}`,
+                                });
+                            }
+                        } else {
+                            const villageName = building.village?.name || building.villageId;
+                            await activityContext?.logActivity({
+                                eventType: CrawlerActivityEventType.ERROR,
+                                message: `Nie udało się zbudować ${building.buildingName} (poziom ${building.targetLevel}) w ${villageName} – ${result.reason}`,
+                            });
                         }
                         villageProcessed = true;
                     } catch (error) {
                         errorCount++;
+                        const villageName = building.village?.name || building.villageId;
+                        const errorMsg = error instanceof Error ? error.message : String(error);
                         logger.error(`❌ Error processing building ${building.buildingName} L${building.targetLevel} in village ${building.villageId}:`, error);
-                        // Continue with next building - don't stop the whole process
+                        await activityContext?.logActivity({
+                            eventType: CrawlerActivityEventType.ERROR,
+                            message: `Błąd przy budowie ${building.buildingName} (poziom ${building.targetLevel}) w ${villageName}: ${errorMsg}`,
+                        });
                     }
                 }
 
@@ -115,6 +152,11 @@ export async function processAndCheckConstructionQueueOperation(
     } catch (error) {
         logger.error('❌ Critical error during construction queue processing:', error);
         logger.log('⏰ Will retry at next scheduled interval');
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        await activityContext?.logActivity({
+            eventType: CrawlerActivityEventType.ERROR,
+            message: `Krytyczny błąd przetwarzania kolejki budowy: ${errorMsg}`,
+        });
     }
 
     logger.log('✅ Construction queue processing finished. Next execution scheduled.');

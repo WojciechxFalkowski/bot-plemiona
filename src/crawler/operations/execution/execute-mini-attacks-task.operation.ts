@@ -7,6 +7,8 @@ import { ServersService } from '@/servers/servers.service';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { BarbarianVillagesService } from '@/barbarian-villages/barbarian-villages.service';
 import { MiniAttackStrategiesService } from '@/mini-attack-strategies/mini-attack-strategies.service';
+import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 
 export interface ExecuteMiniAttacksTaskDependencies {
     miniAttackStrategiesService: MiniAttackStrategiesService;
@@ -15,6 +17,26 @@ export interface ExecuteMiniAttacksTaskDependencies {
     credentials: PlemionaCredentials;
     plemionaCookiesService: PlemionaCookiesService;
     logger: Logger;
+    executionLogId?: number | null;
+    crawlerActivityLogsService?: CrawlerActivityLogsService;
+}
+
+function buildActivityContext(
+    serverId: number,
+    deps: ExecuteMiniAttacksTaskDependencies
+): { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> } | undefined {
+    const { executionLogId, crawlerActivityLogsService } = deps;
+    if (executionLogId == null || !crawlerActivityLogsService) return undefined;
+    return {
+        logActivity: async (evt) =>
+            crawlerActivityLogsService.logActivity({
+                executionLogId: executionLogId!,
+                serverId,
+                operationType: 'Mini Attacks',
+                eventType: evt.eventType,
+                message: evt.message,
+            }),
+    };
 }
 
 /**
@@ -27,6 +49,7 @@ export async function executeMiniAttacksTaskOperation(
     deps: ExecuteMiniAttacksTaskDependencies
 ): Promise<void> {
     const { miniAttackStrategiesService, serversService, barbarianVillagesService, credentials, plemionaCookiesService, logger } = deps;
+    const activityContext = buildActivityContext(serverId, deps);
     logger.log(`🚀 Executing mini attacks for server ${serverId}`);
 
     const browserPage = await createBrowserPage({ headless: true });
@@ -55,6 +78,10 @@ export async function executeMiniAttacksTaskOperation(
         );
 
         if (!loginResult.success || !loginResult.worldSelected) {
+            await activityContext?.logActivity({
+                eventType: CrawlerActivityEventType.ERROR,
+                message: `Nie udało się zalogować do Plemion: ${loginResult.error || 'nieznany błąd'}`,
+            });
             throw new Error(`Login failed for server ${serverId}: ${loginResult.error || 'Unknown error'}`);
         }
 
@@ -68,8 +95,12 @@ export async function executeMiniAttacksTaskOperation(
                 await barbarianVillagesService.executeMiniAttacks(serverId, strategy.villageId, page, serverCode, strategy);
                 logger.log(`✅ Mini attacks completed for village ${strategy.villageId} on server ${serverId}`);
             } catch (villageError) {
+                const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                 logger.error(`❌ Error executing mini attacks for village ${strategy.villageId} on server ${serverId}:`, villageError);
-                // Continue with next village instead of stopping
+                await activityContext?.logActivity({
+                    eventType: CrawlerActivityEventType.ERROR,
+                    message: `Błąd mini-ataków dla wioski ${strategy.villageId}: ${errorMsg}`,
+                });
             }
         }
 

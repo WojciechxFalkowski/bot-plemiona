@@ -13,6 +13,7 @@ import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SettingsService } from '@/settings/settings.service';
 import { SettingsKey } from '@/settings/settings-keys.enum';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 import { VillageInfoPage } from '@/models/tribal-wars/village-info-page';
 import { TroopDispatchPage } from '@/models/tribal-wars/troop-dispatch-page';
 import { PlayerVillageAttackStrategiesService } from './player-village-attack-strategies.service';
@@ -322,24 +323,39 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
         }
     }
 
-    public async executeAttacks(serverId: number): Promise<void> {
+    public async executeAttacks(
+        serverId: number,
+        activityContext?: { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> }
+    ): Promise<void> {
         const villages = await this.findAttackableVillages(serverId);
         for (const village of villages) {
-            await this.executeAttackForVillage(village, serverId);
+            await this.executeAttackForVillage(village, serverId, activityContext);
         }
     }
 
-    private async executeAttackForVillage(village: PlayerVillageEntity, serverId: number): Promise<void> {
-        const { browser, page } = await this.createBrowserSession(serverId, false);
-        const serverCode = await this.serversService.getServerCode(serverId);
+    private async executeAttackForVillage(
+        village: PlayerVillageEntity,
+        serverId: number,
+        activityContext?: { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> }
+    ): Promise<void> {
+        let browser: Browser | null = null;
         try {
+            const session = await this.createBrowserSession(serverId, false);
+            browser = session.browser;
+            const { page } = session;
+            const serverCode = await this.serversService.getServerCode(serverId);
             await this.checkVillageOwnerAndUpdate(page, village, serverCode);
             const strategy = await this.playerVillageAttackStrategiesService.findByVillageId(serverId, village.villageId);
-            await this.executeAttack(page, village, serverCode, serverId, browser, strategy);
+            await this.executeAttack(page, village, serverCode, serverId, session.browser, strategy);
         } catch (error) {
-            this.logger.error(`Error executing attack for village ${village.name}: ${error.message}`);
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Error executing attack for village ${village.name}: ${errorMsg}`);
+            await activityContext?.logActivity({
+                eventType: CrawlerActivityEventType.ERROR,
+                message: `Błąd ataku na wioskę ${village.name}: ${errorMsg}`,
+            });
         } finally {
-            await browser.close();
+            if (browser) await browser.close();
         }
     }
 

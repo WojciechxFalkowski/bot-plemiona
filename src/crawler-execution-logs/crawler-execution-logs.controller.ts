@@ -1,6 +1,7 @@
-import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Query, BadRequestException, Param, ParseIntPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { CrawlerExecutionLogsService } from './crawler-execution-logs.service';
+import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { ExecutionStatus } from './entities/crawler-execution-log.entity';
 import { ExecutionLogsPaginatedResponseDto } from './dto/crawler-execution-log-response.dto';
 
@@ -9,6 +10,7 @@ import { ExecutionLogsPaginatedResponseDto } from './dto/crawler-execution-log-r
 export class CrawlerExecutionLogsController {
     constructor(
         private readonly crawlerExecutionLogsService: CrawlerExecutionLogsService,
+        private readonly crawlerActivityLogsService: CrawlerActivityLogsService,
     ) {}
 
     @Get()
@@ -58,6 +60,12 @@ export class CrawlerExecutionLogsController {
         type: Number,
         description: 'Number of logs per page (default: 50)'
     })
+    @ApiQuery({
+        name: 'triggeredManually',
+        required: false,
+        type: Boolean,
+        description: 'Filter by trigger source: true = only manual, false = only scheduler, omit = all'
+    })
     @ApiResponse({
         status: 200,
         description: 'Execution logs retrieved successfully',
@@ -71,6 +79,7 @@ export class CrawlerExecutionLogsController {
         @Query('endDate') endDate?: string,
         @Query('page') page?: string,
         @Query('limit') limit?: string,
+        @Query('triggeredManually') triggeredManually?: string,
     ): Promise<ExecutionLogsPaginatedResponseDto> {
         let parsedServerId: number | undefined = undefined;
         if (serverId !== undefined && serverId !== null && serverId !== '') {
@@ -119,6 +128,13 @@ export class CrawlerExecutionLogsController {
             throw new BadRequestException('limit must be a valid number between 1 and 100');
         }
 
+        let parsedTriggeredManually: boolean | undefined = undefined;
+        if (triggeredManually === 'true') {
+            parsedTriggeredManually = true;
+        } else if (triggeredManually === 'false') {
+            parsedTriggeredManually = false;
+        }
+
         return await this.crawlerExecutionLogsService.findAll(
             parsedServerId,
             parsedStatus,
@@ -126,8 +142,21 @@ export class CrawlerExecutionLogsController {
             parsedStartDate,
             parsedEndDate,
             parsedPage,
-            parsedLimit
+            parsedLimit,
+            parsedTriggeredManually
         );
+    }
+
+    @Get(':id/activities')
+    @ApiOperation({
+        summary: 'Pobiera zdarzenia aktywności dla logu wykonania',
+        description: 'Zwraca listę szczegółowych zdarzeń (np. zbudowane budynki, wysłane ataki) powiązanych z danym uruchomieniem'
+    })
+    @ApiParam({ name: 'id', description: 'ID logu wykonania' })
+    @ApiResponse({ status: 200, description: 'Lista zdarzeń aktywności' })
+    async getActivities(@Param('id', ParseIntPipe) id: number) {
+        const activities = await this.crawlerActivityLogsService.findByExecutionLogId(id);
+        return { success: true, data: activities };
     }
 }
 

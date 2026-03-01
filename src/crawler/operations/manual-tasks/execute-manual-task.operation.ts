@@ -6,6 +6,8 @@ import { ServersService } from '@/servers/servers.service';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { CrawlerService } from '@/crawler/crawler.service';
+import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 
 /**
  * Result of executing a manual task
@@ -29,6 +31,8 @@ export interface ExecuteManualTaskDependencies {
     plemionaCookiesService: PlemionaCookiesService;
     serversService: ServersService;
     crawlerService: CrawlerService;
+    executionLogId?: number | null;
+    crawlerActivityLogsService?: CrawlerActivityLogsService;
 }
 
 /**
@@ -83,6 +87,41 @@ async function executeSendSupportTask(
 
     const result = await sendSupportOperation(config, sendSupportDeps);
 
+    const { executionLogId, crawlerActivityLogsService } = deps;
+    if (executionLogId != null && crawlerActivityLogsService) {
+        if (result.error) {
+            await crawlerActivityLogsService.logActivity({
+                executionLogId,
+                serverId: payload.serverId,
+                operationType: 'Manual: sendSupport',
+                eventType: CrawlerActivityEventType.ERROR,
+                message: `Nie udało się zalogować do Plemion: ${result.error}`,
+            });
+        } else if (result.successfulDispatches === 0 && result.failedDispatches > 0) {
+            await crawlerActivityLogsService.logActivity({
+                executionLogId,
+                serverId: payload.serverId,
+                operationType: 'Manual: sendSupport',
+                eventType: CrawlerActivityEventType.ERROR,
+                message: 'Nie wysłano wsparcia z żadnej wioski',
+            });
+        } else if (result.success || result.successfulDispatches > 0) {
+            const msg =
+                result.successfulDispatches > 0
+                    ? result.failedDispatches > 0
+                        ? `Wysłano wsparcie z ${result.successfulDispatches}/${result.totalAllocations} wiosek`
+                        : `Wysłano wsparcie z ${result.successfulDispatches} wiosek`
+                    : 'Operacja wsparcia zakończona pomyślnie';
+            await crawlerActivityLogsService.logActivity({
+                executionLogId,
+                serverId: payload.serverId,
+                operationType: 'Manual: sendSupport',
+                eventType: CrawlerActivityEventType.SUCCESS,
+                message: msg,
+            });
+        }
+    }
+
     // After successful support dispatch, refresh village units cache
     // so user sees updated troop counts when clicking "Pobierz stany wojsk"
     if (result.success || result.successfulDispatches > 0) {
@@ -106,14 +145,27 @@ async function executeFetchVillageUnitsTask(
     task: ManualTask,
     deps: ExecuteManualTaskDependencies
 ): Promise<unknown> {
-    const { logger, crawlerService } = deps;
+    const { logger, crawlerService, executionLogId, crawlerActivityLogsService } = deps;
     const payload = task.payload as { serverId: number; forceRefresh?: boolean };
 
     logger.log(`Fetching village units for server ${payload.serverId}`);
 
     // Call the crawler service to fetch village units
     // forceRefresh = true means we skip cache
-    return crawlerService.getVillageUnitsData(payload.serverId, payload.forceRefresh ?? true);
+    const data = await crawlerService.getVillageUnitsData(payload.serverId, payload.forceRefresh ?? true);
+
+    if (executionLogId != null && crawlerActivityLogsService) {
+        const villageCount = Array.isArray(data) ? data.length : 0;
+        await crawlerActivityLogsService.logActivity({
+            executionLogId,
+            serverId: payload.serverId,
+            operationType: 'Manual: fetchVillageUnits',
+            eventType: CrawlerActivityEventType.SUCCESS,
+            message: `Pobrano dane wojsk dla ${villageCount} wiosek`,
+        });
+    }
+
+    return data;
 }
 
 /**
@@ -168,6 +220,19 @@ export async function executeManualTaskOperation(
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const executionTimeMs = Date.now() - startTime;
+
+        const { executionLogId, crawlerActivityLogsService } = deps;
+        if (executionLogId != null && crawlerActivityLogsService && task.serverId != null) {
+            const operationType =
+                task.type === 'sendSupport' ? 'Manual: sendSupport' : task.type === 'fetchVillageUnits' ? 'Manual: fetchVillageUnits' : `Manual: ${task.type}`;
+            await crawlerActivityLogsService.logActivity({
+                executionLogId,
+                serverId: task.serverId,
+                operationType,
+                eventType: CrawlerActivityEventType.ERROR,
+                message: `Błąd: ${errorMessage}`,
+            });
+        }
 
         // Mark task as failed
         markTaskAsCompleted(task, false, errorMessage);

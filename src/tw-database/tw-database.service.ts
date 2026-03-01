@@ -18,6 +18,7 @@ import { computeAttackFingerprintOperation } from './operations/compute-attack-f
 import { sendFakeAttackOperation } from './operations/send-fake-attack.operation';
 import { sendBurzakAttackOperation } from './operations/send-burzak-attack.operation';
 import { clearSentInTwDatabaseOperation } from './operations/clear-sent-in-twdatabase.operation';
+import { isOnPlemionaMainLandingPage } from './operations/is-plemiona-main-landing.operation';
 import { FejkMethodsConfigService } from './fejk-methods-config.service';
 import {
     TwDatabaseAttackEntity,
@@ -25,6 +26,13 @@ import {
 } from './entities/tw-database-attack.entity';
 import { TwDatabaseAttackDetailsEntity } from './entities/tw-database-attack-details.entity';
 import { TW_DATABASE_ATTACK_ENTITY_REPOSITORY } from './tw-database.service.contracts';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+
+export interface VisitAttackPlannerActivityContext {
+    executionLogId: number | null;
+    serverId: number;
+    logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+}
 
 /** URL of TWDatabase Attack Planner page - will be used in crawler (e.g. every 30 min) */
 export const TW_DATABASE_ATTACK_PLANNER_URL = 'https://twdatabase.online/AttackPlanner/Show';
@@ -98,9 +106,14 @@ export class TwDatabaseService {
      *
      * @param serverId - Server ID for credentials lookup
      * @param headless - Run browser in headless mode (default: NODE_ENV === 'production')
+     * @param activityContext - Optional context for logging activity events (fejki sent, session expired)
      * @returns Result with page title and duration
      */
-    async visitAttackPlanner(serverId: number, headless?: boolean): Promise<VisitAttackPlannerResult> {
+    async visitAttackPlanner(
+        serverId: number,
+        headless?: boolean,
+        activityContext?: VisitAttackPlannerActivityContext
+    ): Promise<VisitAttackPlannerResult> {
         const isHeadless = headless ?? process.env.NODE_ENV === 'production';
         const startTime = Date.now();
         this.logger.log(`Opening TWDatabase Attack Planner: ${TW_DATABASE_ATTACK_PLANNER_URL}`);
@@ -263,6 +276,14 @@ export class TwDatabaseService {
                                             this.logger.log(
                                                 `[${i + 1}/${attacksToProcess.length}] ${attackLabel} sent successfully`
                                             );
+                                            const activityMsg =
+                                                row.attackType === 'fejk'
+                                                    ? `Wysłano fejk: ${row['WIOSKA WYSYŁAJĄCA']} -> ${row['WIOSKA DOCELOWA']}`
+                                                    : `Wysłano burzak: ${row['WIOSKA WYSYŁAJĄCA']} -> ${row['WIOSKA DOCELOWA']}`;
+                                            await activityContext?.logActivity({
+                                                eventType: CrawlerActivityEventType.SUCCESS,
+                                                message: activityMsg,
+                                            });
                                         } else {
                                             entity.status = TwDatabaseAttackStatus.FAILED;
                                             entity.failureReason = result.error ?? 'Unknown error';
@@ -273,15 +294,45 @@ export class TwDatabaseService {
                                         }
                                     }
 
+                                    if (!result.success) {
+                                        const currentUrl = await tab2.url();
+                                        if (isOnPlemionaMainLandingPage(currentUrl)) {
+                                            this.logger.warn(
+                                                'Session lost (user logged in?) - stopping early. Next run in ~30 min.'
+                                            );
+                                            await activityContext?.logActivity({
+                                                eventType: CrawlerActivityEventType.SESSION_EXPIRED,
+                                                message: 'Sesja wygasła (użytkownik zalogował się?)',
+                                            });
+                                            break;
+                                        }
+                                    }
+
                                     if (i < attacksToProcess.length - 1) {
                                         await tab2.waitForTimeout(2000);
                                     }
                                 }
                             } else {
                                 this.logger.warn(`Plemiona login/select failed: ${loginResult.error}`);
+                                const count = attacksToProcess.length;
+                                await activityContext?.logActivity({
+                                    eventType: CrawlerActivityEventType.ERROR,
+                                    message:
+                                        count === 1
+                                            ? `1 atak do wysłania, nie wysłany – nie udało się zalogować do Plemion (${loginResult.error ?? 'nieznany błąd'})`
+                                            : `${count} ataków do wysłania, żaden nie wysłany – nie udało się zalogować do Plemion (${loginResult.error ?? 'nieznany błąd'})`,
+                                });
                             }
                         } else {
                             this.logger.warn('Could not extract world from akcja_url');
+                            const count = attacksToProcess.length;
+                            await activityContext?.logActivity({
+                                eventType: CrawlerActivityEventType.ERROR,
+                                message:
+                                    count === 1
+                                        ? '1 atak do wysłania, nie wysłany – nie można wyodrębnić świata z URL'
+                                        : `${count} ataków do wysłania, żaden nie wysłany – nie można wyodrębnić świata z URL`,
+                            });
                         }
                     } finally {
                         await tab2.close();
@@ -290,6 +341,10 @@ export class TwDatabaseService {
                     this.logger.log(
                         'Brak ataków do wysłania (fejk/burzak SPÓŹNIONY/teraz) lub wszystkie już wysłane'
                     );
+                    await activityContext?.logActivity({
+                        eventType: CrawlerActivityEventType.INFO,
+                        message: 'Brak ataków do wysłania – wszystkie już wysłane lub brak w planerze',
+                    });
                 }
 
                 if (loggedIn) {
@@ -320,6 +375,10 @@ export class TwDatabaseService {
             this.logger.error(`Error visiting TWDatabase Attack Planner:`, error);
             const msg = error instanceof Error ? error.message : String(error);
             const isCookieError = msg.includes('cookies') || msg.includes('No Plemiona cookies');
+            await activityContext?.logActivity({
+                eventType: CrawlerActivityEventType.ERROR,
+                message: isCookieError ? `Błąd: ${msg}` : `Wystąpił błąd: ${msg}`,
+            });
             return {
                 success: false,
                 loggedIn: false,

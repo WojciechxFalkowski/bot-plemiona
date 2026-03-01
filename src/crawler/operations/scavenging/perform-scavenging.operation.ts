@@ -16,6 +16,14 @@ import { unitOrder } from '../../../utils/scavenging.config';
 import { validateAutoScavengingEnabledOperation } from '../validation/validate-auto-scavenging-enabled.operation';
 import { collectScavengingTimeDataOperation } from './collect-scavenging-time-data.operation';
 import { processVillageScavengingOperation } from './process-village-scavenging.operation';
+import { isOnPlemionaMainLandingPage } from '@/tw-database/operations/is-plemiona-main-landing.operation';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+
+export interface ScavengingActivityContext {
+    executionLogId: number | null;
+    serverId: number;
+    logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+}
 
 export interface PerformScavengingDependencies {
     logger: Logger;
@@ -27,6 +35,7 @@ export interface PerformScavengingDependencies {
     scavengingLimitsService: ScavengingLimitsService;
     settingsService: SettingsService;
     scavengingTimeData: ScavengingTimeData;
+    activityContext?: ScavengingActivityContext;
 }
 
 /**
@@ -49,7 +58,8 @@ export async function performScavengingOperation(
         advancedScavengingService,
         scavengingLimitsService,
         settingsService,
-        scavengingTimeData
+        scavengingTimeData,
+        activityContext
     } = deps;
 
     let browser: Browser | null = null;
@@ -110,6 +120,10 @@ export async function performScavengingOperation(
             );
 
             if (!loginResult.success || !loginResult.worldSelected) {
+                await activityContext?.logActivity({
+                    eventType: CrawlerActivityEventType.ERROR,
+                    message: `Nie udało się zalogować do Plemion: ${loginResult.error || 'nieznany błąd'}`,
+                });
                 throw new Error(`Login failed for server ${serverCode}: ${loginResult.error || 'Unknown error'}`);
             }
 
@@ -216,8 +230,21 @@ export async function performScavengingOperation(
                     }
 
                 } catch (villageError) {
+                    const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                     logger.error(`Error during pre-filtering for village ${village.name}:`, villageError);
-                    // Dodaj wioską z błędem do scavengingTimeData z domyślnymi wartościami
+                    const currentUrl = await page.url();
+                    if (isOnPlemionaMainLandingPage(currentUrl)) {
+                        logger.warn('Session lost (user logged in?) during pre-filtering - stopping early. Next run in ~30 min.');
+                        await activityContext?.logActivity({
+                            eventType: CrawlerActivityEventType.SESSION_EXPIRED,
+                            message: 'Sesja wygasła (użytkownik zalogował się?)',
+                        });
+                        return;
+                    }
+                    await activityContext?.logActivity({
+                        eventType: CrawlerActivityEventType.ERROR,
+                        message: `Błąd pre-filteringu wioski ${village.name}: ${errorMsg}`,
+                    });
                     scavengingTimeData.villages.push({
                         villageId: village.id,
                         villageName: village.name,
@@ -253,7 +280,8 @@ export async function performScavengingOperation(
                             logger,
                             advancedScavengingService,
                             scavengingLimitsService,
-                            scavengingTimeData
+                            scavengingTimeData,
+                            activityContext
                         }
                     );
                     totalSuccessfulDispatches += dispatchedCount;
@@ -264,14 +292,38 @@ export async function performScavengingOperation(
                         logger.log(`No scavenging missions were dispatched from village ${village.name}.`);
                     }
 
+                    // Sprawdź czy sesja wygasła (użytkownik zalogował się) - przerwij pętlę
+                    const currentUrl = await page.url();
+                    if (isOnPlemionaMainLandingPage(currentUrl)) {
+                        logger.warn('Session lost (user logged in?) - stopping early. Next run in ~30 min.');
+                        await activityContext?.logActivity({
+                            eventType: CrawlerActivityEventType.SESSION_EXPIRED,
+                            message: 'Sesja wygasła (użytkownik zalogował się?)',
+                        });
+                        break;
+                    }
+
                     // Małe opóźnienie między wioskami aby nie przeciążać serwera
                     if (i < villagesToProcess.length - 1) { // Nie opóźniaj po ostatniej wiosce
                         await page.waitForTimeout(2000);
                     }
 
                 } catch (villageError) {
+                    const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                     logger.error(`Error processing scavenging for village ${village.name}:`, villageError);
-                    // Kontynuuj z następną wioską nawet jeśli aktualna się nie udała
+                    const currentUrl = await page.url();
+                    if (isOnPlemionaMainLandingPage(currentUrl)) {
+                        logger.warn('Session lost (user logged in?) - stopping early. Next run in ~30 min.');
+                        await activityContext?.logActivity({
+                            eventType: CrawlerActivityEventType.SESSION_EXPIRED,
+                            message: 'Sesja wygasła (użytkownik zalogował się?)',
+                        });
+                        break;
+                    }
+                    await activityContext?.logActivity({
+                        eventType: CrawlerActivityEventType.ERROR,
+                        message: `Błąd wysyłania zbieractwa z wioski ${village.name}: ${errorMsg}`,
+                    });
                     continue;
                 }
             }

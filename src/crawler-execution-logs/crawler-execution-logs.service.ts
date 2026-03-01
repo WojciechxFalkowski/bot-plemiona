@@ -66,7 +66,8 @@ export class CrawlerExecutionLogsService {
         startDate?: Date,
         endDate?: Date,
         page: number = 1,
-        limit: number = 50
+        limit: number = 50,
+        triggeredManually?: boolean
     ): Promise<ExecutionLogsPaginatedResponseDto> {
         const queryBuilder = this.executionLogRepository.createQueryBuilder('log');
 
@@ -88,6 +89,14 @@ export class CrawlerExecutionLogsService {
 
         if (endDate !== undefined) {
             queryBuilder.andWhere('log.startedAt <= :endDate', { endDate });
+        }
+
+        if (triggeredManually === true) {
+            queryBuilder.andWhere('log.description = :manualDesc', { manualDesc: 'Uruchomienie ręczne' });
+        } else if (triggeredManually === false) {
+            queryBuilder.andWhere('(log.description IS NULL OR log.description != :manualDesc)', {
+                manualDesc: 'Uruchomienie ręczne'
+            });
         }
 
         const skip = (page - 1) * limit;

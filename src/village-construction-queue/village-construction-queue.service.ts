@@ -264,7 +264,10 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
      * 3. Dla każdej wioski używa scrappera do sprawdzenia czy można budować
      * 4. Loguje informacje o możliwych budowach
      */
-    public async processAndCheckConstructionQueue(serverId: number): Promise<void> {
+    public async processAndCheckConstructionQueue(
+        serverId: number,
+        activityContext?: { executionLogId: number | null; serverId: number; logActivity: (evt: { eventType: string; message: string }) => Promise<void> }
+    ): Promise<void> {
         return processAndCheckConstructionQueueOperation(serverId, {
             logger: this.logger,
             serversService: this.serversService,
@@ -313,7 +316,8 @@ export class VillageConstructionQueueService implements OnModuleInit, OnModuleDe
                     buildingStatesCache: this.buildingStatesCache,
                     logger: this.logger
                 }
-            }
+            },
+            activityContext
         });
     }
 
