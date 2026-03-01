@@ -25,6 +25,7 @@ import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execu
 import { CrawlerTask, ServerCrawlerPlan, MultiServerState, MultiServerStatusResponse, ManualTask, ManualTaskType } from './operations/query/get-multi-server-status.operation';
 import { updateServerTaskStatesOperation } from './operations/state-management/update-server-task-states.operation';
 import { findNextTaskToExecuteOperation, NextTaskResult } from './operations/scheduling/find-next-task-to-execute.operation';
+import { findUpcomingTasksOperation, UpcomingTaskItem } from './operations/scheduling/find-upcoming-tasks.operation';
 import { addManualTaskOperation, AddManualTaskResult, getManualTaskByIdOperation, cleanupCompletedManualTasksOperation } from './operations/manual-tasks/add-manual-task.operation';
 import { logDetailedTaskScheduleOperation } from './operations/monitoring/log-detailed-task-schedule.operation';
 import { refreshActiveServersOperation } from './operations/state-management/refresh-active-servers.operation';
@@ -926,6 +927,17 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             multiServerState: this.multiServerState,
             mainTimer: this.mainTimer,
             monitoringTimer: this.monitoringTimer
+        });
+    }
+
+    /**
+     * Gets upcoming scheduled tasks sorted by execution time.
+     * @param limit Maximum number of tasks to return (default 8)
+     */
+    public getUpcomingSchedule(limit = 8): UpcomingTaskItem[] {
+        return findUpcomingTasksOperation({
+            multiServerState: this.multiServerState,
+            limit
         });
     }
 

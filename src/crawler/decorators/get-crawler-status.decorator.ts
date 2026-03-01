@@ -5,7 +5,7 @@ export const GetCrawlerStatusDecorator = () => {
         ApiOperation({
             summary: 'Pobiera status crawlera',
             description:
-                'Zwraca informację o aktywnym serwerze (crawler pracuje), listę serwerów zablokowanych przez reCAPTCHA, czas do następnego zadania (nextScheduledInSeconds) oraz informację o zaplanowanym zadaniu (nextScheduledTask: taskType, serverCode) gdy crawler jest bezczynny'
+                'Zwraca informację o aktywnym serwerze (crawler pracuje), listę serwerów zablokowanych przez reCAPTCHA, czas do następnego zadania (nextScheduledInSeconds), informację o zaplanowanym zadaniu (nextScheduledTask) oraz listę nadchodzących zadań (upcomingTasks: taskType, serverCode, inSeconds)'
         })(target, propertyKey, descriptor);
 
         ApiResponse({

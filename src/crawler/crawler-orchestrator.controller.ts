@@ -381,12 +381,15 @@ export class CrawlerOrchestratorController {
                 }
                 : null;
 
+            const upcomingTasks = this.orchestratorService.getUpcomingSchedule(8);
+
             return {
                 success: true,
                 activeServer: activeServerResponse,
                 recaptchaBlocked,
                 nextScheduledInSeconds,
                 nextScheduledTask,
+                upcomingTasks,
             };
         } catch (error) {
             this.logger.error('Error getting crawler status:', error);
