@@ -381,7 +381,7 @@ export class CrawlerOrchestratorController {
                 }
                 : null;
 
-            const upcomingTasks = this.orchestratorService.getUpcomingSchedule(8);
+            const upcomingTasks = this.orchestratorService.getUpcomingSchedule(100);
 
             return {
                 success: true,
