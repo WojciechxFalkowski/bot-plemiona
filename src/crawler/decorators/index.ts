@@ -11,4 +11,5 @@ export { UpdateArmyTrainingSettingDecorator } from './update-army-training-setti
 export { UpdateTwDatabaseSettingDecorator } from './update-tw-database-setting.decorator';
 export { GetTwDatabaseSettingDecorator } from './get-tw-database-setting.decorator';
 export { GetStatusDecorator } from './get-status.decorator';
+export { GetCrawlerStatusDecorator } from './get-crawler-status.decorator';
 export { GetDefaultIntervalsDecorator } from './get-default-intervals.decorator'; 

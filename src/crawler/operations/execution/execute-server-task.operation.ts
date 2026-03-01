@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ServerCrawlerPlan, MultiServerState, ManualTask } from '../query/get-multi-server-status.operation';
 import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 import { ExecutionStatus } from '@/crawler-execution-logs/entities/crawler-execution-log.entity';
 import { executeConstructionQueueTaskOperation, ExecuteConstructionQueueTaskDependencies } from './execute-construction-queue-task.operation';
 import { executeScavengingTaskOperation, ExecuteScavengingTaskDependencies } from './execute-scavenging-task.operation';
@@ -36,6 +37,7 @@ export interface ExecuteServerTaskDependencies
     multiServerState: MultiServerState;
     crawlerExecutionLogsService: CrawlerExecutionLogsService;
     crawlerActivityLogsService: CrawlerActivityLogsService;
+    crawlerStatusService: CrawlerStatusService;
     crawlerService: any; // CrawlerService - need to get scavengingTimeData
     logger: Logger;
 }
@@ -97,6 +99,8 @@ async function executeManualTask(
         const endedAt = new Date();
 
         if (result.success) {
+            deps.crawlerStatusService.clearRecaptchaBlocked(task.serverId);
+
             logger.warn('══════════════════════════════════════════════════════════════════════════════');
             logger.warn(`🟦 END   | ${taskType} | Server ${task.serverId} | runId=${runId}`);
             logger.warn(`✅ Status: success | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
@@ -254,6 +258,8 @@ export async function executeServerTaskOperation(
 
         // Mark as successful
         plan.lastSuccessfulExecution = new Date();
+
+        deps.crawlerStatusService.clearRecaptchaBlocked(serverId);
 
         const durationMs = Date.now() - startTs;
         const endedAt = new Date();

@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { CrawlerService } from './crawler.service';
 import { CrawlerController } from './crawler.controller';
 import { CrawlerOrchestratorService } from './crawler-orchestrator.service';
+import { CrawlerStatusService } from './crawler-status.service';
 import { CrawlerOrchestratorController } from './crawler-orchestrator.controller';
 import { SettingsModule } from '../settings/settings.module';
 import { ServersModule } from '../servers/servers.module';
@@ -22,7 +23,7 @@ import { TwDatabaseModule } from '@/tw-database/tw-database.module';
 @Module({
   imports: [forwardRef(() => SettingsModule), ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule, ScavengingLimitsModule, AdvancedScavengingModule, CrawlerExecutionLogsModule, CrawlerActivityLogsModule, TwDatabaseModule],
   controllers: [CrawlerController, CrawlerOrchestratorController],
-  providers: [CrawlerService, CrawlerOrchestratorService],
+  providers: [CrawlerService, CrawlerOrchestratorService, CrawlerStatusService],
   exports: [CrawlerService, CrawlerOrchestratorService],
 })
 export class CrawlerModule { }

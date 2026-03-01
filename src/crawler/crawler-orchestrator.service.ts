@@ -49,6 +49,7 @@ import { getInitialIntervalsOperation } from './operations/calculations/get-init
 import { TwDatabaseService } from '@/tw-database/tw-database.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { EncryptionService } from '@/utils/encryption/encryption.service';
+import { CrawlerStatusService } from './crawler-status.service';
 
 @Injectable()
 export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy {
@@ -97,7 +98,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly crawlerActivityLogsService: CrawlerActivityLogsService,
         private readonly globalSettingsService: GlobalSettingsService,
         private readonly twDatabaseService: TwDatabaseService,
-        private readonly encryptionService: EncryptionService
+        private readonly encryptionService: EncryptionService,
+        private readonly crawlerStatusService: CrawlerStatusService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -340,6 +342,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         if (!nextTask) {
             this.logger.log('⚪ No tasks scheduled - checking again in 1 minute...');
+            this.crawlerStatusService.setNextScheduledIn(60000, null);
             this.mainTimer = setTimeout(() => {
                 this.scheduleNextExecution();
             }, 60000);
@@ -363,6 +366,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         this.logDetailedTaskSchedule();
         this.logger.log(`⏰ Next task: ${taskType} on ${serverInfo} in ${Math.round(delay / 1000)}s`);
+
+        this.crawlerStatusService.setNextScheduledIn(delay, { taskType, serverCode: serverInfo });
 
         this.mainTimer = setTimeout(async () => {
             await this.executeServerTask(serverId, taskType, nextTask);
@@ -392,27 +397,49 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             }
         }
 
-        await executeServerTaskOperation(serverId, taskType, {
-            multiServerState: this.multiServerState,
-            crawlerExecutionLogsService: this.crawlerExecutionLogsService,
-            crawlerActivityLogsService: this.crawlerActivityLogsService,
-            crawlerService: this.crawlerService,
-            constructionQueueService: this.constructionQueueService,
-            miniAttackStrategiesService: this.miniAttackStrategiesService,
-            serversService: this.serversService,
-            barbarianVillagesService: this.barbarianVillagesService,
-            credentials: this.credentials,
-            plemionaCookiesService: this.plemionaCookiesService,
-            playerVillagesService: this.playerVillagesService,
-            armyTrainingService: this.armyTrainingService,
-            armyTrainingStrategiesService: this.armyTrainingStrategiesService,
-            twDatabaseService: this.twDatabaseService,
-            settingsService: this.settingsService,
-            logger: this.logger
-        }, nextTaskResult);
+        const { serverCode, serverName } = await this.getServerDisplayInfo(serverId);
+
+        this.crawlerStatusService.clearNextScheduled();
+        this.crawlerStatusService.setActive(serverId, serverCode, serverName, taskType);
+
+        try {
+            await executeServerTaskOperation(serverId, taskType, {
+                multiServerState: this.multiServerState,
+                crawlerExecutionLogsService: this.crawlerExecutionLogsService,
+                crawlerActivityLogsService: this.crawlerActivityLogsService,
+                crawlerStatusService: this.crawlerStatusService,
+                crawlerService: this.crawlerService,
+                constructionQueueService: this.constructionQueueService,
+                miniAttackStrategiesService: this.miniAttackStrategiesService,
+                serversService: this.serversService,
+                barbarianVillagesService: this.barbarianVillagesService,
+                credentials: this.credentials,
+                plemionaCookiesService: this.plemionaCookiesService,
+                playerVillagesService: this.playerVillagesService,
+                armyTrainingService: this.armyTrainingService,
+                armyTrainingStrategiesService: this.armyTrainingStrategiesService,
+                twDatabaseService: this.twDatabaseService,
+                settingsService: this.settingsService,
+                logger: this.logger
+            }, nextTaskResult);
+        } finally {
+            this.crawlerStatusService.clearActive();
+        }
 
         // Schedule next execution
         this.scheduleNextExecution();
+    }
+
+    /**
+     * Gets serverCode and serverName for display (from plan or serversService).
+     */
+    private async getServerDisplayInfo(serverId: number): Promise<{ serverCode: string; serverName: string }> {
+        const plan = this.multiServerState.serverPlans.get(serverId);
+        if (plan) {
+            return { serverCode: plan.serverCode, serverName: plan.serverName };
+        }
+        const server = await this.serversService.findById(serverId);
+        return { serverCode: server.serverCode, serverName: server.serverName };
     }
 
     /**
@@ -754,10 +781,16 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Used by all manual trigger methods to ensure execution logs and activity events are created.
      */
     private async executeServerTaskManually(serverId: number, taskType: 'Construction Queue' | 'Scavenging' | 'Mini Attacks' | 'Army Training' | 'TW Database'): Promise<void> {
+        const { serverCode, serverName } = await this.getServerDisplayInfo(serverId);
+
+        this.crawlerStatusService.clearNextScheduled();
+        this.crawlerStatusService.setActive(serverId, serverCode, serverName, taskType);
+
         const deps = {
             multiServerState: this.multiServerState,
             crawlerExecutionLogsService: this.crawlerExecutionLogsService,
             crawlerActivityLogsService: this.crawlerActivityLogsService,
+            crawlerStatusService: this.crawlerStatusService,
             crawlerService: this.crawlerService,
             constructionQueueService: this.constructionQueueService,
             miniAttackStrategiesService: this.miniAttackStrategiesService,
@@ -772,7 +805,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             settingsService: this.settingsService,
             logger: this.logger
         };
-        await executeServerTaskOperation(serverId, taskType, deps, undefined, { triggeredManually: true });
+
+        try {
+            await executeServerTaskOperation(serverId, taskType, deps, undefined, { triggeredManually: true });
+        } finally {
+            this.crawlerStatusService.clearActive();
+        }
     }
 
     /**

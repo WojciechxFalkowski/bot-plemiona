@@ -19,6 +19,7 @@ import { sendFakeAttackOperation } from './operations/send-fake-attack.operation
 import { sendBurzakAttackOperation } from './operations/send-burzak-attack.operation';
 import { clearSentInTwDatabaseOperation } from './operations/clear-sent-in-twdatabase.operation';
 import { isOnPlemionaMainLandingPage } from './operations/is-plemiona-main-landing.operation';
+import { classifyCrawlerErrorOperation } from '@/crawler/operations/utils/classify-crawler-error.operation';
 import { FejkMethodsConfigService } from './fejk-methods-config.service';
 import {
     TwDatabaseAttackEntity,
@@ -32,6 +33,8 @@ export interface VisitAttackPlannerActivityContext {
     executionLogId: number | null;
     serverId: number;
     logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+    /** Called when recaptcha is detected - marks server for header display */
+    onRecaptchaBlocked?: (serverId: number) => void;
 }
 
 /** URL of TWDatabase Attack Planner page - will be used in crawler (e.g. every 30 min) */
@@ -296,13 +299,25 @@ export class TwDatabaseService {
 
                                     if (!result.success) {
                                         const currentUrl = await tab2.url();
-                                        if (isOnPlemionaMainLandingPage(currentUrl)) {
+                                        const classification = await classifyCrawlerErrorOperation(tab2, currentUrl);
+
+                                        if (classification === 'session_expired') {
                                             this.logger.warn(
                                                 'Session lost (user logged in?) - stopping early. Next run in ~30 min.'
                                             );
                                             await activityContext?.logActivity({
                                                 eventType: CrawlerActivityEventType.SESSION_EXPIRED,
                                                 message: 'Sesja wygasła (użytkownik zalogował się?)',
+                                            });
+                                            break;
+                                        }
+
+                                        if (classification === 'recaptcha_blocked') {
+                                            this.logger.warn('reCAPTCHA detected - stopping early. Next run in ~30 min.');
+                                            activityContext?.onRecaptchaBlocked?.(serverId);
+                                            await activityContext?.logActivity({
+                                                eventType: CrawlerActivityEventType.RECAPTCHA_BLOCKED,
+                                                message: 'reCAPTCHA wymaga odblokowania',
                                             });
                                             break;
                                         }

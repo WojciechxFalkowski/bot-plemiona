@@ -9,6 +9,8 @@ import { BarbarianVillagesService } from '@/barbarian-villages/barbarian-village
 import { MiniAttackStrategiesService } from '@/mini-attack-strategies/mini-attack-strategies.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
+import { classifyCrawlerErrorOperation } from '../utils/classify-crawler-error.operation';
 
 export interface ExecuteMiniAttacksTaskDependencies {
     miniAttackStrategiesService: MiniAttackStrategiesService;
@@ -19,6 +21,7 @@ export interface ExecuteMiniAttacksTaskDependencies {
     logger: Logger;
     executionLogId?: number | null;
     crawlerActivityLogsService?: CrawlerActivityLogsService;
+    crawlerStatusService?: CrawlerStatusService;
 }
 
 function buildActivityContext(
@@ -97,17 +100,54 @@ export async function executeMiniAttacksTaskOperation(
             } catch (villageError) {
                 const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                 logger.error(`❌ Error executing mini attacks for village ${strategy.villageId} on server ${serverId}:`, villageError);
-                await activityContext?.logActivity({
-                    eventType: CrawlerActivityEventType.ERROR,
-                    message: `Błąd mini-ataków dla wioski ${strategy.villageId}: ${errorMsg}`,
-                });
+
+                const url = await page.url();
+                const classification = await classifyCrawlerErrorOperation(page, url);
+
+                if (classification === 'recaptcha_blocked') {
+                    deps.crawlerStatusService?.markRecaptchaBlocked(serverId);
+                    await activityContext?.logActivity({
+                        eventType: CrawlerActivityEventType.RECAPTCHA_BLOCKED,
+                        message: 'reCAPTCHA wymaga odblokowania',
+                    });
+                } else if (classification === 'session_expired') {
+                    await activityContext?.logActivity({
+                        eventType: CrawlerActivityEventType.SESSION_EXPIRED,
+                        message: 'Sesja wygasła (użytkownik zalogował się?)',
+                    });
+                } else {
+                    await activityContext?.logActivity({
+                        eventType: CrawlerActivityEventType.ERROR,
+                        message: `Błąd mini-ataków dla wioski ${strategy.villageId}: ${errorMsg}`,
+                    });
+                }
             }
         }
 
         logger.log(`🎯 All mini attacks completed for server ${serverId}`);
 
     } catch (error) {
-        logger.error(`❌ Error during mini attacks execution for server ${serverId}:`, error);
+        const url = await page.url();
+        const classification = await classifyCrawlerErrorOperation(page, url);
+
+        if (classification === 'recaptcha_blocked') {
+            deps.crawlerStatusService?.markRecaptchaBlocked(serverId);
+            await activityContext?.logActivity({
+                eventType: CrawlerActivityEventType.RECAPTCHA_BLOCKED,
+                message: 'reCAPTCHA wymaga odblokowania',
+            });
+        } else if (classification === 'session_expired') {
+            await activityContext?.logActivity({
+                eventType: CrawlerActivityEventType.SESSION_EXPIRED,
+                message: 'Sesja wygasła (użytkownik zalogował się?)',
+            });
+        } else {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            await activityContext?.logActivity({
+                eventType: CrawlerActivityEventType.ERROR,
+                message: `Błąd wykonania mini-ataków: ${errorMsg}`,
+            });
+        }
         throw error;
     } finally {
         await browser.close();

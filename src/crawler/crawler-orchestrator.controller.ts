@@ -1,5 +1,7 @@
 import { Controller, Post, Get, Logger, InternalServerErrorException, Param, ParseIntPipe, Body } from '@nestjs/common';
 import { CrawlerOrchestratorService } from './crawler-orchestrator.service';
+import { CrawlerStatusService } from './crawler-status.service';
+import { ServersService } from '@/servers/servers.service';
 import { ApiTags } from '@nestjs/swagger';
 import { SettingsService } from '@/settings/settings.service';
 import { SettingsKey } from '@/settings/settings-keys.enum';
@@ -17,6 +19,7 @@ import {
     UpdateTwDatabaseSettingDecorator,
     GetTwDatabaseSettingDecorator,
     GetStatusDecorator,
+    GetCrawlerStatusDecorator,
     GetDefaultIntervalsDecorator
 } from './decorators';
 import { EncryptionService } from '@/utils/encryption/encryption.service';
@@ -29,7 +32,9 @@ export class CrawlerOrchestratorController {
     constructor(
         private readonly orchestratorService: CrawlerOrchestratorService,
         private readonly settingsService: SettingsService,
-        private readonly encryptionService: EncryptionService
+        private readonly encryptionService: EncryptionService,
+        private readonly crawlerStatusService: CrawlerStatusService,
+        private readonly serversService: ServersService
     ) { }
 
     @Post(':serverId/trigger-scavenging')
@@ -347,6 +352,45 @@ export class CrawlerOrchestratorController {
             throw new InternalServerErrorException(
                 `Failed to update TW Database setting: ${error instanceof Error ? error.message : String(error)}`
             );
+        }
+    }
+
+    @Get('crawler-status')
+    @GetCrawlerStatusDecorator()
+    async getCrawlerStatus() {
+        try {
+            const { activeServer, recaptchaBlockedServerIds, nextScheduledInSeconds, nextScheduledTask } = this.crawlerStatusService.getStatus();
+
+            const recaptchaBlocked = await Promise.all(
+                recaptchaBlockedServerIds.map(async (serverId) => {
+                    const server = await this.serversService.findById(serverId);
+                    const detectedAt = this.crawlerStatusService.getRecaptchaDetectedAt(serverId);
+                    return {
+                        serverId,
+                        serverCode: server.serverCode,
+                        serverName: server.serverName,
+                        detectedAt: detectedAt ?? new Date(),
+                    };
+                })
+            );
+
+            const activeServerResponse = activeServer
+                ? {
+                    ...activeServer,
+                    durationSeconds: Math.floor((Date.now() - activeServer.startedAt.getTime()) / 1000),
+                }
+                : null;
+
+            return {
+                success: true,
+                activeServer: activeServerResponse,
+                recaptchaBlocked,
+                nextScheduledInSeconds,
+                nextScheduledTask,
+            };
+        } catch (error) {
+            this.logger.error('Error getting crawler status:', error);
+            throw new InternalServerErrorException(`Failed to get crawler status: ${error.message}`);
         }
     }
 

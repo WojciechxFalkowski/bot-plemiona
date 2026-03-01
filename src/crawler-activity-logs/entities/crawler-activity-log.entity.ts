@@ -11,6 +11,7 @@ import { ServerEntity } from '@/servers/entities/server.entity';
 
 export enum CrawlerActivityEventType {
     SESSION_EXPIRED = 'session_expired',
+    RECAPTCHA_BLOCKED = 'recaptcha_blocked',
     SUCCESS = 'success',
     ERROR = 'error',
     INFO = 'info',
