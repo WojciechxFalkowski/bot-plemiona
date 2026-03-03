@@ -1,7 +1,7 @@
 FROM node:22.18.0
 
 # Ustawienie zmiennej środowiskowej NODE_ENV na produkcję
-# ENV NODE_ENV production
+ENV NODE_ENV=production
 
 # Kopiowanie plików package.json i package-lock.json
 COPY package.json package-lock.json ./
