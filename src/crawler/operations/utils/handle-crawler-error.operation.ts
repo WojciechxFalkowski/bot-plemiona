@@ -9,6 +9,8 @@ export interface HandleCrawlerErrorContext {
     onRecaptchaBlocked?: (serverId: number) => void;
     /** Optional custom message for error case */
     errorMessage?: string;
+    /** When true, do not log when classification is 'error' (e.g. proactive checks where 'error' means "page is OK") */
+    skipLogOnGenericError?: boolean;
 }
 
 /**
@@ -48,11 +50,13 @@ export async function handleCrawlerErrorOperation(
     }
 
     if (classification === 'error') {
-        const msg = context.errorMessage ?? `${operationType} - nieoczekiwany błąd`;
-        await logActivity?.({
-            eventType: CrawlerActivityEventType.ERROR,
-            message: msg
-        });
+        if (!context.skipLogOnGenericError) {
+            const msg = context.errorMessage ?? `${operationType} - nieoczekiwany błąd`;
+            await logActivity?.({
+                eventType: CrawlerActivityEventType.ERROR,
+                message: msg
+            });
+        }
         return classification;
     }
 

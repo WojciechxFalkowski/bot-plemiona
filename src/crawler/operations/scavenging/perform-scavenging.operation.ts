@@ -323,7 +323,8 @@ export async function performScavengingOperation(
                         serverId,
                         operationType: 'Scavenging',
                         logActivity: activityContext?.logActivity,
-                        onRecaptchaBlocked: activityContext?.onRecaptchaBlocked
+                        onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                        skipLogOnGenericError: true // Proactive check - 'error' means page is OK, don't log false positive
                     });
                     if (checkClassification === 'session_expired' || checkClassification === 'recaptcha_blocked') {
                         if (checkClassification === 'recaptcha_blocked') {
