@@ -1,6 +1,8 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { Repository } from 'typeorm';
 import { CrawlerExecutionLogEntity, ExecutionStatus } from './entities/crawler-execution-log.entity';
+import { CRAWLER_LOGS_RETENTION_DAYS } from '@/utils/crawler-logs.config';
 import { CRAWLER_EXECUTION_LOGS_ENTITY_REPOSITORY } from './crawler-execution-logs.service.contracts';
 import { CrawlerExecutionLogResponseDto, ExecutionLogsPaginatedResponseDto } from './dto/crawler-execution-log-response.dto';
 
@@ -127,6 +129,27 @@ export class CrawlerExecutionLogsService {
             page,
             limit,
         };
+    }
+
+    /**
+     * Deletes execution logs older than retention period. Runs daily at 2:00 AM.
+     */
+    @Cron('0 2 * * *')
+    async deleteOldLogs(): Promise<void> {
+        try {
+            const result = await this.executionLogRepository
+                .createQueryBuilder()
+                .delete()
+                .where('startedAt < DATE_SUB(NOW(), INTERVAL :retentionDays DAY)', {
+                    retentionDays: CRAWLER_LOGS_RETENTION_DAYS
+                })
+                .execute();
+            if (result.affected && result.affected > 0) {
+                this.logger.log(`Deleted ${result.affected} old execution log(s)`);
+            }
+        } catch (err) {
+            this.logger.error(`Failed to delete old execution logs: ${err}`);
+        }
     }
 }
 

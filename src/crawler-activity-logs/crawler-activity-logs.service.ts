@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { CrawlerActivityLogEntity, CrawlerActivityEventType } from './entities/crawler-activity-log.entity';
+import { CRAWLER_LOGS_RETENTION_DAYS } from '@/utils/crawler-logs.config';
 import { CRAWLER_ACTIVITY_LOG_ENTITY_REPOSITORY } from './crawler-activity-logs.service.contracts';
 
 export interface LogActivityDto {
@@ -52,7 +53,7 @@ export class CrawlerActivityLogsService {
     }
 
     /**
-     * Deletes activity logs older than 7 days. Runs daily at 2:00 AM.
+     * Deletes activity logs older than retention period. Runs daily at 2:00 AM.
      */
     @Cron('0 2 * * *')
     async deleteOldLogs(): Promise<void> {
@@ -60,7 +61,9 @@ export class CrawlerActivityLogsService {
             const result = await this.activityLogRepository
                 .createQueryBuilder()
                 .delete()
-                .where('createdAt < DATE_SUB(NOW(), INTERVAL 7 DAY)')
+                .where('createdAt < DATE_SUB(NOW(), INTERVAL :retentionDays DAY)', {
+                    retentionDays: CRAWLER_LOGS_RETENTION_DAYS
+                })
                 .execute();
             if (result.affected && result.affected > 0) {
                 this.logger.log(`Deleted ${result.affected} old activity log(s)`);
