@@ -1,12 +1,11 @@
 FROM node:22.18.0
 
-# Ustawienie zmiennej środowiskowej NODE_ENV na produkcję
-ENV NODE_ENV=production
+WORKDIR /app
 
 # Kopiowanie plików package.json i package-lock.json
 COPY package.json package-lock.json ./
 
-# Instalacja zależności
+# Instalacja zależności (bez NODE_ENV=production, żeby zainstalować devDependencies potrzebne do builda)
 RUN npm install
 RUN npx playwright install
 RUN npx playwright install-deps
@@ -16,7 +15,8 @@ COPY . .
 # Budowanie aplikacji w trybie produkcyjnym
 RUN npm run build
 
-# Pruning development dependencies
+# NODE_ENV=production + usunięcie devDependencies
+ENV NODE_ENV=production
 RUN npm prune --production
 
 # Przebudowanie bcrypt
