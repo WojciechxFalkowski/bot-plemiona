@@ -191,12 +191,13 @@ export async function processVillageScavengingOperation(
             // NAWIGUJ PRZEZ TABY PRZED KAŻDYM POZIOMEM - zapewnia świeże dane
             logger.debug(`Navigating through tabs before processing level ${levelPlan.level} in village ${village.name}...`);
             await navigateThroughTabsAndBack(page, logger);
+            await page.waitForTimeout(1500);
 
-            // Retry logic - spróbuj maksymalnie 3 razy z opóźnieniem
+            // Retry logic - spróbuj maksymalnie 5 razy z opóźnieniem
             let levelStatus: ScavengeLevelStatus | undefined;
             let retryCount = 0;
-            const maxRetries = 3;
-            const retryDelay = 1500;
+            const maxRetries = 5;
+            const retryDelay = 2500;
 
             while (retryCount < maxRetries && !levelStatus?.isAvailable) {
                 if (retryCount > 0) {
@@ -251,7 +252,7 @@ export async function processVillageScavengingOperation(
 
                 const startButton = levelStatusBeforeClick.containerLocator.locator(levelSelectors.levelStartButton);
 
-                if (await startButton.isVisible({ timeout: 2000 })) {
+                if (await startButton.isVisible({ timeout: 3500 })) {
                     ScavengingUtils.logDispatchInfo(levelPlan, village.name);
 
                     // Pobierz faktyczny czas trwania z interfejsu gry
@@ -365,7 +366,7 @@ export async function processVillageScavengingOperation(
                 try {
                     const startButton = levelStatus.containerLocator.locator(levelSelectors.levelStartButton);
 
-                    if (await startButton.isVisible({ timeout: 2000 })) {
+                    if (await startButton.isVisible({ timeout: 3500 })) {
                         await startButton.click();
                         logger.log(`Round 2: Clicked Start for level ${level} in village ${village.name}`);
 

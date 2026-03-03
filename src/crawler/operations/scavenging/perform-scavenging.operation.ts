@@ -186,6 +186,11 @@ export async function performScavengingOperation(
                         );
 
                         if (hasAvailableEnabledUnits) {
+                            if (busyLevels.length > 0) {
+                                logger.log(
+                                    `Wioska ${village.name} ma ${busyLevels.length} zajętych i ${freeLevels.length} wolnych poziomów – wysyłanie na wolne`
+                                );
+                            }
                             const enabledUnitsList = unitOrder.filter(unit => enabledUnits[unit] && (availableUnits[unit] || 0) > 0);
                             const unitsString = enabledUnitsList.map(unit => `${unit}=${availableUnits[unit]}`).join(', ');
                             logger.log(`✓ Village ${village.name} added to processing queue (${freeLevels.length} free levels, enabled units: ${unitsString})`);
@@ -219,13 +224,11 @@ export async function performScavengingOperation(
                                 scavengingTimeData.villages[villageDataIndex].levels = [];
                             }
                             logger.log(`✗ Village ${village.name} skipped - data collection error (will retry shortly)`);
-                        } else if (lockedLevels.length === levelStatuses.length && levelStatuses.length === 4) {
-                            // Normalna sytuacja: wszystkie 4 sloty są zablokowane
-                            logger.log(
-                                `✗ Village ${village.name} skipped - all ${lockedLevels.length} levels locked (normal state)`
-                            );
+                        } else if (levelStatuses.length === 4) {
+                            // Normalna sytuacja: 4 poziomy, brak wolnych (dowolny układ busy/locked/unlocking)
+                            // Pomijamy wioskę w ciszy - bez logowania
                         } else {
-                            // Błąd: nieprawidłowa liczba poziomów (powinno być 4) lub mieszany stan
+                            // Błąd: nieprawidłowa liczba poziomów (powinno być 4)
                             logger.warn(
                                 `⚠️ Village ${village.name} - unexpected state: ${levelStatuses.length} levels found ` +
                                 `(${busyLevels.length} busy, ${freeLevels.length} free, ${lockedLevels.length} locked, ${unlockingLevels.length} unlocking). ` +
