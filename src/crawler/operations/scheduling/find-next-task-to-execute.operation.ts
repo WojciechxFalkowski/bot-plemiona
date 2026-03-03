@@ -1,7 +1,9 @@
 import { MultiServerState, CrawlerTask, ManualTask } from '../query/get-multi-server-status.operation';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 
 export interface FindNextTaskToExecuteDependencies {
     multiServerState: MultiServerState;
+    crawlerStatusService: CrawlerStatusService;
 }
 
 /**
@@ -12,6 +14,18 @@ export interface NextRegularTaskResult {
     serverId: number;
     taskType: string;
     isManualTask: false;
+    isRecaptchaCheck: false;
+}
+
+/**
+ * Result type for RecaptchaCheck task (blocked server check)
+ */
+export interface NextRecaptchaCheckTaskResult {
+    serverId: number;
+    taskType: 'Recaptcha Check';
+    isManualTask: false;
+    isRecaptchaCheck: true;
+    nextCheckAt: Date;
 }
 
 /**
@@ -27,7 +41,7 @@ export interface NextManualTaskResult {
 /**
  * Union type for next task result
  */
-export type NextTaskResult = NextRegularTaskResult | NextManualTaskResult;
+export type NextTaskResult = NextRegularTaskResult | NextManualTaskResult | NextRecaptchaCheckTaskResult;
 
 /**
  * Finds the next pending manual task that is ready for execution
@@ -58,17 +72,41 @@ function findNextPendingManualTask(
 }
 
 /**
- * Finds the next regular task to execute across all servers
+ * Finds the next RecaptchaCheck task for a blocked server (earliest due).
+ * @param crawlerStatusService Service with recaptcha-blocked state
+ * @returns RecaptchaCheck task or null if none due
+ */
+function findNextRecaptchaCheckTask(
+    crawlerStatusService: CrawlerStatusService
+): NextRecaptchaCheckTaskResult | null {
+    const due = crawlerStatusService.getNextRecaptchaCheckDue();
+    if (!due) return null;
+    return {
+        serverId: due.serverId,
+        taskType: 'Recaptcha Check',
+        isManualTask: false,
+        isRecaptchaCheck: true,
+        nextCheckAt: due.nextCheckAt
+    };
+}
+
+/**
+ * Finds the next regular task to execute across all servers.
+ * Excludes servers in recaptchaBlockedServerIds.
  * @param multiServerState State containing server plans
+ * @param recaptchaBlockedServerIds Set of server IDs blocked by reCAPTCHA
  * @returns Regular task result or null if no tasks scheduled
  */
 function findNextRegularTask(
-    multiServerState: MultiServerState
+    multiServerState: MultiServerState,
+    recaptchaBlockedServerIds: Set<number>
 ): NextRegularTaskResult | null {
     let earliestTask: NextRegularTaskResult | null = null;
     let earliestTime = Number.MAX_SAFE_INTEGER;
 
     for (const [serverId, plan] of multiServerState.serverPlans) {
+        if (recaptchaBlockedServerIds.has(serverId)) continue;
+
         const tasks = [
             { task: plan.constructionQueue, type: 'Construction Queue' },
             { task: plan.scavenging, type: 'Scavenging' },
@@ -81,7 +119,7 @@ function findNextRegularTask(
         for (const { task, type } of tasks) {
             if (task.enabled && task.nextExecutionTime.getTime() < earliestTime) {
                 earliestTime = task.nextExecutionTime.getTime();
-                earliestTask = { task, serverId, taskType: type, isManualTask: false };
+                earliestTask = { task, serverId, taskType: type, isManualTask: false, isRecaptchaCheck: false };
             }
         }
     }
@@ -105,16 +143,23 @@ function findNextRegularTask(
 export function findNextTaskToExecuteOperation(
     deps: FindNextTaskToExecuteDependencies
 ): NextTaskResult | null {
-    const { multiServerState } = deps;
+    const { multiServerState, crawlerStatusService } = deps;
 
-    // First check for ready manual tasks
+    // 1. Manual tasks (highest priority)
     const manualTask = findNextPendingManualTask(multiServerState);
     if (manualTask) {
         return manualTask;
     }
 
-    // Find next regular task
-    const regularTask = findNextRegularTask(multiServerState);
+    // 2. RecaptchaCheck for blocked servers
+    const recaptchaTask = findNextRecaptchaCheckTask(crawlerStatusService);
+    if (recaptchaTask) {
+        return recaptchaTask;
+    }
+
+    // 3. Regular tasks (exclude blocked servers)
+    const recaptchaBlockedServerIds = new Set(crawlerStatusService.getStatus().recaptchaBlockedServerIds);
+    const regularTask = findNextRegularTask(multiServerState, recaptchaBlockedServerIds);
 
     return regularTask;
 }

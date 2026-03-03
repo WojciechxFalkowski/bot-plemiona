@@ -19,7 +19,7 @@ import { sendFakeAttackOperation } from './operations/send-fake-attack.operation
 import { sendBurzakAttackOperation } from './operations/send-burzak-attack.operation';
 import { clearSentInTwDatabaseOperation } from './operations/clear-sent-in-twdatabase.operation';
 import { isOnPlemionaMainLandingPage } from './operations/is-plemiona-main-landing.operation';
-import { classifyCrawlerErrorOperation } from '@/crawler/operations/utils/classify-crawler-error.operation';
+import { handleCrawlerErrorOperation } from '@/crawler/operations/utils/handle-crawler-error.operation';
 import { FejkMethodsConfigService } from './fejk-methods-config.service';
 import {
     TwDatabaseAttackEntity,
@@ -298,27 +298,16 @@ export class TwDatabaseService {
                                     }
 
                                     if (!result.success) {
-                                        const currentUrl = await tab2.url();
-                                        const classification = await classifyCrawlerErrorOperation(tab2, currentUrl);
-
-                                        if (classification === 'session_expired') {
-                                            this.logger.warn(
-                                                'Session lost (user logged in?) - stopping early. Next run in ~30 min.'
-                                            );
-                                            await activityContext?.logActivity({
-                                                eventType: CrawlerActivityEventType.SESSION_EXPIRED,
-                                                message: 'Sesja wygasła (użytkownik zalogował się?)',
-                                            });
-                                            break;
-                                        }
-
-                                        if (classification === 'recaptcha_blocked') {
-                                            this.logger.warn('reCAPTCHA detected - stopping early. Next run in ~30 min.');
-                                            activityContext?.onRecaptchaBlocked?.(serverId);
-                                            await activityContext?.logActivity({
-                                                eventType: CrawlerActivityEventType.RECAPTCHA_BLOCKED,
-                                                message: 'reCAPTCHA wymaga odblokowania',
-                                            });
+                                        const classification = await handleCrawlerErrorOperation(tab2, await tab2.url(), {
+                                            serverId,
+                                            operationType: 'TW Database',
+                                            logActivity: activityContext?.logActivity,
+                                            onRecaptchaBlocked: activityContext?.onRecaptchaBlocked
+                                        });
+                                        if (classification === 'session_expired' || classification === 'recaptcha_blocked') {
+                                            if (classification === 'recaptcha_blocked') {
+                                                throw new Error('reCAPTCHA wymaga odblokowania');
+                                            }
                                             break;
                                         }
                                     }

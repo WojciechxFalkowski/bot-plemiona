@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Logger, InternalServerErrorException, Param, ParseIntPipe, Body } from '@nestjs/common';
+import { Controller, Post, Get, Logger, InternalServerErrorException, BadRequestException, Param, ParseIntPipe, Body } from '@nestjs/common';
 import { CrawlerOrchestratorService } from './crawler-orchestrator.service';
 import { CrawlerStatusService } from './crawler-status.service';
 import { ServersService } from '@/servers/servers.service';
@@ -11,6 +11,7 @@ import {
     TriggerMiniAttacksDecorator,
     TriggerArmyTrainingDecorator,
     TriggerTwDatabaseDecorator,
+    TriggerRecaptchaCheckDecorator,
     StartMonitoringDecorator,
     UpdateConstructionQueueSettingDecorator,
     UpdateMiniAttacksSettingDecorator,
@@ -110,6 +111,35 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error during manual army training trigger for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Army training failed: ${error.message}`);
+        }
+    }
+
+    @Post(':serverId/trigger-recaptcha-check')
+    @TriggerRecaptchaCheckDecorator()
+    async triggerRecaptchaCheck(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Trigger recaptcha check requested for server ${serverId}`);
+
+        try {
+            const blockedIds = this.crawlerStatusService.getStatus().recaptchaBlockedServerIds;
+            if (!blockedIds.includes(serverId)) {
+                throw new BadRequestException(
+                    `Serwer ${serverId} nie jest zablokowany przez reCAPTCHA. Akcja dostępna tylko dla serwerów wymagających odblokowania.`
+                );
+            }
+
+            const { serverCode, serverName } = await this.orchestratorService.triggerRecaptchaCheck(serverId);
+            return {
+                success: true,
+                message: `Sprawdzenie reCAPTCHA zaplanowane na teraz dla serwera ${serverCode} (${serverName})`
+            };
+        } catch (error) {
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+            this.logger.error(`Error during trigger recaptcha check for server ${serverId}:`, error);
+            throw new InternalServerErrorException(
+                `Nie udało się wyzwolić sprawdzenia reCAPTCHA: ${error.message}`
+            );
         }
     }
 
@@ -365,11 +395,13 @@ export class CrawlerOrchestratorController {
                 recaptchaBlockedServerIds.map(async (serverId) => {
                     const server = await this.serversService.findById(serverId);
                     const detectedAt = this.crawlerStatusService.getRecaptchaDetectedAt(serverId);
+                    const nextCheckAt = this.crawlerStatusService.getRecaptchaNextCheckAt(serverId);
                     return {
                         serverId,
                         serverCode: server.serverCode,
                         serverName: server.serverName,
                         detectedAt: detectedAt ?? new Date(),
+                        nextCheckAt: nextCheckAt ?? null,
                     };
                 })
             );

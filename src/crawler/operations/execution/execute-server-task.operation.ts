@@ -18,6 +18,7 @@ import { updateNextArmyTrainingTimeOperation, UpdateNextArmyTrainingTimeDependen
 import { updateNextTwDatabaseTimeOperation } from '../scheduling/update-next-tw-database-time.operation';
 import { updateNextExecutionTimeForFailedTaskOperation, UpdateNextExecutionTimeForFailedTaskDependencies } from '../scheduling/update-next-execution-time-for-failed-task.operation';
 import { executeManualTaskOperation, ExecuteManualTaskDependencies } from '../manual-tasks/execute-manual-task.operation';
+import { executeRecaptchaCheckTaskOperation } from './execute-recaptcha-check-task.operation';
 import { NextTaskResult } from '../scheduling/find-next-task-to-execute.operation';
 
 export interface ExecuteServerTaskDependencies
@@ -178,15 +179,11 @@ export async function executeServerTaskOperation(
     }
 
     const plan = multiServerState.serverPlans.get(serverId);
-
     if (!plan) {
         logger.error(`❌ No plan found for server ${serverId}`);
         return;
     }
 
-    logger.log(`🚀 Executing ${taskType} for server ${plan.serverCode} (${plan.serverName})`);
-
-    // Visible START banner with runId and timestamp
     const runId = `${taskType.replace(/\s+/g, '_')}-${plan.serverCode}-${Date.now()}`;
     const startTs = Date.now();
     const startedAt = new Date(startTs);
@@ -195,26 +192,82 @@ export async function executeServerTaskOperation(
     logger.warn(`⏱️ Started at: ${startedAt.toLocaleString()}`);
     logger.warn('══════════════════════════════════════════════════════════════════════════════');
 
-    // Get villageId if applicable (for Army Training)
-    let villageId: string | null = null;
-    if (taskType === 'Army Training' && plan.armyTraining.villageId) {
-        villageId = plan.armyTraining.villageId;
-    }
+    const villageId = !nextTaskResult?.isRecaptchaCheck && taskType === 'Army Training' && plan.armyTraining.villageId
+        ? plan.armyTraining.villageId
+        : null;
 
-    // Create execution log entry
     let executionLogId: number | null = null;
     try {
         const executionLog = await crawlerExecutionLogsService.logExecution({
-            serverId: serverId,
-            villageId: villageId,
+            serverId,
+            villageId,
             title: taskType,
             description: options?.triggeredManually ? 'Uruchomienie ręczne' : null,
-            startedAt: startedAt,
+            startedAt,
         });
         executionLogId = executionLog.id;
     } catch (logError) {
         logger.error(`❌ Failed to create execution log:`, logError);
     }
+
+    // RecaptchaCheck task (operation handles clear/reset internally)
+    if (nextTaskResult?.isRecaptchaCheck) {
+        try {
+            await executeRecaptchaCheckTaskOperation({
+                serverId,
+                credentials: deps.credentials,
+                plemionaCookiesService: deps.plemionaCookiesService,
+                serversService: deps.serversService,
+                crawlerStatusService: deps.crawlerStatusService,
+                crawlerActivityLogsService: deps.crawlerActivityLogsService,
+                multiServerState: deps.multiServerState,
+                logger: deps.logger,
+                executionLogId: executionLogId ?? undefined
+            });
+        } catch (error) {
+            const durationMs = Date.now() - startTs;
+            const endedAt = new Date();
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.warn('══════════════════════════════════════════════════════════════════════════════');
+            logger.warn(`🟥 END   | Recaptcha Check | ${plan.serverCode} | runId=${runId}`);
+            logger.warn(`❌ Status: error   | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
+            logger.warn(`🕒 Ended at: ${endedAt.toLocaleString()}`);
+            logger.warn('══════════════════════════════════════════════════════════════════════════════');
+            if (executionLogId !== null) {
+                try {
+                    await crawlerExecutionLogsService.updateExecutionLog(executionLogId, {
+                        endedAt,
+                        status: ExecutionStatus.ERROR,
+                        description: errorMessage
+                    });
+                } catch (logError) {
+                    logger.error(`❌ Failed to update execution log:`, logError);
+                }
+            }
+            throw error;
+        }
+        const durationMs = Date.now() - startTs;
+        const endedAt = new Date();
+        logger.warn('══════════════════════════════════════════════════════════════════════════════');
+        logger.warn(`🟦 END   | Recaptcha Check | ${plan.serverCode} | runId=${runId}`);
+        logger.warn(`✅ Status: complete | ⌛ Duration: ${Math.round(durationMs / 1000)}s (${durationMs}ms)`);
+        logger.warn(`🕒 Ended at: ${endedAt.toLocaleString()}`);
+        logger.warn('══════════════════════════════════════════════════════════════════════════════');
+        if (executionLogId !== null) {
+            try {
+                await crawlerExecutionLogsService.updateExecutionLog(executionLogId, {
+                    endedAt,
+                    status: ExecutionStatus.SUCCESS,
+                    description: null
+                });
+            } catch (logError) {
+                logger.error(`❌ Failed to update execution log:`, logError);
+            }
+        }
+        return;
+    }
+
+    logger.log(`🚀 Executing ${taskType} for server ${plan.serverCode} (${plan.serverName})`);
 
     const taskDepsWithActivity = {
         ...deps,

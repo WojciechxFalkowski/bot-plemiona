@@ -10,11 +10,18 @@ import { formatUnitsInProductionTableOperation } from '../data-transformation/fo
 import { calculateRequestedUnitsByKeyOperation } from '../calculations/calculate-requested-units-by-key.operation';
 import { calculateGlobalQueueLimitsOperation } from '../calculations/calculate-global-queue-limits.operation';
 import { calculateUnitTrainingGrantOperation } from '../calculations/calculate-unit-training-grant.operation';
+import { handleCrawlerErrorOperation } from '@/crawler/operations/utils/handle-crawler-error.operation';
+
+export interface StartTrainingUnitsActivityContext {
+    logActivity?: (evt: { eventType: string; message: string }) => Promise<void>;
+    onRecaptchaBlocked?: (serverId: number) => void;
+}
 
 export interface StartTrainingUnitsDependencies extends CreateBrowserSessionDependencies {
     villagesService: VillagesService;
     serversService: ServersService;
     logger: Logger;
+    activityContext?: StartTrainingUnitsActivityContext;
 }
 
 export interface StartTrainingUnitsResult {
@@ -90,6 +97,23 @@ export async function startTrainingUnitsOperation(
         return { success: true };
     } catch (error) {
         logger.error(`❌ Error starting army training for village ${strategy.villageId}:`, error);
+        const { activityContext } = deps;
+        if (browserSession?.page && activityContext) {
+            const classification = await handleCrawlerErrorOperation(
+                browserSession.page,
+                await browserSession.page.url(),
+                {
+                    serverId,
+                    operationType: 'Army Training',
+                    logActivity: activityContext.logActivity,
+                    onRecaptchaBlocked: activityContext.onRecaptchaBlocked,
+                    errorMessage: `Błąd szkolenia w wiosce ${strategy.villageId}: ${error instanceof Error ? error.message : String(error)}`
+                }
+            );
+            if (classification === 'recaptcha_blocked') {
+                throw new Error('reCAPTCHA wymaga odblokowania');
+            }
+        }
         throw new BadRequestException(`Error starting army training: ${error}`);
     } finally {
         if (browserSession?.browser) {

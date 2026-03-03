@@ -6,11 +6,13 @@ import { processSingleBuildingOperation, ProcessSingleBuildingDependencies } fro
 import { scrapeVillageBuildingDataOperation, ScrapeVillageBuildingDataDependencies } from '../scraping/scrape-village-building-data.operation';
 import { ServersService } from '@/servers';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import { handleCrawlerErrorOperation } from '@/crawler/operations/utils/handle-crawler-error.operation';
 
 export interface ConstructionQueueActivityContext {
     executionLogId: number | null;
     serverId: number;
     logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+    onRecaptchaBlocked?: (serverId: number) => void;
 }
 
 export interface ProcessAndCheckConstructionQueueDependencies {
@@ -122,10 +124,16 @@ export async function processAndCheckConstructionQueueOperation(
                         const villageName = building.village?.name || building.villageId;
                         const errorMsg = error instanceof Error ? error.message : String(error);
                         logger.error(`❌ Error processing building ${building.buildingName} L${building.targetLevel} in village ${building.villageId}:`, error);
-                        await activityContext?.logActivity({
-                            eventType: CrawlerActivityEventType.ERROR,
-                            message: `Błąd przy budowie ${building.buildingName} (poziom ${building.targetLevel}) w ${villageName}: ${errorMsg}`,
+                        const classification = await handleCrawlerErrorOperation(page, await page.url(), {
+                            serverId,
+                            operationType: 'Construction Queue',
+                            logActivity: activityContext?.logActivity,
+                            onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                            errorMessage: `Błąd przy budowie ${building.buildingName} (poziom ${building.targetLevel}) w ${villageName}: ${errorMsg}`
                         });
+                        if (classification === 'recaptcha_blocked') {
+                            throw new Error('reCAPTCHA wymaga odblokowania');
+                        }
                     }
                 }
 
@@ -155,8 +163,11 @@ export async function processAndCheckConstructionQueueOperation(
         const errorMsg = error instanceof Error ? error.message : String(error);
         await activityContext?.logActivity({
             eventType: CrawlerActivityEventType.ERROR,
-            message: `Krytyczny błąd przetwarzania kolejki budowy: ${errorMsg}`,
+            message: `Krytyczny błąd przetwarzania kolejki budowy: ${errorMsg}`
         });
+        if (error instanceof Error && error.message.includes('reCAPTCHA wymaga odblokowania')) {
+            throw error;
+        }
     }
 
     logger.log('✅ Construction queue processing finished. Next execution scheduled.');

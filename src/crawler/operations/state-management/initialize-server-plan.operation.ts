@@ -33,7 +33,7 @@ export function initializeServerPlanOperation(
             name: 'Construction Queue'
         },
         scavenging: {
-            nextExecutionTime: new Date(now.getTime() + 30000), // Start in 30 seconds
+            nextExecutionTime: new Date(now.getTime() + intervals.scavenging),
             enabled: false,
             lastExecuted: null,
             name: 'Scavenging',

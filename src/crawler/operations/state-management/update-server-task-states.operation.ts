@@ -7,6 +7,7 @@ import { validateArmyTrainingEnabledOperation } from '../validation/validate-arm
 import { validatePlayerVillageAttacksEnabledOperation } from '../validation/validate-player-village-attacks-enabled.operation';
 import { validateTwDatabaseEnabledOperation } from '../validation/validate-tw-database-enabled.operation';
 import { calculateRandomConstructionIntervalOperation } from '../calculations/calculate-random-construction-interval.operation';
+import { getInitialIntervalsOperation } from '../calculations/get-initial-intervals.operation';
 import { calculateRandomMiniAttackIntervalOperation } from '../calculations/calculate-random-mini-attack-interval.operation';
 import { calculateRandomArmyTrainingIntervalOperation } from '../calculations/calculate-random-army-training-interval.operation';
 import { calculateRandomTwDatabaseIntervalOperation } from '../calculations/calculate-random-tw-database-interval.operation';
@@ -64,8 +65,7 @@ export async function updateServerTaskStatesOperation(
         }
 
         if (!previousStates.scavenging && plan.scavenging.enabled) {
-            // Use default 5 minute delay for scavenging when newly enabled
-            const defaultDelay = 5 * 60 * 1000; // 5 minutes
+            const defaultDelay = getInitialIntervalsOperation().scavenging;
             plan.scavenging.nextExecutionTime = new Date(Date.now() + defaultDelay);
             logger.log(`🔄 Scavenging enabled for ${plan.serverCode}, next execution: ${plan.scavenging.nextExecutionTime.toLocaleString()}`);
         }

@@ -2,9 +2,11 @@ import { Logger } from '@nestjs/common';
 import { MultiServerState, CrawlerTask } from '../query/get-multi-server-status.operation';
 import { formatExecutionTimeOperation } from '../utilities/format-execution-time.operation';
 import { findNextTaskToExecuteOperation } from '../scheduling/find-next-task-to-execute.operation';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 
 export interface LogDetailedTaskScheduleDependencies {
     multiServerState: MultiServerState;
+    crawlerStatusService: CrawlerStatusService;
     logger: Logger;
 }
 
@@ -15,7 +17,7 @@ export interface LogDetailedTaskScheduleDependencies {
 export function logDetailedTaskScheduleOperation(
     deps: LogDetailedTaskScheduleDependencies
 ): void {
-    const { multiServerState, logger } = deps;
+    const { multiServerState, crawlerStatusService, logger } = deps;
 
     logger.warn('📋 ============== DETAILED TASK SCHEDULE ==============');
 
@@ -25,6 +27,19 @@ export function logDetailedTaskScheduleOperation(
     }
 
     const now = new Date();
+
+    const blockedEntries = crawlerStatusService.getRecaptchaBlockedEntries();
+    if (blockedEntries.length > 0) {
+        logger.warn('🚨 BLOCKED BY reCAPTCHA (rozwiąż w przeglądarce, aby odblokować):');
+        blockedEntries.forEach(({ serverId, nextCheckAt }) => {
+            const plan = multiServerState.serverPlans.get(serverId);
+            const serverInfo = plan ? plan.serverCode : `server ${serverId}`;
+            const timeUntilCheck = formatExecutionTimeOperation(nextCheckAt.getTime() - now.getTime());
+            logger.warn(`  • ${serverInfo}: następne auto-sprawdzenie za ${timeUntilCheck}`);
+        });
+        logger.warn('  💡 Użyj "Sprawdź reCAPTCHA teraz" w UI lub uruchom z headless:false, aby rozwiązać.');
+        logger.warn('');
+    }
     const allTasks: Array<{
         serverCode: string;
         serverName: string;
@@ -126,15 +141,16 @@ export function logDetailedTaskScheduleOperation(
     }
 
     // Log next scheduled task
-    const nextTask = findNextTaskToExecuteOperation({ multiServerState });
+    const nextTask = findNextTaskToExecuteOperation({ multiServerState, crawlerStatusService });
     if (nextTask) {
         const plan = multiServerState.serverPlans.get(nextTask.serverId);
         const serverInfo = plan ? `${plan.serverCode} (${plan.serverName})` : `server ${nextTask.serverId}`;
 
-        // Handle both manual tasks and regular tasks
         let executionTime: Date;
         if (nextTask.isManualTask) {
             executionTime = nextTask.task.scheduledFor;
+        } else if ('isRecaptchaCheck' in nextTask && nextTask.isRecaptchaCheck) {
+            executionTime = nextTask.nextCheckAt;
         } else {
             executionTime = (nextTask.task as CrawlerTask).nextExecutionTime;
         }

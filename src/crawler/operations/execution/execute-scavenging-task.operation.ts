@@ -2,12 +2,14 @@ import { Logger } from '@nestjs/common';
 import { CrawlerService } from '../../crawler.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 
 export interface ExecuteScavengingTaskDependencies {
     crawlerService: CrawlerService;
     logger: Logger;
     executionLogId?: number | null;
     crawlerActivityLogsService?: CrawlerActivityLogsService;
+    crawlerStatusService?: CrawlerStatusService;
 }
 
 /**
@@ -20,8 +22,9 @@ function buildActivityContext(
     executionLogId: number | null;
     serverId: number;
     logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+    onRecaptchaBlocked?: (id: number) => void;
 } | undefined {
-    const { executionLogId, crawlerActivityLogsService } = deps;
+    const { executionLogId, crawlerActivityLogsService, crawlerStatusService } = deps;
     if (executionLogId == null || !crawlerActivityLogsService) return undefined;
 
     return {
@@ -36,6 +39,7 @@ function buildActivityContext(
                 message: evt.message,
             });
         },
+        onRecaptchaBlocked: crawlerStatusService ? (id) => crawlerStatusService.markRecaptchaBlocked(id) : undefined
     };
 }
 

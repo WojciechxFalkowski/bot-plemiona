@@ -89,7 +89,14 @@ export class ArmyTrainingService {
     /**
      * Rozpoczyna trening jednostek zgodnie ze strategią
      */
-    public async startTrainingUnits(strategy: ArmyTrainingStrategyResponseDto, serverId: number) {
-        return startTrainingUnitsOperation(strategy, serverId, this.getDependencies());
+    public async startTrainingUnits(
+        strategy: ArmyTrainingStrategyResponseDto,
+        serverId: number,
+        activityContext?: { logActivity?: (evt: { eventType: string; message: string }) => Promise<void>; onRecaptchaBlocked?: (serverId: number) => void }
+    ) {
+        return startTrainingUnitsOperation(strategy, serverId, {
+            ...this.getDependencies(),
+            activityContext
+        });
     }
 }

@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ServerCrawlerPlan } from '../query/get-multi-server-status.operation';
 import { ScavengingTimeData } from '@/utils/scavenging/scavenging.interfaces';
 import { calculateOptimalScheduleTimeOperation } from '../scavenging/calculate-optimal-schedule-time.operation';
+import { SCAVENGING_FALLBACK_DELAY_SECONDS } from '../calculations/get-initial-intervals.operation';
 
 export interface UpdateNextScavengingTimeDependencies {
     scavengingTimeData: ScavengingTimeData;
@@ -47,8 +48,8 @@ export function updateNextScavengingTimeOperation(
         let optimalDelay = calculateOptimalScheduleTimeOperation({ scavengingTimeData });
 
         if (optimalDelay === null || optimalDelay < 30) {
-            optimalDelay = 300; // 5 minutes fallback
-            logger.warn(`Using fallback scavenging delay for ${plan.serverCode}: 5 minutes`);
+            optimalDelay = SCAVENGING_FALLBACK_DELAY_SECONDS;
+            logger.warn(`Using fallback scavenging delay for ${plan.serverCode}: ${optimalDelay}s`);
         }
 
         // Add random buffer to make it less predictable
@@ -62,8 +63,7 @@ export function updateNextScavengingTimeOperation(
         logger.debug(`📅 Next scavenging for ${plan.serverCode}: ${plan.scavenging.nextExecutionTime.toLocaleString()} (optimal: ${optimalDelay}s)`);
     } catch (error) {
         logger.error(`Error calculating optimal scavenging time for ${plan.serverCode}:`, error);
-        // Fallback to 5 minutes
-        plan.scavenging.nextExecutionTime = new Date(Date.now() + 300000);
+        plan.scavenging.nextExecutionTime = new Date(Date.now() + SCAVENGING_FALLBACK_DELAY_SECONDS * 1000);
         plan.scavenging.lastExecuted = new Date();
         logger.debug(`📅 Next scavenging for ${plan.serverCode} (fallback): ${plan.scavenging.nextExecutionTime.toLocaleString()}`);
     }

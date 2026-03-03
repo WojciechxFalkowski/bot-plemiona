@@ -17,10 +17,18 @@ export interface NextScheduledTaskInfo {
     serverCode: string;
 }
 
+/** Default interval for RecaptchaCheck when blocked (10 minutes) */
+export const RECAPTCHA_CHECK_INTERVAL_MS = 600;
+
+export interface RecaptchaBlockedEntry {
+    detectedAt: Date;
+    nextCheckAt: Date;
+}
+
 @Injectable()
 export class CrawlerStatusService {
     private activeServer: ActiveServerInfo | null = null;
-    private recaptchaBlockedServers: Map<number, { detectedAt: Date }> = new Map();
+    private recaptchaBlockedServers: Map<number, RecaptchaBlockedEntry> = new Map();
     private nextScheduledAt: number | null = null;
     private nextScheduledTask: NextScheduledTaskInfo | null = null;
 
@@ -67,9 +75,33 @@ export class CrawlerStatusService {
 
     /**
      * Marks a server as blocked by reCAPTCHA (bot protection detected).
+     * Sets nextCheckAt to now + 10 minutes.
      */
     markRecaptchaBlocked(serverId: number): void {
-        this.recaptchaBlockedServers.set(serverId, { detectedAt: new Date() });
+        const now = new Date();
+        const nextCheckAt = new Date(now.getTime() + RECAPTCHA_CHECK_INTERVAL_MS);
+        this.recaptchaBlockedServers.set(serverId, { detectedAt: now, nextCheckAt });
+    }
+
+    /**
+     * Sets RecaptchaCheck to run immediately for a blocked server (manual trigger).
+     */
+    setRecaptchaCheckDueNow(serverId: number): void {
+        const entry = this.recaptchaBlockedServers.get(serverId);
+        if (!entry) return;
+        this.recaptchaBlockedServers.set(serverId, {
+            ...entry,
+            nextCheckAt: new Date()
+        });
+    }
+
+    /**
+     * Updates next RecaptchaCheck time (e.g. when check failed, still blocked).
+     */
+    updateRecaptchaNextCheck(serverId: number, nextCheckAt: Date): void {
+        const entry = this.recaptchaBlockedServers.get(serverId);
+        if (!entry) return;
+        this.recaptchaBlockedServers.set(serverId, { ...entry, nextCheckAt });
     }
 
     /**
@@ -77,6 +109,33 @@ export class CrawlerStatusService {
      */
     clearRecaptchaBlocked(serverId: number): void {
         this.recaptchaBlockedServers.delete(serverId);
+    }
+
+    /**
+     * Returns the next RecaptchaCheck task to run (earliest due, or null).
+     */
+    getNextRecaptchaCheckDue(): { serverId: number; nextCheckAt: Date } | null {
+        const now = Date.now();
+        let earliest: { serverId: number; nextCheckAt: Date } | null = null;
+        for (const [serverId, entry] of this.recaptchaBlockedServers) {
+            if (entry.nextCheckAt.getTime() <= now) {
+                if (!earliest || entry.nextCheckAt.getTime() < earliest.nextCheckAt.getTime()) {
+                    earliest = { serverId, nextCheckAt: entry.nextCheckAt };
+                }
+            }
+        }
+        return earliest;
+    }
+
+    /**
+     * Returns recaptcha-blocked entries with nextCheckAt for schedule display.
+     */
+    getRecaptchaBlockedEntries(): Array<{ serverId: number; detectedAt: Date; nextCheckAt: Date }> {
+        return Array.from(this.recaptchaBlockedServers.entries()).map(([serverId, entry]) => ({
+            serverId,
+            detectedAt: entry.detectedAt,
+            nextCheckAt: entry.nextCheckAt
+        }));
     }
 
     /**
@@ -104,5 +163,12 @@ export class CrawlerStatusService {
      */
     getRecaptchaDetectedAt(serverId: number): Date | null {
         return this.recaptchaBlockedServers.get(serverId)?.detectedAt ?? null;
+    }
+
+    /**
+     * Returns nextCheckAt for a recaptcha-blocked server.
+     */
+    getRecaptchaNextCheckAt(serverId: number): Date | null {
+        return this.recaptchaBlockedServers.get(serverId)?.nextCheckAt ?? null;
     }
 }

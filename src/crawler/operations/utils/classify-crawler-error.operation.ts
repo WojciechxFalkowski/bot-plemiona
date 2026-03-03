@@ -24,7 +24,7 @@ export async function classifyCrawlerErrorOperation(
     }
 
     try {
-        const botProtectionElement = await page.$('#botprotection_quest');
+        const botProtectionElement = await page.$('.bot-protection-row');
         if (botProtectionElement) {
             return 'recaptcha_blocked';
         }

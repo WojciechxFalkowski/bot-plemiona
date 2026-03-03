@@ -342,7 +342,15 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         const nextTask = this.findNextTaskToExecute();
 
         if (!nextTask) {
-            this.logger.log('⚪ No tasks scheduled - checking again in 1 minute...');
+            const blockedCount = this.crawlerStatusService.getRecaptchaBlockedEntries().length;
+            if (blockedCount > 0) {
+                this.logger.warn(
+                    `⚪ Brak zadań - ${blockedCount} serwer(ów) zablokowanych przez reCAPTCHA. ` +
+                    `Sprawdź harmonogram powyżej. Scheduler sprawdzi harmonogram ponownie za 1 min.`
+                );
+            } else {
+                this.logger.log('⚪ Brak zadań – scheduler sprawdzi harmonogram za 1 min');
+            }
             this.crawlerStatusService.setNextScheduledIn(60000, null);
             this.mainTimer = setTimeout(() => {
                 this.scheduleNextExecution();
@@ -350,15 +358,19 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             return;
         }
 
-        const { task, serverId, taskType, isManualTask } = nextTask;
+        const { serverId, taskType, isManualTask } = nextTask;
+        const task = 'task' in nextTask ? nextTask.task : null;
 
         // Calculate delay based on task type
         let delay: number;
-        if (isManualTask) {
-            // Manual tasks run immediately when ready
+        if (isManualTask && task) {
             delay = Math.max(0, (task as ManualTask).scheduledFor.getTime() - Date.now());
-        } else {
+        } else if ('isRecaptchaCheck' in nextTask && nextTask.isRecaptchaCheck) {
+            delay = Math.max(0, nextTask.nextCheckAt.getTime() - Date.now());
+        } else if (task) {
             delay = Math.max(0, (task as CrawlerTask).nextExecutionTime.getTime() - Date.now());
+        } else {
+            delay = 0;
         }
 
         // Get server info for logging (manual tasks may not have a server plan)
@@ -367,6 +379,12 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         this.logDetailedTaskSchedule();
         this.logger.log(`⏰ Next task: ${taskType} on ${serverInfo} in ${Math.round(delay / 1000)}s`);
+        if (taskType === 'Recaptcha Check' && delay > 0) {
+            this.logger.warn(
+                `🚨 Serwer ${serverInfo} zablokowany przez reCAPTCHA. ` +
+                `Rozwiąż ręcznie (headless:false) lub poczekaj ${Math.round(delay / 60)} min na auto-sprawdzenie.`
+            );
+        }
 
         this.crawlerStatusService.setNextScheduledIn(delay, { taskType, serverCode: serverInfo });
 
@@ -380,7 +398,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      */
     private findNextTaskToExecute(): NextTaskResult | null {
         return findNextTaskToExecuteOperation({
-            multiServerState: this.multiServerState
+            multiServerState: this.multiServerState,
+            crawlerStatusService: this.crawlerStatusService
         });
     }
 
@@ -815,6 +834,23 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Sets RecaptchaCheck to run immediately for a blocked server (manual trigger).
+     * Server must be in recaptchaBlockedServerIds.
+     * @returns Server code and name for response
+     */
+    public async triggerRecaptchaCheck(serverId: number): Promise<{ serverCode: string; serverName: string }> {
+        const blockedIds = this.crawlerStatusService.getStatus().recaptchaBlockedServerIds;
+        if (!blockedIds.includes(serverId)) {
+            throw new Error(`Server ${serverId} is not blocked by reCAPTCHA`);
+        }
+        this.crawlerStatusService.setRecaptchaCheckDueNow(serverId);
+        this.scheduleNextExecution();
+        const { serverCode, serverName } = await this.getServerDisplayInfo(serverId);
+        this.logger.log(`🔧 RecaptchaCheck triggered for server ${serverCode} (${serverName})`);
+        return { serverCode, serverName };
+    }
+
+    /**
      * Public method to manually trigger TW Database for a specific server.
      * Uses executeServerTaskOperation so execution log and activity events are created.
      */
@@ -899,6 +935,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private logDetailedTaskSchedule(): void {
         logDetailedTaskScheduleOperation({
             multiServerState: this.multiServerState,
+            crawlerStatusService: this.crawlerStatusService,
             logger: this.logger
         });
     }
@@ -937,6 +974,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     public getUpcomingSchedule(limit = 8): UpcomingTaskItem[] {
         return findUpcomingTasksOperation({
             multiServerState: this.multiServerState,
+            crawlerStatusService: this.crawlerStatusService,
             limit
         });
     }
@@ -957,7 +995,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
 
         return {
             constructionQueue: intervals.construction,
-            scavenging: 30000, // Hardcoded in initialize-server-plan.operation.ts
+            scavenging: intervals.scavenging,
             miniAttacks: intervals.miniAttack,
             playerVillageAttacks: intervals.playerVillageAttack,
             armyTraining: intervals.armyTraining,

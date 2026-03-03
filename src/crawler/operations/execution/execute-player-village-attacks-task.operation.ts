@@ -2,19 +2,21 @@ import { Logger } from '@nestjs/common';
 import { PlayerVillagesService } from '@/player-villages/player-villages.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 
 export interface ExecutePlayerVillageAttacksTaskDependencies {
     playerVillagesService: PlayerVillagesService;
     logger: Logger;
     executionLogId?: number | null;
     crawlerActivityLogsService?: CrawlerActivityLogsService;
+    crawlerStatusService?: CrawlerStatusService;
 }
 
 function buildActivityContext(
     serverId: number,
     deps: ExecutePlayerVillageAttacksTaskDependencies
-): { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> } | undefined {
-    const { executionLogId, crawlerActivityLogsService } = deps;
+): { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>; onRecaptchaBlocked?: (id: number) => void } | undefined {
+    const { executionLogId, crawlerActivityLogsService, crawlerStatusService } = deps;
     if (executionLogId == null || !crawlerActivityLogsService) return undefined;
     return {
         logActivity: async (evt) =>
@@ -25,6 +27,7 @@ function buildActivityContext(
                 eventType: evt.eventType,
                 message: evt.message,
             }),
+        onRecaptchaBlocked: crawlerStatusService ? (id) => crawlerStatusService.markRecaptchaBlocked(id) : undefined
     };
 }
 

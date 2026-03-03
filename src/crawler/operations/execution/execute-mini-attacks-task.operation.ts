@@ -10,7 +10,7 @@ import { MiniAttackStrategiesService } from '@/mini-attack-strategies/mini-attac
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 import { CrawlerStatusService } from '@/crawler/crawler-status.service';
-import { classifyCrawlerErrorOperation } from '../utils/classify-crawler-error.operation';
+import { handleCrawlerErrorOperation } from '../utils/handle-crawler-error.operation';
 
 export interface ExecuteMiniAttacksTaskDependencies {
     miniAttackStrategiesService: MiniAttackStrategiesService;
@@ -24,21 +24,23 @@ export interface ExecuteMiniAttacksTaskDependencies {
     crawlerStatusService?: CrawlerStatusService;
 }
 
-function buildActivityContext(
-    serverId: number,
-    deps: ExecuteMiniAttacksTaskDependencies
-): { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> } | undefined {
-    const { executionLogId, crawlerActivityLogsService } = deps;
-    if (executionLogId == null || !crawlerActivityLogsService) return undefined;
+function buildErrorContext(serverId: number, deps: ExecuteMiniAttacksTaskDependencies) {
+    const { executionLogId, crawlerActivityLogsService, crawlerStatusService } = deps;
     return {
-        logActivity: async (evt) =>
-            crawlerActivityLogsService.logActivity({
-                executionLogId: executionLogId!,
-                serverId,
-                operationType: 'Mini Attacks',
-                eventType: evt.eventType,
-                message: evt.message,
-            }),
+        serverId,
+        operationType: 'Mini Attacks',
+        logActivity:
+            executionLogId != null && crawlerActivityLogsService
+                ? async (evt: { eventType: CrawlerActivityEventType; message: string }) =>
+                      crawlerActivityLogsService.logActivity({
+                          executionLogId: executionLogId!,
+                          serverId,
+                          operationType: 'Mini Attacks',
+                          eventType: evt.eventType,
+                          message: evt.message
+                      })
+                : undefined,
+        onRecaptchaBlocked: crawlerStatusService ? (id) => crawlerStatusService.markRecaptchaBlocked(id) : undefined
     };
 }
 
@@ -52,7 +54,6 @@ export async function executeMiniAttacksTaskOperation(
     deps: ExecuteMiniAttacksTaskDependencies
 ): Promise<void> {
     const { miniAttackStrategiesService, serversService, barbarianVillagesService, credentials, plemionaCookiesService, logger } = deps;
-    const activityContext = buildActivityContext(serverId, deps);
     logger.log(`🚀 Executing mini attacks for server ${serverId}`);
 
     const browserPage = await createBrowserPage({ headless: true });
@@ -81,10 +82,14 @@ export async function executeMiniAttacksTaskOperation(
         );
 
         if (!loginResult.success || !loginResult.worldSelected) {
-            await activityContext?.logActivity({
-                eventType: CrawlerActivityEventType.ERROR,
-                message: `Nie udało się zalogować do Plemion: ${loginResult.error || 'nieznany błąd'}`,
+            const errorContext = buildErrorContext(serverId, deps);
+            const classification = await handleCrawlerErrorOperation(page, page.url(), {
+                ...errorContext,
+                errorMessage: `Nie udało się zalogować do Plemion: ${loginResult.error || 'nieznany błąd'}`
             });
+            if (classification === 'recaptcha_blocked') {
+                throw new Error('reCAPTCHA wymaga odblokowania');
+            }
             throw new Error(`Login failed for server ${serverId}: ${loginResult.error || 'Unknown error'}`);
         }
 
@@ -101,25 +106,13 @@ export async function executeMiniAttacksTaskOperation(
                 const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                 logger.error(`❌ Error executing mini attacks for village ${strategy.villageId} on server ${serverId}:`, villageError);
 
-                const url = await page.url();
-                const classification = await classifyCrawlerErrorOperation(page, url);
-
+                const errorContext = buildErrorContext(serverId, deps);
+                const classification = await handleCrawlerErrorOperation(page, await page.url(), {
+                    ...errorContext,
+                    errorMessage: `Błąd mini-ataków dla wioski ${strategy.villageId}: ${errorMsg}`
+                });
                 if (classification === 'recaptcha_blocked') {
-                    deps.crawlerStatusService?.markRecaptchaBlocked(serverId);
-                    await activityContext?.logActivity({
-                        eventType: CrawlerActivityEventType.RECAPTCHA_BLOCKED,
-                        message: 'reCAPTCHA wymaga odblokowania',
-                    });
-                } else if (classification === 'session_expired') {
-                    await activityContext?.logActivity({
-                        eventType: CrawlerActivityEventType.SESSION_EXPIRED,
-                        message: 'Sesja wygasła (użytkownik zalogował się?)',
-                    });
-                } else {
-                    await activityContext?.logActivity({
-                        eventType: CrawlerActivityEventType.ERROR,
-                        message: `Błąd mini-ataków dla wioski ${strategy.villageId}: ${errorMsg}`,
-                    });
+                    throw villageError;
                 }
             }
         }
@@ -127,26 +120,14 @@ export async function executeMiniAttacksTaskOperation(
         logger.log(`🎯 All mini attacks completed for server ${serverId}`);
 
     } catch (error) {
-        const url = await page.url();
-        const classification = await classifyCrawlerErrorOperation(page, url);
-
+        const errorContext = buildErrorContext(serverId, deps);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const classification = await handleCrawlerErrorOperation(page, await page.url(), {
+            ...errorContext,
+            errorMessage: `Błąd wykonania mini-ataków: ${errorMsg}`
+        });
         if (classification === 'recaptcha_blocked') {
-            deps.crawlerStatusService?.markRecaptchaBlocked(serverId);
-            await activityContext?.logActivity({
-                eventType: CrawlerActivityEventType.RECAPTCHA_BLOCKED,
-                message: 'reCAPTCHA wymaga odblokowania',
-            });
-        } else if (classification === 'session_expired') {
-            await activityContext?.logActivity({
-                eventType: CrawlerActivityEventType.SESSION_EXPIRED,
-                message: 'Sesja wygasła (użytkownik zalogował się?)',
-            });
-        } else {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            await activityContext?.logActivity({
-                eventType: CrawlerActivityEventType.ERROR,
-                message: `Błąd wykonania mini-ataków: ${errorMsg}`,
-            });
+            throw error;
         }
         throw error;
     } finally {

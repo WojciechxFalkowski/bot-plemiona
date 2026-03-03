@@ -371,8 +371,12 @@ export class ScavengingUtils {
     /**
      * Oblicza optymalny czas do następnego uruchomienia na podstawie zebranych danych
      * Logika: znajdź najkrótszy z najdłuższych czasów busy z każdej wioski
+     * @param availableButNoTroopsDelay Seconds to use when village has available levels but likely no troops (default 60)
      */
-    static calculateOptimalScheduleTime(scavengingTimeData: ScavengingTimeData): number | null {
+    static calculateOptimalScheduleTime(
+        scavengingTimeData: ScavengingTimeData,
+        availableButNoTroopsDelay = 60
+    ): number | null {
         if (!scavengingTimeData.villages || scavengingTimeData.villages.length === 0) {
             this.logger.debug('No village data available for scheduling calculation');
             return null;
@@ -414,9 +418,11 @@ export class ScavengingUtils {
                     // 2. Nie udało się wysłać wojsk z powodu błędu
                     // W takim przypadku nie używamy czasu 0s, bo bot by się uruchamiał co 30 sekund
 
-                    // Zamiast 0s, użyj czasu 300s (5 minut) jako domyślny dla wiosek które nie wysłały wojsk
-                    maxTimesPerVillage.push(300);
-                    this.logger.debug(`Village ${village.villageName} has available levels but likely no troops or failed dispatch - set to 300s (5 min)`);
+                    // Use configurable delay for villages that didn't dispatch (no troops or failed)
+                    maxTimesPerVillage.push(availableButNoTroopsDelay);
+                    this.logger.debug(
+                        `Village ${village.villageName} has available levels but likely no troops or failed dispatch - set to ${availableButNoTroopsDelay}s`
+                    );
                 } else {
                     // Normalna logika - wioska ma dostępne poziomy i może wysłać wojska
                     maxTimesPerVillage.push(0);

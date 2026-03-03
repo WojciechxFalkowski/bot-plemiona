@@ -3,6 +3,7 @@ import { ArmyTrainingService } from '@/army-training/army-training.service';
 import { ArmyTrainingStrategiesService } from '@/army-training/army-training-strategies.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 
 export interface ExecuteArmyTrainingTaskDependencies {
     armyTrainingService: ArmyTrainingService;
@@ -10,13 +11,14 @@ export interface ExecuteArmyTrainingTaskDependencies {
     logger: Logger;
     executionLogId?: number | null;
     crawlerActivityLogsService?: CrawlerActivityLogsService;
+    crawlerStatusService?: CrawlerStatusService;
 }
 
 function buildActivityContext(
     serverId: number,
     deps: ExecuteArmyTrainingTaskDependencies
-): { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> } | undefined {
-    const { executionLogId, crawlerActivityLogsService } = deps;
+): { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>; onRecaptchaBlocked?: (id: number) => void } | undefined {
+    const { executionLogId, crawlerActivityLogsService, crawlerStatusService } = deps;
     if (executionLogId == null || !crawlerActivityLogsService) return undefined;
     return {
         logActivity: async (evt) =>
@@ -27,6 +29,7 @@ function buildActivityContext(
                 eventType: evt.eventType,
                 message: evt.message,
             }),
+        onRecaptchaBlocked: crawlerStatusService ? (id) => crawlerStatusService.markRecaptchaBlocked(id) : undefined
     };
 }
 
@@ -58,14 +61,17 @@ export async function executeArmyTrainingTaskOperation(
             logger.log(`⚔️ Starting army training for village ${strategy.villageId} on server ${serverId}`);
 
             try {
-                await armyTrainingService.startTrainingUnits(strategy, serverId);
+                await armyTrainingService.startTrainingUnits(strategy, serverId, activityContext);
                 logger.log(`✅ Army training completed for village ${strategy.villageId} on server ${serverId}`);
             } catch (villageError) {
                 const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                 logger.error(`❌ Error executing army training for village ${strategy.villageId} on server ${serverId}:`, villageError);
+                if (errorMsg.includes('reCAPTCHA wymaga odblokowania')) {
+                    throw villageError;
+                }
                 await activityContext?.logActivity({
                     eventType: CrawlerActivityEventType.ERROR,
-                    message: `Błąd szkolenia w wiosce ${strategy.villageId}: ${errorMsg}`,
+                    message: `Błąd szkolenia w wiosce ${strategy.villageId}: ${errorMsg}`
                 });
             }
         }

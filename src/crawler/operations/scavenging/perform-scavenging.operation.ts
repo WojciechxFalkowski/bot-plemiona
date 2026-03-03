@@ -16,13 +16,14 @@ import { unitOrder } from '../../../utils/scavenging.config';
 import { validateAutoScavengingEnabledOperation } from '../validation/validate-auto-scavenging-enabled.operation';
 import { collectScavengingTimeDataOperation } from './collect-scavenging-time-data.operation';
 import { processVillageScavengingOperation } from './process-village-scavenging.operation';
-import { isOnPlemionaMainLandingPage } from '@/tw-database/operations/is-plemiona-main-landing.operation';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import { handleCrawlerErrorOperation } from '../utils/handle-crawler-error.operation';
 
 export interface ScavengingActivityContext {
     executionLogId: number | null;
     serverId: number;
     logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+    onRecaptchaBlocked?: (serverId: number) => void;
 }
 
 export interface PerformScavengingDependencies {
@@ -103,7 +104,8 @@ export async function performScavengingOperation(
         }
 
         // 3. Teraz dopiero otwórz przeglądarkę i zaloguj użytkownika
-        const browserPage = await createBrowserPage({ headless: true });
+        const headless = process.env.NODE_ENV === 'production';
+        const browserPage = await createBrowserPage({ headless });
         browser = browserPage.browser;
         const { page } = browserPage;
 
@@ -120,10 +122,16 @@ export async function performScavengingOperation(
             );
 
             if (!loginResult.success || !loginResult.worldSelected) {
-                await activityContext?.logActivity({
-                    eventType: CrawlerActivityEventType.ERROR,
-                    message: `Nie udało się zalogować do Plemion: ${loginResult.error || 'nieznany błąd'}`,
+                const classification = await handleCrawlerErrorOperation(page, page.url(), {
+                    serverId,
+                    operationType: 'Scavenging',
+                    logActivity: activityContext?.logActivity,
+                    onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                    errorMessage: `Nie udało się zalogować do Plemion: ${loginResult.error || 'nieznany błąd'}`
                 });
+                if (classification === 'recaptcha_blocked') {
+                    throw new Error('reCAPTCHA wymaga odblokowania');
+                }
                 throw new Error(`Login failed for server ${serverCode}: ${loginResult.error || 'Unknown error'}`);
             }
 
@@ -188,11 +196,21 @@ export async function performScavengingOperation(
                     } else {
                         // Sprawdź czy to rzeczywiście "wszystkie sloty zablokowane" czy błąd pobierania danych
                         if (levelStatuses.length === 0) {
-                            // Błąd: nie znaleziono żadnych kontenerów - oznacza błąd podczas pobierania danych
+                            // Błąd: nie znaleziono żadnych kontenerów - może być reCAPTCHA lub błąd pobierania danych
                             logger.warn(
                                 `⚠️ Village ${village.name} - data collection error: no level containers found. ` +
                                 `Will retry with short interval.`
                             );
+                            const classification = await handleCrawlerErrorOperation(page, page.url(), {
+                                serverId,
+                                operationType: 'Scavenging',
+                                logActivity: activityContext?.logActivity,
+                                onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                                errorMessage: `Błąd pre-filteringu (brak kontenerów poziomów) wioski ${village.name}`
+                            });
+                            if (classification === 'recaptcha_blocked') {
+                                throw new Error(`reCAPTCHA detected when no level containers found for village ${village.name}`);
+                            }
                             // Nadpisz dane wioski pustymi levels aby oznaczyć błąd
                             const villageDataIndex = scavengingTimeData.villages.findIndex(
                                 v => v.villageId === village.id
@@ -213,6 +231,16 @@ export async function performScavengingOperation(
                                 `(${busyLevels.length} busy, ${freeLevels.length} free, ${lockedLevels.length} locked, ${unlockingLevels.length} unlocking). ` +
                                 `Expected 4 locked levels. Will retry with short interval.`
                             );
+                            const classification = await handleCrawlerErrorOperation(page, page.url(), {
+                                serverId,
+                                operationType: 'Scavenging',
+                                logActivity: activityContext?.logActivity,
+                                onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                                errorMessage: `Błąd pre-filteringu (nieoczekiwany stan poziomów) wioski ${village.name}`
+                            });
+                            if (classification === 'recaptcha_blocked') {
+                                throw new Error(`reCAPTCHA detected for village ${village.name} (unexpected level state)`);
+                            }
                             // Nadpisz dane wioski pustymi levels aby oznaczyć błąd
                             const villageDataIndex = scavengingTimeData.villages.findIndex(
                                 v => v.villageId === village.id
@@ -232,19 +260,16 @@ export async function performScavengingOperation(
                 } catch (villageError) {
                     const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                     logger.error(`Error during pre-filtering for village ${village.name}:`, villageError);
-                    const currentUrl = await page.url();
-                    if (isOnPlemionaMainLandingPage(currentUrl)) {
-                        logger.warn('Session lost (user logged in?) during pre-filtering - stopping early. Next run in ~30 min.');
-                        await activityContext?.logActivity({
-                            eventType: CrawlerActivityEventType.SESSION_EXPIRED,
-                            message: 'Sesja wygasła (użytkownik zalogował się?)',
-                        });
-                        return;
-                    }
-                    await activityContext?.logActivity({
-                        eventType: CrawlerActivityEventType.ERROR,
-                        message: `Błąd pre-filteringu wioski ${village.name}: ${errorMsg}`,
+                    const classification = await handleCrawlerErrorOperation(page, await page.url(), {
+                        serverId,
+                        operationType: 'Scavenging',
+                        logActivity: activityContext?.logActivity,
+                        onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                        errorMessage: `Błąd pre-filteringu wioski ${village.name}: ${errorMsg}`
                     });
+                    if (classification === 'recaptcha_blocked') {
+                        throw villageError;
+                    }
                     scavengingTimeData.villages.push({
                         villageId: village.id,
                         villageName: village.name,
@@ -293,37 +318,38 @@ export async function performScavengingOperation(
                     }
 
                     // Sprawdź czy sesja wygasła (użytkownik zalogował się) - przerwij pętlę
-                    const currentUrl = await page.url();
-                    if (isOnPlemionaMainLandingPage(currentUrl)) {
-                        logger.warn('Session lost (user logged in?) - stopping early. Next run in ~30 min.');
-                        await activityContext?.logActivity({
-                            eventType: CrawlerActivityEventType.SESSION_EXPIRED,
-                            message: 'Sesja wygasła (użytkownik zalogował się?)',
-                        });
+                    const checkUrl = await page.url();
+                    const checkClassification = await handleCrawlerErrorOperation(page, checkUrl, {
+                        serverId,
+                        operationType: 'Scavenging',
+                        logActivity: activityContext?.logActivity,
+                        onRecaptchaBlocked: activityContext?.onRecaptchaBlocked
+                    });
+                    if (checkClassification === 'session_expired' || checkClassification === 'recaptcha_blocked') {
+                        if (checkClassification === 'recaptcha_blocked') {
+                            throw new Error('reCAPTCHA wymaga odblokowania');
+                        }
                         break;
                     }
 
                     // Małe opóźnienie między wioskami aby nie przeciążać serwera
-                    if (i < villagesToProcess.length - 1) { // Nie opóźniaj po ostatniej wiosce
+                    if (i < villagesToProcess.length - 1) {
                         await page.waitForTimeout(2000);
                     }
 
                 } catch (villageError) {
                     const errorMsg = villageError instanceof Error ? villageError.message : String(villageError);
                     logger.error(`Error processing scavenging for village ${village.name}:`, villageError);
-                    const currentUrl = await page.url();
-                    if (isOnPlemionaMainLandingPage(currentUrl)) {
-                        logger.warn('Session lost (user logged in?) - stopping early. Next run in ~30 min.');
-                        await activityContext?.logActivity({
-                            eventType: CrawlerActivityEventType.SESSION_EXPIRED,
-                            message: 'Sesja wygasła (użytkownik zalogował się?)',
-                        });
-                        break;
-                    }
-                    await activityContext?.logActivity({
-                        eventType: CrawlerActivityEventType.ERROR,
-                        message: `Błąd wysyłania zbieractwa z wioski ${village.name}: ${errorMsg}`,
+                    const classification = await handleCrawlerErrorOperation(page, await page.url(), {
+                        serverId,
+                        operationType: 'Scavenging',
+                        logActivity: activityContext?.logActivity,
+                        onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                        errorMessage: `Błąd wysyłania zbieractwa z wioski ${village.name}: ${errorMsg}`
                     });
+                    if (classification === 'recaptcha_blocked') {
+                        throw villageError;
+                    }
                     continue;
                 }
             }

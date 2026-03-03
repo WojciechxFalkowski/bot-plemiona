@@ -325,7 +325,10 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
 
     public async executeAttacks(
         serverId: number,
-        activityContext?: { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> }
+        activityContext?: {
+            logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+            onRecaptchaBlocked?: (id: number) => void;
+        }
     ): Promise<void> {
         const villages = await this.findAttackableVillages(serverId);
         for (const village of villages) {
@@ -336,13 +339,17 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
     private async executeAttackForVillage(
         village: PlayerVillageEntity,
         serverId: number,
-        activityContext?: { logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void> }
+        activityContext?: {
+            logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+            onRecaptchaBlocked?: (id: number) => void;
+        }
     ): Promise<void> {
         let browser: Browser | null = null;
+        let page: Page | null = null;
         try {
             const session = await this.createBrowserSession(serverId, false);
             browser = session.browser;
-            const { page } = session;
+            page = session.page;
             const serverCode = await this.serversService.getServerCode(serverId);
             await this.checkVillageOwnerAndUpdate(page, village, serverCode);
             const strategy = await this.playerVillageAttackStrategiesService.findByVillageId(serverId, village.villageId);
@@ -350,10 +357,24 @@ export class PlayerVillagesService extends PlayerVillagesServiceContracts {
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             this.logger.error(`Error executing attack for village ${village.name}: ${errorMsg}`);
-            await activityContext?.logActivity({
-                eventType: CrawlerActivityEventType.ERROR,
-                message: `Błąd ataku na wioskę ${village.name}: ${errorMsg}`,
-            });
+            if (page) {
+                const { handleCrawlerErrorOperation } = await import('@/crawler/operations/utils/handle-crawler-error.operation');
+                const classification = await handleCrawlerErrorOperation(page, await page.url(), {
+                    serverId,
+                    operationType: 'Player Village Attacks',
+                    logActivity: activityContext?.logActivity,
+                    onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+                    errorMessage: `Błąd ataku na wioskę ${village.name}: ${errorMsg}`
+                });
+                if (classification === 'recaptcha_blocked') {
+                    throw error;
+                }
+            } else {
+                await activityContext?.logActivity({
+                    eventType: CrawlerActivityEventType.ERROR,
+                    message: `Błąd ataku na wioskę ${village.name}: ${errorMsg}`
+                });
+            }
         } finally {
             if (browser) await browser.close();
         }

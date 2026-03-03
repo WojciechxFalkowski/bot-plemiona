@@ -1,4 +1,5 @@
 import { MultiServerState, CrawlerTask } from '../query/get-multi-server-status.operation';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 
 export interface UpcomingTaskItem {
     taskType: string;
@@ -8,6 +9,7 @@ export interface UpcomingTaskItem {
 
 export interface FindUpcomingTasksDependencies {
     multiServerState: MultiServerState;
+    crawlerStatusService: CrawlerStatusService;
     limit?: number;
 }
 
@@ -18,26 +20,40 @@ export interface FindUpcomingTasksDependencies {
 export function findUpcomingTasksOperation(
     deps: FindUpcomingTasksDependencies
 ): UpcomingTaskItem[] {
-    const { multiServerState, limit = 8 } = deps;
+    const { multiServerState, crawlerStatusService, limit = 8 } = deps;
     const now = Date.now();
     const items: Array<{ taskType: string; serverCode: string; executionTime: number }> = [];
 
+    const recaptchaBlockedServerIds = new Set(crawlerStatusService.getStatus().recaptchaBlockedServerIds);
+
     for (const [, plan] of multiServerState.serverPlans) {
-        const regularTasks: Array<{ task: CrawlerTask; type: string }> = [
-            { task: plan.constructionQueue, type: 'Construction Queue' },
-            { task: plan.scavenging, type: 'Scavenging' },
-            { task: plan.miniAttacks, type: 'Mini Attacks' },
-            { task: plan.playerVillageAttacks, type: 'Player Village Attacks' },
-            { task: plan.armyTraining, type: 'Army Training' },
-            { task: plan.twDatabase, type: 'TW Database' }
-        ];
-        for (const { task, type } of regularTasks) {
-            if (task.enabled) {
+        if (recaptchaBlockedServerIds.has(plan.serverId)) {
+            const entries = crawlerStatusService.getRecaptchaBlockedEntries();
+            const entry = entries.find((e) => e.serverId === plan.serverId);
+            if (entry) {
                 items.push({
-                    taskType: type,
+                    taskType: 'Recaptcha Check',
                     serverCode: plan.serverCode,
-                    executionTime: task.nextExecutionTime.getTime()
+                    executionTime: entry.nextCheckAt.getTime()
                 });
+            }
+        } else {
+            const regularTasks: Array<{ task: CrawlerTask; type: string }> = [
+                { task: plan.constructionQueue, type: 'Construction Queue' },
+                { task: plan.scavenging, type: 'Scavenging' },
+                { task: plan.miniAttacks, type: 'Mini Attacks' },
+                { task: plan.playerVillageAttacks, type: 'Player Village Attacks' },
+                { task: plan.armyTraining, type: 'Army Training' },
+                { task: plan.twDatabase, type: 'TW Database' }
+            ];
+            for (const { task, type } of regularTasks) {
+                if (task.enabled) {
+                    items.push({
+                        taskType: type,
+                        serverCode: plan.serverCode,
+                        executionTime: task.nextExecutionTime.getTime()
+                    });
+                }
             }
         }
     }

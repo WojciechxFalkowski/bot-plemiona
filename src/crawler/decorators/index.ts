@@ -3,6 +3,7 @@ export { TriggerConstructionQueueDecorator } from './trigger-construction-queue.
 export { TriggerMiniAttacksDecorator } from './trigger-mini-attacks.decorator';
 export { TriggerArmyTrainingDecorator } from './trigger-army-training.decorator';
 export { TriggerTwDatabaseDecorator } from './trigger-tw-database.decorator';
+export { TriggerRecaptchaCheckDecorator } from './trigger-recaptcha-check.decorator';
 export { StartMonitoringDecorator } from './start-monitoring.decorator';
 export { UpdateConstructionQueueSettingDecorator } from './update-construction-queue-setting.decorator';
 export { UpdateMiniAttacksSettingDecorator } from './update-mini-attacks-setting.decorator';

@@ -1,5 +1,6 @@
 import { ScavengingTimeData } from '@/utils/scavenging/scavenging.interfaces';
 import { ScavengingUtils } from '@/utils/scavenging/scavenging.utils';
+import { SCAVENGING_FALLBACK_DELAY_SECONDS } from '../calculations/get-initial-intervals.operation';
 
 export interface CalculateOptimalScheduleTimeDependencies {
     scavengingTimeData: ScavengingTimeData;
@@ -14,7 +15,10 @@ export function calculateOptimalScheduleTimeOperation(
     deps: CalculateOptimalScheduleTimeDependencies
 ): number | null {
     const { scavengingTimeData } = deps;
-    return ScavengingUtils.calculateOptimalScheduleTime(scavengingTimeData);
+    return ScavengingUtils.calculateOptimalScheduleTime(
+        scavengingTimeData,
+        SCAVENGING_FALLBACK_DELAY_SECONDS
+    );
 }
 
 
