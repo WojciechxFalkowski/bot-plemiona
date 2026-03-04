@@ -37,7 +37,7 @@ export class TroopDispatchPage {
             .filter(([key, value]) => typeof value === 'number' && value > 0)
             .map(([unit, count]) => `${unit}: ${count}`)
             .join(', ');
-        
+
         return strategyUnits || 'no units';
     }
 
@@ -90,37 +90,45 @@ export class TroopDispatchPage {
     }
 
     /**
-     * Fills the support form with specific spear and sword unit counts
-     * @param spearCount - Number of spearmen to send
-     * @param swordCount - Number of swordsmen to send
+     * Fills the support form with specific unit counts
+     * @param unitsToSend - Map of unit names and counts to send
      */
-    public async fillSupportUnits(spearCount: number, swordCount: number): Promise<void> {
-        this.logger.log(`Filling support units: ${spearCount} spear, ${swordCount} sword`);
+    public async fillSupportUnits(unitsToSend: Record<string, number>): Promise<void> {
+        this.logger.log(`Filling support units: ${Object.entries(unitsToSend).map(([u, c]) => `${c} ${u}`).join(', ')}`);
 
-        // Fill spear input
-        const spearInput = this.page.locator('#unit_input_spear');
-        if (await spearInput.isVisible({ timeout: 3000 })) {
-            await spearInput.fill(spearCount.toString());
-            this.logger.debug(`Filled spear: ${spearCount}`);
-        } else {
-            this.logger.warn('Spear input field not visible');
-            throw new Error('Spear input field not visible on troop dispatch page');
+        for (const [unit, count] of Object.entries(unitsToSend)) {
+            if (count <= 0) continue;
+
+            try {
+                // Ensure unit exists in selectors
+                const unitSelector = availableUnitSelectors[unit];
+                if (!unitSelector) {
+                    this.logger.warn(`Unknown unit type: ${unit}`);
+                    continue;
+                }
+
+                const locator = this.page.locator(unitSelector).first();
+                if (await locator.isVisible()) {
+                    const inputSelector = `input[name="${unit}"]`;
+                    const inputLocator = this.page.locator(inputSelector).first();
+
+                    if (await inputLocator.isVisible({ timeout: 1000 })) {
+                        await inputLocator.fill(count.toString());
+                        this.logger.debug(`Filled ${unit}: ${count}`);
+                        await this.page.waitForTimeout(300); // small delay between typing
+                    } else {
+                        this.logger.warn(`Input field for ${unit} not found`);
+                        throw new Error(`Input field for ${unit} not visible on troop dispatch page`);
+                    }
+                } else {
+                    this.logger.warn(`Unit ${unit} selector not visible`);
+                }
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                this.logger.warn(`Error handling unit ${unit}: ${errorMsg}`);
+                throw error; // Rethrow to fail the operation for this village if a unit can't be filled
+            }
         }
-
-        await this.page.waitForTimeout(300);
-
-        // Fill sword input
-        const swordInput = this.page.locator('#unit_input_sword');
-        if (await swordInput.isVisible({ timeout: 3000 })) {
-            await swordInput.fill(swordCount.toString());
-            this.logger.debug(`Filled sword: ${swordCount}`);
-        } else {
-            this.logger.warn('Sword input field not visible');
-            throw new Error('Sword input field not visible on troop dispatch page');
-        }
-
-        await this.page.waitForTimeout(300);
-        this.logger.log('Support units filled successfully');
     }
 
     /**
@@ -129,7 +137,7 @@ export class TroopDispatchPage {
      */
     public async confirmSupportSequence(): Promise<void> {
         this.logger.log('Clicking support button (#target_support)...');
-        
+
         const supportButton = this.page.locator('#target_support');
         if (await supportButton.isVisible({ timeout: 5000 })) {
             await supportButton.click();

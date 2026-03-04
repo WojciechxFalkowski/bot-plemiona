@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Min,
@@ -49,22 +50,12 @@ export class VillageAllocationDto {
   packagesFromVillage!: number;
 
   @ApiProperty({
-    description: 'Liczba pikinierów do wysłania z tej wioski',
-    example: 500,
-    minimum: 0,
+    description: 'Słownik jednostek do wysłania z tej wioski',
+    example: { spear: 500, sword: 500 },
   })
-  @IsNumber()
-  @Min(0)
-  spearToSend!: number;
-
-  @ApiProperty({
-    description: 'Liczba mieczników do wysłania z tej wioski',
-    example: 500,
-    minimum: 0,
-  })
-  @IsNumber()
-  @Min(0)
-  swordToSend!: number;
+  @IsObject()
+  @IsNotEmpty()
+  unitsToSend!: Record<string, number>;
 }
 
 /**
@@ -106,13 +97,12 @@ export class SendSupportDto {
   totalPackages!: number;
 
   @ApiProperty({
-    description: 'Rozmiar paczki (jednostek na paczkę)',
-    example: 100,
-    minimum: 1,
+    description: 'Konfiguracja jednostek w paczce (jednostek na paczkę)',
+    example: { spear: 50, sword: 50 },
   })
-  @IsNumber()
-  @Min(1)
-  packageSize!: number;
+  @IsObject()
+  @IsNotEmpty()
+  packageUnits!: Record<string, number>;
 
   @ApiProperty({
     description: 'Czy uruchomić przeglądarkę w trybie headless (bez okna). Domyślnie true.',

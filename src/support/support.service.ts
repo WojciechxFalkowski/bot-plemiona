@@ -20,8 +20,7 @@ export interface SendSupportResponseDto {
     villageId: string;
     villageName: string;
     success: boolean;
-    spearSent: number;
-    swordSent: number;
+    unitsSent: Record<string, number>;
     error?: string;
   }[];
 }
@@ -79,12 +78,19 @@ export class SupportService {
     this.logger.log(`Target village ID: ${dto.targetVillageId}`);
     this.logger.log(`Total allocations: ${dto.allocations.length}`);
     this.logger.log(`Total packages: ${dto.totalPackages}`);
-    this.logger.log(`Package size: ${dto.packageSize}`);
 
     // Log allocation summary
-    const totalSpear = dto.allocations.reduce((sum, a) => sum + a.spearToSend, 0);
-    const totalSword = dto.allocations.reduce((sum, a) => sum + a.swordToSend, 0);
-    this.logger.log(`Total troops to queue: ${totalSpear} spear, ${totalSword} sword`);
+    const summary: Record<string, number> = {};
+    for (const alloc of dto.allocations) {
+      for (const [unit, count] of Object.entries(alloc.unitsToSend)) {
+        summary[unit] = (summary[unit] || 0) + count;
+      }
+    }
+
+    const summaryStr = Object.entries(summary)
+      .map(([unit, count]) => `${count} ${unit}`)
+      .join(', ');
+    this.logger.log(`Total troops to queue: ${summaryStr}`);
 
     // Validate server exists
     const serverCode = await this.serversService.getServerCode(dto.serverId);
@@ -148,9 +154,17 @@ export class SupportService {
     this.logger.log(`Total allocations: ${dto.allocations.length}`);
 
     // Log allocation summary
-    const totalSpear = dto.allocations.reduce((sum, a) => sum + a.spearToSend, 0);
-    const totalSword = dto.allocations.reduce((sum, a) => sum + a.swordToSend, 0);
-    this.logger.log(`Total troops to send: ${totalSpear} spear, ${totalSword} sword`);
+    const summary: Record<string, number> = {};
+    for (const alloc of dto.allocations) {
+      for (const [unit, count] of Object.entries(alloc.unitsToSend)) {
+        summary[unit] = (summary[unit] || 0) + count;
+      }
+    }
+
+    const summaryStr = Object.entries(summary)
+      .map(([unit, count]) => `${count} ${unit}`)
+      .join(', ');
+    this.logger.log(`Total troops to send: ${summaryStr}`);
 
     // Get server information
     const serverCode = await this.serversService.getServerCode(dto.serverId);

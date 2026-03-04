@@ -14,8 +14,7 @@ export interface SupportDispatchResult {
   villageId: string;
   villageName: string;
   success: boolean;
-  spearSent: number;
-  swordSent: number;
+  unitsSent: Record<string, number>;
   error?: string;
 }
 
@@ -127,8 +126,12 @@ export async function sendSupportOperation(
       const allocation = allocations[i];
       const progress = `[${i + 1}/${allocations.length}]`;
 
+      const unitsSummary = Object.entries(allocation.unitsToSend)
+        .map(([unit, count]) => `${count} ${unit}`)
+        .join(', ');
+
       logger.log(`${progress} Processing village "${allocation.villageName}" (ID: ${allocation.villageId})`);
-      logger.log(`${progress} Sending ${allocation.spearToSend} spear, ${allocation.swordToSend} sword`);
+      logger.log(`${progress} Sending ${unitsSummary}`);
 
       try {
         // Navigate to troop dispatch page
@@ -151,10 +154,7 @@ export async function sendSupportOperation(
 
         // Fill support units
         logger.debug(`${progress} Filling unit inputs...`);
-        await troopDispatchPage.fillSupportUnits(
-          allocation.spearToSend,
-          allocation.swordToSend
-        );
+        await troopDispatchPage.fillSupportUnits(allocation.unitsToSend);
 
         // Confirm support sequence
         logger.debug(`${progress} Clicking support button and confirming...`);
@@ -169,8 +169,7 @@ export async function sendSupportOperation(
           villageId: allocation.villageId,
           villageName: allocation.villageName,
           success: true,
-          spearSent: allocation.spearToSend,
-          swordSent: allocation.swordToSend,
+          unitsSent: allocation.unitsToSend,
         });
 
       } catch (error) {
@@ -190,8 +189,7 @@ export async function sendSupportOperation(
           villageId: allocation.villageId,
           villageName: allocation.villageName,
           success: false,
-          spearSent: 0,
-          swordSent: 0,
+          unitsSent: {},
           error: errorMsg,
         });
       }
