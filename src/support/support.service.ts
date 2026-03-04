@@ -6,6 +6,7 @@ import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { SendSupportDto } from './dto';
 import { sendSupportOperation, SendSupportResult } from './operations';
 import { CrawlerOrchestratorService } from '@/crawler/crawler-orchestrator.service';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 
 /**
  * Response DTO for send support endpoint (direct execution - legacy)
@@ -197,6 +198,17 @@ export class SupportService {
         logger: this.logger,
         credentials: this.credentials,
         plemionaCookiesService: this.plemionaCookiesService,
+        activityContext: {
+          serverId: dto.serverId,
+          logActivity: async (evt) => {
+            if (evt.eventType === CrawlerActivityEventType.ERROR) {
+              this.logger.error(`[Manual: sendSupport] ${evt.message}`);
+            } else {
+              this.logger.log(`[Manual: sendSupport] ${evt.message}`);
+            }
+          },
+          onRecaptchaBlocked: (id) => this.logger.warn(`Serwer ${id} zablokowany przez reCAPTCHA podczas bezpośredniego wysyłania wsparcia!`),
+        }
       },
     );
 

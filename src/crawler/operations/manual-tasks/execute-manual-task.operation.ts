@@ -8,6 +8,7 @@ import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { CrawlerService } from '@/crawler/crawler.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
+import { CrawlerStatusService } from '@/crawler/crawler-status.service';
 
 /**
  * Result of executing a manual task
@@ -33,6 +34,7 @@ export interface ExecuteManualTaskDependencies {
     crawlerService: CrawlerService;
     executionLogId?: number | null;
     crawlerActivityLogsService?: CrawlerActivityLogsService;
+    crawlerStatusService?: CrawlerStatusService;
 }
 
 /**
@@ -83,6 +85,23 @@ async function executeSendSupportTask(
         logger,
         credentials,
         plemionaCookiesService,
+        activityContext: {
+            serverId: payload.serverId,
+            logActivity: async (evt) => {
+                if (deps.executionLogId != null && deps.crawlerActivityLogsService) {
+                    await deps.crawlerActivityLogsService.logActivity({
+                        executionLogId: deps.executionLogId,
+                        serverId: payload.serverId,
+                        operationType: 'Manual: sendSupport',
+                        eventType: evt.eventType,
+                        message: evt.message
+                    });
+                }
+            },
+            onRecaptchaBlocked: deps.crawlerStatusService
+                ? (id) => deps.crawlerStatusService!.markRecaptchaBlocked(id)
+                : undefined
+        }
     };
 
     const result = await sendSupportOperation(config, sendSupportDeps);
@@ -257,7 +276,7 @@ export function findNextPendingManualTask(
     deps: Pick<ExecuteManualTaskDependencies, 'multiServerState'>
 ): ManualTask | null {
     const { multiServerState } = deps;
-    
+
     const pendingTasks = multiServerState.manualTaskQueue
         .filter(t => t.status === 'pending')
         .sort((a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime());

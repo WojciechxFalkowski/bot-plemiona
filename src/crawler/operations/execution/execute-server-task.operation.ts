@@ -23,18 +23,18 @@ import { NextTaskResult } from '../scheduling/find-next-task-to-execute.operatio
 
 export interface ExecuteServerTaskDependencies
     extends ExecuteConstructionQueueTaskDependencies,
-        ExecuteScavengingTaskDependencies,
-        ExecuteMiniAttacksTaskDependencies,
-        ExecutePlayerVillageAttacksTaskDependencies,
-        ExecuteArmyTrainingTaskDependencies,
-        ExecuteTwDatabaseTaskDependencies,
-        UpdateNextConstructionTimeDependencies,
-        Omit<UpdateNextScavengingTimeDependencies, 'scavengingTimeData'>,
-        UpdateNextMiniAttackTimeDependencies,
-        UpdateNextPlayerVillageAttackTimeDependencies,
-        UpdateNextArmyTrainingTimeDependencies,
-        UpdateNextExecutionTimeForFailedTaskDependencies,
-        Omit<ExecuteManualTaskDependencies, 'multiServerState' | 'logger'> {
+    ExecuteScavengingTaskDependencies,
+    ExecuteMiniAttacksTaskDependencies,
+    ExecutePlayerVillageAttacksTaskDependencies,
+    ExecuteArmyTrainingTaskDependencies,
+    ExecuteTwDatabaseTaskDependencies,
+    UpdateNextConstructionTimeDependencies,
+    Omit<UpdateNextScavengingTimeDependencies, 'scavengingTimeData'>,
+    UpdateNextMiniAttackTimeDependencies,
+    UpdateNextPlayerVillageAttackTimeDependencies,
+    UpdateNextArmyTrainingTimeDependencies,
+    UpdateNextExecutionTimeForFailedTaskDependencies,
+    Omit<ExecuteManualTaskDependencies, 'multiServerState' | 'logger'> {
     multiServerState: MultiServerState;
     crawlerExecutionLogsService: CrawlerExecutionLogsService;
     crawlerActivityLogsService: CrawlerActivityLogsService;
@@ -92,6 +92,7 @@ async function executeManualTask(
             crawlerService: deps.crawlerService,
             executionLogId,
             crawlerActivityLogsService: deps.crawlerActivityLogsService,
+            crawlerStatusService: deps.crawlerStatusService,
         };
 
         const result = await executeManualTaskOperation(task, manualTaskDeps);

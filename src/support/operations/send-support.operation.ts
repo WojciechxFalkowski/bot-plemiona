@@ -6,6 +6,8 @@ import { PlemionaCredentials } from '@/utils/auth/auth.interfaces';
 import { PlemionaCookiesService } from '@/plemiona-cookies';
 import { TroopDispatchPage } from '@/models/tribal-wars/troop-dispatch-page';
 import { VillageAllocationDto } from '../dto/send-support.dto';
+import { handleCrawlerErrorOperation } from '@/crawler/operations/utils/handle-crawler-error.operation';
+import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 
 /**
  * Result of a single support dispatch
@@ -50,6 +52,11 @@ export interface SendSupportDependencies {
   logger: Logger;
   credentials: PlemionaCredentials;
   plemionaCookiesService: PlemionaCookiesService;
+  activityContext?: {
+    serverId: number;
+    logActivity: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
+    onRecaptchaBlocked?: (serverId: number) => void;
+  };
 }
 
 /**
@@ -73,7 +80,7 @@ export async function sendSupportOperation(
   config: SendSupportConfig,
   deps: SendSupportDependencies
 ): Promise<SendSupportResult> {
-  const { logger, credentials, plemionaCookiesService } = deps;
+  const { logger, credentials, plemionaCookiesService, activityContext } = deps;
   const { serverCode, serverName, targetVillageId, allocations } = config;
 
   logger.log(`=== Starting support dispatch operation ===`);
@@ -146,6 +153,31 @@ export async function sendSupportOperation(
         await page.waitForTimeout(1000);
         logger.debug(`${progress} Place screen loaded`);
 
+        // Weryfikacja twardych błędów (reCAPTCHA, wylogowanie)
+        const currentUrl = page.url();
+        const errorClassification = await handleCrawlerErrorOperation(page, currentUrl, {
+          serverId: activityContext?.serverId || config.serverId,
+          operationType: 'Wysłanie wsparcia',
+          logActivity: activityContext?.logActivity,
+          onRecaptchaBlocked: activityContext?.onRecaptchaBlocked,
+          skipLogOnGenericError: true // We handle generic errors manually via error_box text
+        });
+
+        if (errorClassification === 'recaptcha_blocked' || errorClassification === 'session_expired') {
+          const hardErrorMsg = errorClassification === 'recaptcha_blocked' ? 'Wykryto reCAPTCHA. Przerwano wysyłanie wsparcia.' : 'Sesja wygasła. Przerwano wysyłanie wsparcia.';
+          logger.error(`${progress} Hard Error: ${hardErrorMsg}`);
+
+          // Push failed result for current and throw to abort rest
+          results.push({
+            villageId: allocation.villageId,
+            villageName: allocation.villageName,
+            success: false,
+            unitsSent: {},
+            error: hardErrorMsg,
+          });
+          throw new Error(hardErrorMsg); // Break out of the entire loop
+        }
+
         // Check if command form exists
         const formExists = await page.locator('#command-data-form').isVisible({ timeout: 5000 });
         if (!formExists) {
@@ -176,22 +208,33 @@ export async function sendSupportOperation(
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         logger.error(`${progress} ❌ Failed - ${allocation.villageName}: ${errorMsg}`);
 
-        // Take screenshot on error
-        try {
-          const screenshotPath = `support_error_${allocation.villageId}_${Date.now()}.png`;
-          await page.screenshot({ path: screenshotPath, fullPage: true });
-          logger.debug(`${progress} Error screenshot saved: ${screenshotPath}`);
-        } catch (screenshotError) {
-          logger.warn(`${progress} Failed to take error screenshot`);
+        // Take screenshot on error if it's not a global abort
+        if (!errorMsg.includes('reCAPTCHA') && !errorMsg.includes('Sesja wygasła')) {
+          try {
+            const screenshotPath = `support_error_${allocation.villageId}_${Date.now()}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            logger.debug(`${progress} Error screenshot saved: ${screenshotPath}`);
+          } catch (screenshotError) {
+            logger.warn(`${progress} Failed to take error screenshot`);
+          }
         }
 
-        results.push({
-          villageId: allocation.villageId,
-          villageName: allocation.villageName,
-          success: false,
-          unitsSent: {},
-          error: errorMsg,
-        });
+        // Add result if it wasn't already added by the hard error checker
+        if (!results.find(r => r.villageId === allocation.villageId)) {
+          results.push({
+            villageId: allocation.villageId,
+            villageName: allocation.villageName,
+            success: false,
+            unitsSent: {},
+            error: errorMsg,
+          });
+        }
+
+        // Jeśli to twardy błąd, chcemy wyjść z pętli żeby nie przepalać wiosek
+        if (errorMsg.includes('reCAPTCHA') || errorMsg.includes('Sesja wygasła')) {
+          logger.warn(`Aborting remaining ${allocations.length - i - 1} support task(s) due to hard error.`);
+          break;
+        }
       }
     }
 

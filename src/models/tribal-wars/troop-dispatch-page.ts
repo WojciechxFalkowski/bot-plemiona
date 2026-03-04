@@ -147,10 +147,30 @@ export class TroopDispatchPage {
             throw new Error('Support button (#target_support) not visible on page');
         }
 
-        // Wait for confirmation page to load
-        await this.page.waitForLoadState('networkidle', { timeout: 10000 });
-        await this.page.waitForTimeout(1000);
-        this.logger.debug('Confirmation page loaded');
+        // Wait for confirmation page to load or error box to appear
+        try {
+            // Wait for either the confirm button or an error box
+            const raceResult = await Promise.race([
+                this.page.waitForSelector('#troop_confirm_submit', { state: 'visible', timeout: 15000 }).then(() => 'confirm'),
+                this.page.waitForSelector('.error_box', { state: 'visible', timeout: 15000 }).then(() => 'error')
+            ]);
+
+            if (raceResult === 'error') {
+                const errorBox = this.page.locator('.error_box').first();
+                const errorText = await errorBox.textContent();
+                const cleanError = errorText?.trim() || 'Wystąpił błąd na stronie placu (brak szczegółów)';
+                this.logger.warn(`Game error during support dispatch: ${cleanError}`);
+                throw new Error(cleanError);
+            }
+
+            this.logger.debug('Confirmation page loaded');
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('timeout')) {
+                this.logger.error('Timeout waiting for confirmation page or error box');
+                throw new Error('Timeout waiting for confirmation page (#troop_confirm_submit)');
+            }
+            throw error;
+        }
 
         // Click confirm button
         this.logger.log('Clicking confirmation button (#troop_confirm_submit)...');
@@ -163,6 +183,8 @@ export class TroopDispatchPage {
             throw new Error('Confirmation button (#troop_confirm_submit) not visible on page');
         }
 
+        // Optional: wait a bit or for networkidle after clicking confirm to ensure the action is registered
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => { });
         await this.page.waitForTimeout(1000);
         this.logger.log('Support sequence completed successfully');
     }
