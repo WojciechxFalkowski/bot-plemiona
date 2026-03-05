@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { SlackNotificationService } from '../notifications/slack-notification.service';
 
 export interface ActiveServerInfo {
     serverId: number;
@@ -18,7 +19,7 @@ export interface NextScheduledTaskInfo {
 }
 
 /** Default interval for RecaptchaCheck when blocked (10 minutes) */
-export const RECAPTCHA_CHECK_INTERVAL_MS = 600;
+export const RECAPTCHA_CHECK_INTERVAL_MS = 600000;
 
 export interface RecaptchaBlockedEntry {
     detectedAt: Date;
@@ -27,10 +28,13 @@ export interface RecaptchaBlockedEntry {
 
 @Injectable()
 export class CrawlerStatusService {
+    private readonly logger = new Logger(CrawlerStatusService.name);
     private activeServer: ActiveServerInfo | null = null;
     private recaptchaBlockedServers: Map<number, RecaptchaBlockedEntry> = new Map();
     private nextScheduledAt: number | null = null;
     private nextScheduledTask: NextScheduledTaskInfo | null = null;
+
+    constructor(private readonly slackNotificationService: SlackNotificationService) { }
 
     /**
      * Sets the currently active server (crawler is executing a task on it).
@@ -80,6 +84,17 @@ export class CrawlerStatusService {
     markRecaptchaBlocked(serverId: number): void {
         const now = new Date();
         const nextCheckAt = new Date(now.getTime() + RECAPTCHA_CHECK_INTERVAL_MS);
+
+        if (!this.recaptchaBlockedServers.has(serverId)) {
+            let operationType = 'Nieznana operacja';
+            if (this.activeServer && this.activeServer.serverId === serverId) {
+                operationType = this.activeServer.taskType;
+            }
+
+            this.slackNotificationService.sendRecaptchaAlert({ serverId, operationType })
+                .catch(err => this.logger.error('Failed to send slack alert', err));
+        }
+
         this.recaptchaBlockedServers.set(serverId, { detectedAt: now, nextCheckAt });
     }
 
