@@ -122,22 +122,37 @@ async function executeSendSupportTask(
                 serverId: payload.serverId,
                 operationType: 'Manual: sendSupport',
                 eventType: CrawlerActivityEventType.ERROR,
-                message: 'Nie wysłano wsparcia z żadnej wioski',
+                message: `Nie udało się wysłać wsparcia z żadnej z ${result.failedDispatches} zaplanowanych wiosek`,
             });
-        } else if (result.success || result.successfulDispatches > 0) {
-            const msg =
-                result.successfulDispatches > 0
-                    ? result.failedDispatches > 0
-                        ? `Wysłano wsparcie z ${result.successfulDispatches}/${result.totalAllocations} wiosek`
-                        : `Wysłano wsparcie z ${result.successfulDispatches} wiosek`
-                    : 'Operacja wsparcia zakończona pomyślnie';
-            await crawlerActivityLogsService.logActivity({
-                executionLogId,
-                serverId: payload.serverId,
-                operationType: 'Manual: sendSupport',
-                eventType: CrawlerActivityEventType.SUCCESS,
-                message: msg,
-            });
+        } else {
+            // Mixed or full success
+            if (result.successfulDispatches > 0) {
+                await crawlerActivityLogsService.logActivity({
+                    executionLogId,
+                    serverId: payload.serverId,
+                    operationType: 'Manual: sendSupport',
+                    eventType: CrawlerActivityEventType.SUCCESS,
+                    message: `Wysłano wsparcie z ${result.successfulDispatches} wiosek`,
+                });
+            }
+            if (result.failedDispatches > 0) {
+                await crawlerActivityLogsService.logActivity({
+                    executionLogId,
+                    serverId: payload.serverId,
+                    operationType: 'Manual: sendSupport',
+                    eventType: CrawlerActivityEventType.ERROR,
+                    message: `Nie udało się wysłać wsparcia z ${result.failedDispatches} wiosek`,
+                });
+            }
+            if (result.successfulDispatches === 0 && result.failedDispatches === 0) {
+                await crawlerActivityLogsService.logActivity({
+                    executionLogId,
+                    serverId: payload.serverId,
+                    operationType: 'Manual: sendSupport',
+                    eventType: CrawlerActivityEventType.SUCCESS,
+                    message: 'Operacja wsparcia zakończona pomyślnie (brak dyspozycji do wysłania)',
+                });
+            }
         }
     }
 

@@ -62,6 +62,7 @@ export interface ServerCrawlerPlan {
         villageId: string | null;
     };
     twDatabase: CrawlerTask;
+    accountManager: CrawlerTask;
     lastSuccessfulExecution: Date | null;
 }
 
@@ -144,6 +145,11 @@ export interface MultiServerStatusResponse {
                 nextExecution: Date;
                 lastExecuted: Date | null;
             };
+            accountManager: {
+                enabled: boolean;
+                nextExecution: Date;
+                lastExecuted: Date | null;
+            };
         };
     }>;
 }
@@ -198,6 +204,11 @@ export function getMultiServerStatusOperation(
                 enabled: plan.twDatabase.enabled,
                 nextExecution: plan.twDatabase.nextExecutionTime,
                 lastExecuted: plan.twDatabase.lastExecuted
+            },
+            accountManager: {
+                enabled: plan.accountManager.enabled,
+                nextExecution: plan.accountManager.nextExecutionTime,
+                lastExecuted: plan.accountManager.lastExecuted
             }
         }
     }));

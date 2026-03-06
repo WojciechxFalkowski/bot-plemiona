@@ -44,7 +44,8 @@ export function findUpcomingTasksOperation(
                 { task: plan.miniAttacks, type: 'Mini Attacks' },
                 { task: plan.playerVillageAttacks, type: 'Player Village Attacks' },
                 { task: plan.armyTraining, type: 'Army Training' },
-                { task: plan.twDatabase, type: 'TW Database' }
+                { task: plan.twDatabase, type: 'TW Database' },
+                { task: plan.accountManager, type: 'Account Manager' }
             ];
             for (const { task, type } of regularTasks) {
                 if (task.enabled) {

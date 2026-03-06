@@ -106,6 +106,15 @@ export function logDetailedTaskScheduleOperation(
                 nextExecution: plan.twDatabase.nextExecutionTime,
                 timeUntilExecution: plan.twDatabase.nextExecutionTime.getTime() - now.getTime(),
                 lastExecuted: plan.twDatabase.lastExecuted
+            },
+            {
+                serverCode: plan.serverCode,
+                serverName: plan.serverName,
+                taskType: 'Account Manager',
+                enabled: plan.accountManager.enabled,
+                nextExecution: plan.accountManager.nextExecutionTime,
+                timeUntilExecution: plan.accountManager.nextExecutionTime.getTime() - now.getTime(),
+                lastExecuted: plan.accountManager.lastExecuted
             }
         );
     }

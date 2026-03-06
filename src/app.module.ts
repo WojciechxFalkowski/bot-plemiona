@@ -23,6 +23,7 @@ import { ScheduledAttacksModule } from './scheduled-attacks/scheduled-attacks.mo
 import { SupportModule } from './support/support.module';
 import { TwDatabaseModule } from './tw-database/tw-database.module';
 import { EncryptionModule } from './utils/encryption/encryption.module';
+import { AccountManagerModule } from './account-manager/account-manager.module';
 
 @Module({
   imports: [
@@ -37,7 +38,7 @@ import { EncryptionModule } from './utils/encryption/encryption.module';
     BarbarianVillagesModule,
     BuildingsModule,
     ServersModule,
-		PlemionaCookiesModule,
+    PlemionaCookiesModule,
     MiniAttackStrategiesModule,
     ArmyTrainingModule,
     PlayerVillagesModule,
@@ -47,6 +48,7 @@ import { EncryptionModule } from './utils/encryption/encryption.module';
     SupportModule,
     TwDatabaseModule,
     EncryptionModule,
+    AccountManagerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

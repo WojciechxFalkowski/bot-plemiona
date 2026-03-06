@@ -21,7 +21,8 @@ import {
     GetTwDatabaseSettingDecorator,
     GetStatusDecorator,
     GetCrawlerStatusDecorator,
-    GetDefaultIntervalsDecorator
+    GetDefaultIntervalsDecorator,
+    UpdateAccountManagerSettingDecorator
 } from './decorators';
 import { EncryptionService } from '@/utils/encryption/encryption.service';
 
@@ -302,6 +303,36 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error updating army training setting for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Failed to update army training setting: ${error.message}`);
+        }
+    }
+
+    @Post('settings/:serverId/account-manager')
+    @UpdateAccountManagerSettingDecorator()
+    async updateAccountManagerSetting(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: { value: boolean }
+    ) {
+        this.logger.log(`Updating account manager setting for server ${serverId}: value=${dto.value}`);
+
+        try {
+            // 1. Update setting
+            await this.settingsService.setSetting(serverId, SettingsKey.AUTO_ACCOUNT_MANAGER_ENABLED, { value: dto.value });
+
+            // 2. Refresh task states immediately
+            await this.orchestratorService.updateServerTaskStates(serverId);
+
+            return {
+                success: true,
+                message: `Account manager setting updated to ${dto.value} for server ${serverId}`,
+                setting: {
+                    serverId,
+                    key: SettingsKey.AUTO_ACCOUNT_MANAGER_ENABLED,
+                    value: dto.value
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Error updating account manager setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Failed to update account manager setting: ${error.message}`);
         }
     }
 

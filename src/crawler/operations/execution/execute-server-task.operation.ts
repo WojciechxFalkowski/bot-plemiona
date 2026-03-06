@@ -10,12 +10,14 @@ import { executeMiniAttacksTaskOperation, ExecuteMiniAttacksTaskDependencies } f
 import { executePlayerVillageAttacksTaskOperation, ExecutePlayerVillageAttacksTaskDependencies } from './execute-player-village-attacks-task.operation';
 import { executeArmyTrainingTaskOperation, ExecuteArmyTrainingTaskDependencies } from './execute-army-training-task.operation';
 import { executeTwDatabaseTaskOperation, ExecuteTwDatabaseTaskDependencies } from './execute-tw-database-task.operation';
+import { executeAccountManagerTaskOperation, ExecuteAccountManagerTaskDependencies } from './execute-account-manager-task.operation';
 import { updateNextConstructionTimeOperation, UpdateNextConstructionTimeDependencies } from '../scheduling/update-next-construction-time.operation';
 import { updateNextScavengingTimeOperation, UpdateNextScavengingTimeDependencies } from '../scheduling/update-next-scavenging-time.operation';
 import { updateNextMiniAttackTimeOperation, UpdateNextMiniAttackTimeDependencies } from '../scheduling/update-next-mini-attack-time.operation';
 import { updateNextPlayerVillageAttackTimeOperation, UpdateNextPlayerVillageAttackTimeDependencies } from '../scheduling/update-next-player-village-attack-time.operation';
 import { updateNextArmyTrainingTimeOperation, UpdateNextArmyTrainingTimeDependencies } from '../scheduling/update-next-army-training-time.operation';
 import { updateNextTwDatabaseTimeOperation } from '../scheduling/update-next-tw-database-time.operation';
+import { updateNextAccountManagerTimeOperation, UpdateNextAccountManagerTimeDependencies } from '../scheduling/update-next-account-manager-time.operation';
 import { updateNextExecutionTimeForFailedTaskOperation, UpdateNextExecutionTimeForFailedTaskDependencies } from '../scheduling/update-next-execution-time-for-failed-task.operation';
 import { executeManualTaskOperation, ExecuteManualTaskDependencies } from '../manual-tasks/execute-manual-task.operation';
 import { executeRecaptchaCheckTaskOperation } from './execute-recaptcha-check-task.operation';
@@ -28,11 +30,13 @@ export interface ExecuteServerTaskDependencies
     ExecutePlayerVillageAttacksTaskDependencies,
     ExecuteArmyTrainingTaskDependencies,
     ExecuteTwDatabaseTaskDependencies,
+    ExecuteAccountManagerTaskDependencies,
     UpdateNextConstructionTimeDependencies,
     Omit<UpdateNextScavengingTimeDependencies, 'scavengingTimeData'>,
     UpdateNextMiniAttackTimeDependencies,
     UpdateNextPlayerVillageAttackTimeDependencies,
     UpdateNextArmyTrainingTimeDependencies,
+    UpdateNextAccountManagerTimeDependencies,
     UpdateNextExecutionTimeForFailedTaskDependencies,
     Omit<ExecuteManualTaskDependencies, 'multiServerState' | 'logger'> {
     multiServerState: MultiServerState;
@@ -305,6 +309,10 @@ export async function executeServerTaskOperation(
             case 'TW Database':
                 await executeTwDatabaseTaskOperation(serverId, taskDepsWithActivity);
                 updateNextTwDatabaseTimeOperation(plan);
+                break;
+            case 'Account Manager':
+                await executeAccountManagerTaskOperation(serverId, taskDepsWithActivity);
+                await updateNextAccountManagerTimeOperation(plan, serverId, deps);
                 break;
             default:
                 logger.error(`❌ Unknown task type: ${taskType}`);

@@ -13,4 +13,5 @@ export { UpdateTwDatabaseSettingDecorator } from './update-tw-database-setting.d
 export { GetTwDatabaseSettingDecorator } from './get-tw-database-setting.decorator';
 export { GetStatusDecorator } from './get-status.decorator';
 export { GetCrawlerStatusDecorator } from './get-crawler-status.decorator';
-export { GetDefaultIntervalsDecorator } from './get-default-intervals.decorator'; 
+export { GetDefaultIntervalsDecorator } from './get-default-intervals.decorator';
+export { UpdateAccountManagerSettingDecorator } from './update-account-manager-setting.decorator';

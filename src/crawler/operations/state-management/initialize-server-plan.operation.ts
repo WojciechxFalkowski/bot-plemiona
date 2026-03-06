@@ -68,6 +68,12 @@ export function initializeServerPlanOperation(
             lastExecuted: null,
             name: 'TW Database'
         },
+        accountManager: {
+            nextExecutionTime: new Date(now.getTime() + intervals.accountManager),
+            enabled: false,
+            lastExecuted: null,
+            name: 'Account Manager'
+        },
         lastSuccessfulExecution: null
     };
 

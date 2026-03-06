@@ -25,6 +25,7 @@ export async function createDefaultSettingsOperation(
         { key: SettingsKey.MINI_ATTACKS_VILLAGE_ID, value: { value: null } },
         { key: SettingsKey.MINI_ATTACKS_MIN_INTERVAL, value: { value: 10 } }, // 10 minutes
         { key: SettingsKey.MINI_ATTACKS_MAX_INTERVAL, value: { value: 15 } }, // 15 minutes
+        { key: SettingsKey.AUTO_ACCOUNT_MANAGER_ENABLED, value: { value: false } },
     ];
 
     // Tworzenie ustawień równolegle dla lepszej wydajności

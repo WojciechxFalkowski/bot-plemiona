@@ -35,13 +35,14 @@ export function resetServerPlanExecutionTimesOperation(
 
     const baseTime = Date.now() + delayMs;
 
-    const taskTypes: Array<keyof Pick<ServerCrawlerPlan, 'constructionQueue' | 'scavenging' | 'miniAttacks' | 'playerVillageAttacks' | 'armyTraining' | 'twDatabase'>> = [
+    const taskTypes: Array<keyof Pick<ServerCrawlerPlan, 'constructionQueue' | 'scavenging' | 'miniAttacks' | 'playerVillageAttacks' | 'armyTraining' | 'twDatabase' | 'accountManager'>> = [
         'constructionQueue',
         'scavenging',
         'miniAttacks',
         'playerVillageAttacks',
         'armyTraining',
-        'twDatabase'
+        'twDatabase',
+        'accountManager'
     ];
 
     for (const key of taskTypes) {

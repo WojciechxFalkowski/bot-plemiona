@@ -11,6 +11,8 @@ import { getInitialIntervalsOperation } from '../calculations/get-initial-interv
 import { calculateRandomMiniAttackIntervalOperation } from '../calculations/calculate-random-mini-attack-interval.operation';
 import { calculateRandomArmyTrainingIntervalOperation } from '../calculations/calculate-random-army-training-interval.operation';
 import { calculateRandomTwDatabaseIntervalOperation } from '../calculations/calculate-random-tw-database-interval.operation';
+import { validateAccountManagerEnabledOperation } from '../validation/validate-account-manager-enabled.operation';
+import { calculateRandomAccountManagerIntervalOperation } from '../calculations/calculate-random-account-manager-interval.operation';
 
 export interface UpdateServerTaskStatesDependencies {
     multiServerState: MultiServerState;
@@ -46,7 +48,8 @@ export async function updateServerTaskStatesOperation(
             miniAttacks: plan.miniAttacks.enabled,
             playerVillageAttacks: plan.playerVillageAttacks.enabled,
             armyTraining: plan.armyTraining.enabled,
-            twDatabase: plan.twDatabase.enabled
+            twDatabase: plan.twDatabase.enabled,
+            accountManager: plan.accountManager.enabled
         };
 
         // Update enabled states for all tasks
@@ -56,6 +59,7 @@ export async function updateServerTaskStatesOperation(
         plan.playerVillageAttacks.enabled = await validatePlayerVillageAttacksEnabledOperation(serverId, deps);
         plan.armyTraining.enabled = await validateArmyTrainingEnabledOperation(serverId, deps);
         plan.twDatabase.enabled = await validateTwDatabaseEnabledOperation(serverId, deps);
+        plan.accountManager.enabled = await validateAccountManagerEnabledOperation(serverId, deps);
 
         // If task was just enabled (disabled -> enabled), set new nextExecutionTime
         if (!previousStates.constructionQueue && plan.constructionQueue.enabled) {
@@ -95,7 +99,13 @@ export async function updateServerTaskStatesOperation(
             logger.log(`🔄 TW Database enabled for ${plan.serverCode}, next execution: ${plan.twDatabase.nextExecutionTime.toLocaleString()}`);
         }
 
-        logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}, TwDatabase=${plan.twDatabase.enabled}`);
+        if (!previousStates.accountManager && plan.accountManager.enabled) {
+            const delay = await calculateRandomAccountManagerIntervalOperation(serverId, { settingsService, logger });
+            plan.accountManager.nextExecutionTime = new Date(Date.now() + delay);
+            logger.log(`🔄 Account Manager enabled for ${plan.serverCode}, next execution: ${plan.accountManager.nextExecutionTime.toLocaleString()}`);
+        }
+
+        logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}, TwDatabase=${plan.twDatabase.enabled}, AccountManager=${plan.accountManager.enabled}`);
     } catch (error) {
         logger.error(`❌ Error updating task states for server ${serverId}:`, error);
         throw error;

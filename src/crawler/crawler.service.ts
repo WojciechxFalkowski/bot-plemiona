@@ -43,6 +43,15 @@ import { cacheVillageUnitsDataOperation } from './operations/cache/cache-village
 import { getCachedVillageUnitsDataOperation } from './operations/cache/get-cached-village-units-data.operation';
 import { clearCacheForServerOperation } from './operations/cache/clear-cache-for-server.operation';
 
+// Account Manager Operation
+import {
+    scrapeCombinedOverviewOperation,
+    ScrapeCombinedOverviewDependencies
+} from './operations/account-manager/scrape-combined-overview.operation';
+import { assignTroopTemplatesOperation, AssignTroopTemplatesResult } from './operations/account-manager/assign-troop-templates.operation';
+import { ScrapedVillageStatus } from './pages/account-manager-combined.page';
+import { AccountManagerScrapeResult } from './pages/account-manager-combined.page';
+
 // AttackConfig is now imported from perform-attack.operation.ts
 
 @Injectable()
@@ -461,7 +470,7 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
      */
     public async getVillageUnitsData(serverId: number, forceRefresh: boolean = false): Promise<VillageUnitsData[]> {
         this.logger.log(`Extracting village units data for server ${serverId} (forceRefresh: ${forceRefresh})`);
-        
+
         // Check cache first unless forcing refresh
         if (!forceRefresh) {
             const cached = getCachedVillageUnitsDataOperation(serverId, {
@@ -478,23 +487,23 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
 
         // If cache miss or force refresh, scrape fresh data with retry logic
         this.logger.log(`Scraping fresh village units data for server ${serverId}`);
-        
+
         const MAX_RETRIES = 2;
         const RETRY_DELAY_MS = 3000;
         let lastError: Error | null = null;
-        
+
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             const { browser, page } = await createBrowserPage({ headless: true });
-            
+
             try {
                 if (attempt > 1) {
                     this.logger.log(`Retry attempt ${attempt}/${MAX_RETRIES} for village units data`);
                 }
-                
+
                 // Get server information
                 const serverCode = await this.serversService.getServerCode(serverId);
                 const serverName = await this.serversService.getServerName(serverId);
-                
+
                 // Login and select world
                 const loginResult = await AuthUtils.loginAndSelectWorld(
                     page,
@@ -502,40 +511,40 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                     this.plemionaCookiesService,
                     serverName
                 );
-                
+
                 if (!loginResult.success || !loginResult.worldSelected) {
                     throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
                 }
-                
+
                 this.logger.log(`Login successful, extracting village units data`);
-                
+
                 // Get first village ID for navigation (we need any village ID to construct the URL)
                 const villages = await this.villagesService.findAll(serverId, false);
                 if (!villages || villages.length === 0) {
                     throw new Error(`No villages found for server ${serverId}`);
                 }
-                
+
                 const firstVillageId = villages[0].id;
-                
+
                 // Use VillageUnitsOverviewPage to extract data
                 const overviewPage = new VillageUnitsOverviewPage(page);
                 await overviewPage.navigate(serverCode, firstVillageId);
                 const villagesData = await overviewPage.extractVillageUnitsData();
-                
+
                 this.logger.log(`Successfully extracted units data for ${villagesData.length} villages`);
-                
+
                 // Cache the fresh data
                 cacheVillageUnitsDataOperation(serverId, villagesData, {
                     villageUnitsCache: this.villageUnitsCache,
                     logger: this.logger
                 });
-                
+
                 return villagesData;
-                
+
             } catch (error) {
                 lastError = error;
                 this.logger.error(`Attempt ${attempt}/${MAX_RETRIES} failed: ${error.message}`);
-                
+
                 if (attempt < MAX_RETRIES) {
                     this.logger.log(`Waiting ${RETRY_DELAY_MS}ms before retry...`);
                     await this.delay(RETRY_DELAY_MS);
@@ -546,10 +555,80 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
                 }
             }
         }
-        
+
         // All retries exhausted
         this.logger.error(`All ${MAX_RETRIES} attempts failed for village units data`, lastError?.stack);
         throw lastError || new Error('Failed to extract village units data after retries');
+    }
+
+    /**
+     * Extracts Account Manager "Combined" overview data
+     * Logs in and extracts building, farm, recruitment and units count for villages
+     * @param serverId - ID of the server
+     * @returns AccountManagerScrapeResult containing execution time and village data
+     */
+    public async getAccountManagerCombinedData(serverId: number): Promise<AccountManagerScrapeResult> {
+        this.logger.log(`Extracting Account Manager Combined data for server ${serverId}`);
+
+        const MAX_RETRIES = 2;
+        const RETRY_DELAY_MS = 3000;
+        let lastError: Error | null = null;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            const { browser, page } = await createBrowserPage({ headless: true });
+
+            try {
+                if (attempt > 1) {
+                    this.logger.log(`Retry attempt ${attempt}/${MAX_RETRIES} for Account Manager data`);
+                }
+
+                const serverCode = await this.serversService.getServerCode(serverId);
+                const serverName = await this.serversService.getServerName(serverId);
+
+                const loginResult = await AuthUtils.loginAndSelectWorld(
+                    page,
+                    this.credentials,
+                    this.plemionaCookiesService,
+                    serverName
+                );
+
+                if (!loginResult.success || !loginResult.worldSelected) {
+                    throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+                }
+
+                this.logger.log(`Login successful, proceeding to Account Manager scrape`);
+
+                const villages = await this.villagesService.findAll(serverId, false);
+                if (!villages || villages.length === 0) {
+                    throw new Error(`No villages found for server ${serverId}`);
+                }
+                const firstVillageId = villages[0].id;
+
+                // Execute the explicit Account Manager scraper operation
+                const result = await scrapeCombinedOverviewOperation(serverCode, firstVillageId, page, {
+                    logger: this.logger,
+                    serverId
+                });
+
+                return result;
+
+            } catch (error) {
+                lastError = error;
+                this.logger.error(`Attempt ${attempt}/${MAX_RETRIES} failed for Account Manager data: ${error.message}`);
+
+                if (attempt < MAX_RETRIES) {
+                    this.logger.log(`Waiting ${RETRY_DELAY_MS}ms before retry...`);
+                    await this.delay(RETRY_DELAY_MS);
+                }
+            } finally {
+                if (browser) {
+                    await browser.close();
+                }
+            }
+        }
+
+        this.logger.error(`All ${MAX_RETRIES} attempts failed for Account Manager Combined data`, lastError?.stack);
+        throw lastError || new Error('Failed to extract Account Manager Combined data after retries');
     }
 
     /**
@@ -571,5 +650,68 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
         return new Promise((resolve) => {
             global.setTimeout(resolve, ms);
         });
+    }
+
+    async assignAccountManagerTroopTemplates(
+        serverId: number,
+        villages: ScrapedVillageStatus[]
+    ): Promise<AssignTroopTemplatesResult> {
+        this.logger.log(`Assigning Account Manager Troop Templates for server ${serverId}`);
+
+        const MAX_RETRIES = 2;
+        const RETRY_DELAY_MS = 3000;
+        let lastError: Error | null = null;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            const { browser, page } = await createBrowserPage({ headless: true });
+
+            try {
+                if (attempt > 1) {
+                    this.logger.log(`Retry attempt ${attempt}/${MAX_RETRIES} for Account Manager troop templates`);
+                }
+
+                const serverCode = await this.serversService.getServerCode(serverId);
+                const serverName = await this.serversService.getServerName(serverId);
+
+                const loginResult = await AuthUtils.loginAndSelectWorld(
+                    page,
+                    this.credentials,
+                    this.plemionaCookiesService,
+                    serverName
+                );
+
+                if (!loginResult.success || !loginResult.worldSelected) {
+                    throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+                }
+
+                this.logger.log(`Login successful, proceeding to assign troop templates`);
+
+                return await assignTroopTemplatesOperation(
+                    serverCode,
+                    villages,
+                    page,
+                    {
+                        logger: this.logger,
+                        serverId
+                    }
+                );
+
+            } catch (error) {
+                lastError = error;
+                this.logger.error(`Attempt ${attempt}/${MAX_RETRIES} failed for assigning templates: ${error.message}`);
+
+                if (attempt < MAX_RETRIES) {
+                    this.logger.log(`Waiting ${RETRY_DELAY_MS}ms before retry...`);
+                    await this.delay(RETRY_DELAY_MS);
+                }
+            } finally {
+                if (browser) {
+                    await browser.close();
+                }
+            }
+        }
+
+        this.logger.error(`All ${MAX_RETRIES} attempts failed for assigning templates`, lastError?.stack);
+        throw lastError || new Error('Failed to assign troop templates after retries');
     }
 }
