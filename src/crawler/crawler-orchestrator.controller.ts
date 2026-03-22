@@ -144,6 +144,34 @@ export class CrawlerOrchestratorController {
         }
     }
 
+    @Post(':serverId/trigger-token-check')
+    async triggerTokenCheck(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Trigger token check requested for server ${serverId}`);
+
+        try {
+            const expiredIds = this.crawlerStatusService.getStatus().tokenExpiredServerIds;
+            if (!expiredIds.includes(serverId)) {
+                throw new BadRequestException(
+                    `Serwer ${serverId} nie ma zablokowanego tokenu. Akcja dostępna tylko dla serwerów wymagających weryfikacji ciastek.`
+                );
+            }
+
+            const { serverCode, serverName } = await this.orchestratorService.triggerTokenCheck(serverId);
+            return {
+                success: true,
+                message: `Sprawdzenie działania ciastek zaplanowane na teraz dla serwera ${serverCode} (${serverName})`
+            };
+        } catch (error) {
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+            this.logger.error(`Error during trigger token check for server ${serverId}:`, error);
+            throw new InternalServerErrorException(
+                `Nie udało się wyzwolić sprawdzenia ciastek: ${error.message}`
+            );
+        }
+    }
+
     @Post(':serverId/trigger-tw-database')
     @TriggerTwDatabaseDecorator()
     async triggerTwDatabase(@Param('serverId', ParseIntPipe) serverId: number) {
@@ -420,7 +448,7 @@ export class CrawlerOrchestratorController {
     @GetCrawlerStatusDecorator()
     async getCrawlerStatus() {
         try {
-            const { activeServer, recaptchaBlockedServerIds, nextScheduledInSeconds, nextScheduledTask } = this.crawlerStatusService.getStatus();
+            const { activeServer, recaptchaBlockedServerIds, tokenExpiredServerIds, nextScheduledInSeconds, nextScheduledTask } = this.crawlerStatusService.getStatus();
 
             const recaptchaBlocked = await Promise.all(
                 recaptchaBlockedServerIds.map(async (serverId) => {
@@ -433,6 +461,19 @@ export class CrawlerOrchestratorController {
                         serverName: server.serverName,
                         detectedAt: detectedAt ?? new Date(),
                         nextCheckAt: nextCheckAt ?? null,
+                    };
+                })
+            );
+
+            const tokenExpired = await Promise.all(
+                tokenExpiredServerIds.map(async (serverId) => {
+                    const server = await this.serversService.findById(serverId);
+                    const detectedAt = this.crawlerStatusService.getTokenExpiredAt(serverId);
+                    return {
+                        serverId,
+                        serverCode: server.serverCode,
+                        serverName: server.serverName,
+                        detectedAt: detectedAt ?? new Date(),
                     };
                 })
             );
@@ -450,6 +491,7 @@ export class CrawlerOrchestratorController {
                 success: true,
                 activeServer: activeServerResponse,
                 recaptchaBlocked,
+                tokenExpired,
                 nextScheduledInSeconds,
                 nextScheduledTask,
                 upcomingTasks,

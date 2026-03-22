@@ -31,6 +31,7 @@ export class CrawlerStatusService {
     private readonly logger = new Logger(CrawlerStatusService.name);
     private activeServer: ActiveServerInfo | null = null;
     private recaptchaBlockedServers: Map<number, RecaptchaBlockedEntry> = new Map();
+    private tokenExpiredServers: Map<number, Date> = new Map();
     private nextScheduledAt: number | null = null;
     private nextScheduledTask: NextScheduledTaskInfo | null = null;
 
@@ -143,6 +144,31 @@ export class CrawlerStatusService {
     }
 
     /**
+     * Marks a server's token as expired.
+     * Prevents normal tasks from running and alerts via Slack.
+     */
+    markTokenExpired(serverId: number): void {
+        if (!this.tokenExpiredServers.has(serverId)) {
+            let operationType = 'Nieznana operacja';
+            if (this.activeServer && this.activeServer.serverId === serverId) {
+                operationType = this.activeServer.taskType;
+            }
+
+            this.slackNotificationService.sendTokenExpiredAlert({ serverId, operationType })
+                .catch(err => this.logger.error('Failed to send slack token expiration alert', err));
+        }
+
+        this.tokenExpiredServers.set(serverId, new Date());
+    }
+
+    /**
+     * Clears token expired state for a server (e.g. after successful login).
+     */
+    clearTokenExpired(serverId: number): void {
+        this.tokenExpiredServers.delete(serverId);
+    }
+
+    /**
      * Returns recaptcha-blocked entries with nextCheckAt for schedule display.
      */
     getRecaptchaBlockedEntries(): Array<{ serverId: number; detectedAt: Date; nextCheckAt: Date }> {
@@ -159,6 +185,7 @@ export class CrawlerStatusService {
     getStatus(): {
         activeServer: ActiveServerInfo | null;
         recaptchaBlockedServerIds: number[];
+        tokenExpiredServerIds: number[];
         nextScheduledInSeconds: number | null;
         nextScheduledTask: NextScheduledTaskInfo | null;
     } {
@@ -168,6 +195,7 @@ export class CrawlerStatusService {
         return {
             activeServer: this.activeServer,
             recaptchaBlockedServerIds: Array.from(this.recaptchaBlockedServers.keys()),
+            tokenExpiredServerIds: Array.from(this.tokenExpiredServers.keys()),
             nextScheduledInSeconds,
             nextScheduledTask: this.nextScheduledTask,
         };
@@ -185,5 +213,12 @@ export class CrawlerStatusService {
      */
     getRecaptchaNextCheckAt(serverId: number): Date | null {
         return this.recaptchaBlockedServers.get(serverId)?.nextCheckAt ?? null;
+    }
+
+    /**
+     * Returns detectedAt for a token-expired server.
+     */
+    getTokenExpiredAt(serverId: number): Date | null {
+        return this.tokenExpiredServers.get(serverId) ?? null;
     }
 }

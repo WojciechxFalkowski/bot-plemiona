@@ -7,6 +7,7 @@ export interface HandleCrawlerErrorContext {
     operationType: string;
     logActivity?: (evt: { eventType: CrawlerActivityEventType; message: string }) => Promise<void>;
     onRecaptchaBlocked?: (serverId: number) => void;
+    onTokenExpired?: (serverId: number) => void;
     /** Optional custom message for error case */
     errorMessage?: string;
     /** When true, do not log when classification is 'error' (e.g. proactive checks where 'error' means "page is OK") */
@@ -16,7 +17,7 @@ export interface HandleCrawlerErrorContext {
 /**
  * Classifies crawler error and handles logging/callbacks.
  * For recaptcha_blocked: calls onRecaptchaBlocked, logs RECAPTCHA_BLOCKED.
- * For session_expired: logs SESSION_EXPIRED.
+ * For session_expired: calls onTokenExpired, logs SESSION_EXPIRED.
  * For error: logs ERROR with optional message.
  *
  * @param page Playwright page (may be null)
@@ -41,12 +42,13 @@ export async function handleCrawlerErrorOperation(
         return classification;
     }
 
-    if (classification === 'session_expired') {
+    if (classification === 'session_expired' || context.errorMessage?.includes('World selector not visible') || context.errorMessage?.includes('SESSION_EXPIRED')) {
+        context.onTokenExpired?.(serverId);
         await logActivity?.({
             eventType: CrawlerActivityEventType.SESSION_EXPIRED,
-            message: 'Sesja wygasła (użytkownik zalogował się?)'
+            message: 'Sesja wygasła (użytkownik wylogowany / złe ciastka)'
         });
-        return classification;
+        return 'session_expired';
     }
 
     if (classification === 'error') {

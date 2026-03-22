@@ -797,6 +797,32 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
+     * Public method to manually trigger a token session check for a specific server
+     */
+    public async triggerTokenCheck(serverId: number): Promise<{ serverCode: string; serverName: string }> {
+        const plan = this.multiServerState.serverPlans.get(serverId);
+        if (!plan) {
+            throw new Error(`Obecnie serwer ${serverId} nie ma aktywnego planu (może być wyłączony).`);
+        }
+
+        this.logger.log(`🔧 Manually triggering token check for server ${plan.serverCode}...`);
+
+        const result = addManualTaskOperation({
+            type: 'tokenCheck',
+            serverId,
+            payload: { serverId }
+        }, {
+            multiServerState: this.multiServerState,
+            logger: this.logger
+        });
+
+        // Trigger scheduler to process it immediately
+        this.scheduleNextExecution();
+
+        return { serverCode: plan.serverCode, serverName: plan.serverName };
+    }
+
+    /**
      * Executes a task via executeServerTaskOperation with triggeredManually flag.
      * Used by all manual trigger methods to ensure execution logs and activity events are created.
      */

@@ -10,7 +10,7 @@ export interface CrawlerTask {
 /**
  * Types of manual tasks that can be queued
  */
-export type ManualTaskType = 'sendSupport' | 'fetchVillageUnits';
+export type ManualTaskType = 'sendSupport' | 'fetchVillageUnits' | 'tokenCheck';
 
 /**
  * Status of a manual task

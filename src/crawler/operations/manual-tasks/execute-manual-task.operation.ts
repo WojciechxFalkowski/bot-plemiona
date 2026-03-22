@@ -9,6 +9,7 @@ import { CrawlerService } from '@/crawler/crawler.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { CrawlerActivityEventType } from '@/crawler-activity-logs/entities/crawler-activity-log.entity';
 import { CrawlerStatusService } from '@/crawler/crawler-status.service';
+import { executeTokenCheckTaskOperation } from './execute-token-check-task.operation';
 
 /**
  * Result of executing a manual task
@@ -203,6 +204,32 @@ async function executeFetchVillageUnitsTask(
 }
 
 /**
+ * Executes a tokenCheck manual task
+ */
+async function executeTokenCheckTask(
+    task: ManualTask,
+    deps: ExecuteManualTaskDependencies
+): Promise<unknown> {
+    const { logger, serversService, credentials, plemionaCookiesService, crawlerStatusService, crawlerActivityLogsService, executionLogId } = deps;
+    
+    if (!crawlerStatusService || !crawlerActivityLogsService) {
+        throw new Error('Dependencies crawlerStatusService or crawlerActivityLogsService are missing');
+    }
+
+    await executeTokenCheckTaskOperation(task.serverId, {
+        serversService,
+        credentials,
+        plemionaCookiesService,
+        crawlerStatusService,
+        crawlerActivityLogsService,
+        logger,
+        executionLogId
+    });
+
+    return { success: true };
+}
+
+/**
  * Executes a manual task from the queue
  * 
  * @param task The manual task to execute
@@ -231,6 +258,10 @@ export async function executeManualTaskOperation(
 
             case 'fetchVillageUnits':
                 result = await executeFetchVillageUnitsTask(task, deps);
+                break;
+
+            case 'tokenCheck':
+                result = await executeTokenCheckTask(task, deps);
                 break;
 
             default:

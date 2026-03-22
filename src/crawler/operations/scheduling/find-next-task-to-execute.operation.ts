@@ -99,13 +99,13 @@ function findNextRecaptchaCheckTask(
  */
 function findNextRegularTask(
     multiServerState: MultiServerState,
-    recaptchaBlockedServerIds: Set<number>
+    blockedServerIds: Set<number>
 ): NextRegularTaskResult | null {
     let earliestTask: NextRegularTaskResult | null = null;
     let earliestTime = Number.MAX_SAFE_INTEGER;
 
     for (const [serverId, plan] of multiServerState.serverPlans) {
-        if (recaptchaBlockedServerIds.has(serverId)) continue;
+        if (blockedServerIds.has(serverId)) continue;
 
         const tasks = [
             { task: plan.constructionQueue, type: 'Construction Queue' },
@@ -158,9 +158,13 @@ export function findNextTaskToExecuteOperation(
         return recaptchaTask;
     }
 
-    // 3. Regular tasks (exclude blocked servers)
-    const recaptchaBlockedServerIds = new Set(crawlerStatusService.getStatus().recaptchaBlockedServerIds);
-    const regularTask = findNextRegularTask(multiServerState, recaptchaBlockedServerIds);
+    // 3. Regular tasks (exclude blocked servers and servers with expired tokens)
+    const status = crawlerStatusService.getStatus();
+    const blockedServerIds = new Set([
+        ...status.recaptchaBlockedServerIds,
+        ...status.tokenExpiredServerIds
+    ]);
+    const regularTask = findNextRegularTask(multiServerState, blockedServerIds);
 
     return regularTask;
 }

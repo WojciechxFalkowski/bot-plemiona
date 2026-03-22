@@ -52,4 +52,49 @@ export class SlackNotificationService {
             this.logger.error('Error sending Slack notification', error);
         }
     }
+
+    async sendTokenExpiredAlert(params: { serverId: number; accountName?: string; operationType?: string }): Promise<void> {
+        const token = this.configService.get<string>('SLACK_BOT_TOKEN');
+        const channel = this.configService.get<string>('SLACK_ALERTS_CHANNEL');
+
+        if (!token || !channel) {
+            this.logger.debug('Skipping Slack notification due to missing configuration (SLACK_BOT_TOKEN or SLACK_ALERTS_CHANNEL).');
+            return;
+        }
+
+        const { serverId, accountName, operationType } = params;
+        const accountStr = accountName ? `dla konta *${accountName}* ` : '';
+        const operationStr = operationType ? `podczas operacji: *${operationType}*` : '';
+
+        const text = `🚨 *Wygasła Sesja (Token)!* 🚨\n\nBot nie mógł załadować ekranu wyboru świata ${accountStr}na serwerze *${serverId}* ${operationStr}. Prawdopodobnie ciastka wygasły.\nZaloguj się ręcznie w przeglądarce, zaktualizuj ciastka w ustawieniach, aby kontynuować pracę.`;
+
+        try {
+            const response = await fetch(this.webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    channel: channel,
+                    text: text
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                this.logger.error(`Failed to send Slack token expiration alert. Status: ${response.status}, Body: ${errorText}`);
+                return;
+            }
+
+            const data = await response.json();
+            if (!data.ok) {
+                this.logger.error(`Slack API returned error: ${data.error}`);
+            } else {
+                this.logger.log(`Successfully sent Slack token expiration alert to ${channel}`);
+            }
+        } catch (error) {
+            this.logger.error('Error sending Slack token expiration alert', error);
+        }
+    }
 }

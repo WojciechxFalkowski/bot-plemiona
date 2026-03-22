@@ -301,6 +301,7 @@ export class TwDatabaseService {
                                         const classification = await handleCrawlerErrorOperation(tab2, await tab2.url(), {
                                             serverId,
                                             operationType: 'TW Database',
+                                            errorMessage: `Nieudany ${attackLabel}: ${row['WIOSKA WYSYŁAJĄCA']} -> ${row['WIOSKA DOCELOWA']} (Akcja: ${row['AKCJA']}). Powód: ${result.error}`,
                                             logActivity: activityContext?.logActivity,
                                             onRecaptchaBlocked: activityContext?.onRecaptchaBlocked
                                         });
@@ -326,6 +327,7 @@ export class TwDatabaseService {
                                             ? `1 atak do wysłania, nie wysłany – nie udało się zalogować do Plemion (${loginResult.error ?? 'nieznany błąd'})`
                                             : `${count} ataków do wysłania, żaden nie wysłany – nie udało się zalogować do Plemion (${loginResult.error ?? 'nieznany błąd'})`,
                                 });
+                                throw new Error(`Login and world selection failed: ${loginResult.error}`);
                             }
                         } else {
                             this.logger.warn('Could not extract world from akcja_url');

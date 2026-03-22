@@ -371,6 +371,10 @@ export async function executeServerTaskOperation(
             }
         }
 
+        if (errorMessage.includes('World selector not visible') || errorMessage.includes('SESSION_EXPIRED')) {
+            deps.crawlerStatusService.markTokenExpired(serverId);
+        }
+
         // Update next execution time for the failed task to prevent immediate retry
         updateNextExecutionTimeForFailedTaskOperation(plan, taskType, deps);
     }
