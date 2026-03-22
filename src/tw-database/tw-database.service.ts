@@ -18,6 +18,7 @@ import { computeAttackFingerprintOperation } from './operations/compute-attack-f
 import { sendFakeAttackOperation } from './operations/send-fake-attack.operation';
 import { sendBurzakAttackOperation } from './operations/send-burzak-attack.operation';
 import { clearSentInTwDatabaseOperation } from './operations/clear-sent-in-twdatabase.operation';
+import { clearOverdueInTwDatabaseOperation } from './operations/clear-overdue-in-twdatabase.operation';
 import { isOnPlemionaMainLandingPage } from './operations/is-plemiona-main-landing.operation';
 import { handleCrawlerErrorOperation } from '@/crawler/operations/utils/handle-crawler-error.operation';
 import { FejkMethodsConfigService } from './fejk-methods-config.service';
@@ -174,6 +175,13 @@ export class TwDatabaseService {
                         page,
                         logger: this.logger
                     });
+
+                    await clearOverdueInTwDatabaseOperation({
+                        page,
+                        tableData,
+                        logger: this.logger
+                    });
+
                     await clearSentInTwDatabaseOperation({
                         page,
                         attackRepo: this.attackRepo,
