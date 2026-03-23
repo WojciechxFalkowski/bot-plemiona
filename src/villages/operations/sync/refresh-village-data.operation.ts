@@ -26,7 +26,7 @@ export async function refreshVillageDataOperation(
     logger.log(`Starting village data refresh for server ${serverId}...`);
 
     const villageData = await getOverviewVillageInformationOperation(serverId, {
-        headless: true,
+        headless: process.env.NODE_ENV === 'production',
         timeoutPerPage: 15000,
         saveToDatabase: true
     }, getOverviewVillageInformationDeps);

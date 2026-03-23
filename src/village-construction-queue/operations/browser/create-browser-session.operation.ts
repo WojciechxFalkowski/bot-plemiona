@@ -31,7 +31,7 @@ export async function createBrowserSessionOperation(
     deps: CreateBrowserSessionDependencies
 ): Promise<BrowserSession> {
     const { serversService, credentials, plemionaCookiesService, logger } = deps;
-    const { browser, context, page } = await createBrowserPage({ headless: true });
+    const { browser, context, page } = await createBrowserPage({ headless: process.env.NODE_ENV === 'production' });
     const serverName = await serversService.getServerName(serverId);
     const loginResult = await AuthUtils.loginAndSelectWorld(
         page,
