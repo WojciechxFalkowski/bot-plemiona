@@ -17,7 +17,7 @@ import { ArmyTrainingStrategiesService } from '@/army-training/army-training-str
 import { PlayerVillagesService } from '@/player-villages/player-villages.service';
 import { PlayerVillageAttackStrategiesService } from '@/player-villages/player-village-attack-strategies.service';
 import * as ghostCursor from 'ghost-cursor-playwright';
-import { NotificationsService } from '@/notifications/notifications.service';
+import { SlackNotificationService } from '@/notifications/slack-notification.service';
 import { Page } from 'playwright';
 import { CrawlerExecutionLogsService } from '@/crawler-execution-logs/crawler-execution-logs.service';
 import { GlobalSettingsService } from '@/settings/global-settings.service';
@@ -94,7 +94,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly armyTrainingService: ArmyTrainingService,
         private readonly armyTrainingStrategiesService: ArmyTrainingStrategiesService,
         private readonly playerVillagesService: PlayerVillagesService,
-        private readonly notificationsService: NotificationsService,
+        private readonly slackNotificationService: SlackNotificationService,
         private readonly crawlerExecutionLogsService: CrawlerExecutionLogsService,
         private readonly crawlerActivityLogsService: CrawlerActivityLogsService,
         private readonly globalSettingsService: GlobalSettingsService,
@@ -511,10 +511,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             if (botProtectionElement) {
                 this.logger.warn(`🚨 Bot protection detected on server ${serverId} during mini attacks execution`);
 
-                // Send notification to all users about captcha detection
-                await this.notificationsService.createNotificationForAllUsers({
-                    title: 'Wykryto reCAPTCHA',
-                    body: `Bot zatrzymał się na serwerze ${serverId} podczas wykonywania ataków. Wykryto ochronę botową - wymagane odblokowanie reCAPTCHA.`
+                // Send notification to Slack about captcha detection
+                await this.slackNotificationService.sendRecaptchaAlert({
+                    serverId: serverId,
+                    operationType: 'wykonywanie ataków'
                 });
             }
         } catch (checkError) {

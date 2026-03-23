@@ -101,8 +101,8 @@ describe('VillagesService', () => {
             mockRepository.save.mockImplementation(async (v) => v);
 
             const input = [
-                { id: '1', name: 'A', coordinates: '100|100' },
-                { id: '2', name: 'B', coordinates: '200|200' },
+                { id: '1', name: 'A', coordinates: '100|100', points: 0 },
+                { id: '2', name: 'B', coordinates: '200|200', points: 0 },
             ];
 
             const result = await service.syncVillages(1, input);
@@ -119,7 +119,7 @@ describe('VillagesService', () => {
             mockRepository.save.mockImplementation(async (v) => v);
 
             const input = [
-                { id: '1', name: 'A2', coordinates: '100|101' },
+                { id: '1', name: 'A2', coordinates: '100|101', points: 0 },
             ];
 
             const result = await service.syncVillages(1, input);
@@ -136,7 +136,7 @@ describe('VillagesService', () => {
             mockRepository.save.mockImplementation(async (v) => v);
 
             const input = [
-                { id: '1', name: 'A', coordinates: '100|100' },
+                { id: '1', name: 'A', coordinates: '100|100', points: 0 },
             ];
 
             const result = await service.syncVillages(1, input);
