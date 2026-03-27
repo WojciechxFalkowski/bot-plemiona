@@ -1,9 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { ServerCrawlerPlan } from '../query/get-multi-server-status.operation';
-import { calculateRandomConstructionIntervalOperation } from '../calculations/calculate-random-construction-interval.operation';
+import type { ResolvedOrchestratorSchedulingConfig } from '@/crawler/scheduling-config/orchestrator-scheduling.types';
+import { computeRepeatDelayMsFromSpec } from '@/crawler/scheduling-config/compute-repeat-delay-ms.operation';
 
 export interface UpdateNextConstructionTimeDependencies {
     logger: Logger;
+    scheduling: ResolvedOrchestratorSchedulingConfig;
 }
 
 /**
@@ -15,7 +17,7 @@ export function updateNextConstructionTimeOperation(
     plan: ServerCrawlerPlan,
     deps: UpdateNextConstructionTimeDependencies
 ): void {
-    const delay = calculateRandomConstructionIntervalOperation();
+    const delay = computeRepeatDelayMsFromSpec(deps.scheduling.constructionQueue.repeat);
     plan.constructionQueue.nextExecutionTime = new Date(Date.now() + delay);
     plan.constructionQueue.lastExecuted = new Date();
 

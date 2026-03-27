@@ -1,9 +1,10 @@
 import { ServerCrawlerPlan } from '../query/get-multi-server-status.operation';
-import { calculateRandomMiniAttackIntervalOperation } from '../calculations/calculate-random-mini-attack-interval.operation';
+import type { ResolvedOrchestratorSchedulingConfig } from '@/crawler/scheduling-config/orchestrator-scheduling.types';
+import { computeRepeatDelayMsFromSpec } from '@/crawler/scheduling-config/compute-repeat-delay-ms.operation';
 
 export interface UpdateNextMiniAttackTimeDependencies {
-    settingsService: any;
     logger: any;
+    scheduling: ResolvedOrchestratorSchedulingConfig;
 }
 
 export async function updateNextMiniAttackTimeOperation(
@@ -11,7 +12,7 @@ export async function updateNextMiniAttackTimeOperation(
     serverId: number,
     deps: UpdateNextMiniAttackTimeDependencies
 ): Promise<void> {
-    const delay = await calculateRandomMiniAttackIntervalOperation(serverId, deps);
+    const delay = computeRepeatDelayMsFromSpec(deps.scheduling.miniAttacks.repeat);
     plan.miniAttacks.nextExecutionTime = new Date(Date.now() + delay);
     plan.miniAttacks.lastExecuted = new Date();
     plan.miniAttacks.lastAttackTime = new Date();

@@ -94,9 +94,6 @@ export * from './monitoring/start-memory-monitoring.operation';
 export * from './monitoring/log-detailed-task-schedule.operation';
 
 // Calculations operations
-export * from './calculations/calculate-random-construction-interval.operation';
-export * from './calculations/calculate-random-mini-attack-interval.operation';
-export * from './calculations/calculate-random-army-training-interval.operation';
 export * from './calculations/get-mini-attack-intervals.operation';
 export * from './calculations/get-initial-intervals.operation';
 

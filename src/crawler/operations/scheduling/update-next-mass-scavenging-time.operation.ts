@@ -1,9 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { ServerCrawlerPlan } from '../query/get-multi-server-status.operation';
-import { getInitialIntervalsOperation } from '../calculations/get-initial-intervals.operation';
+import type { ResolvedOrchestratorSchedulingConfig } from '@/crawler/scheduling-config/orchestrator-scheduling.types';
+import { computeRepeatDelayMsFromSpec } from '@/crawler/scheduling-config/compute-repeat-delay-ms.operation';
 
 export interface UpdateNextMassScavengingTimeDependencies {
     logger: Logger;
+    scheduling: ResolvedOrchestratorSchedulingConfig;
 }
 
 /**
@@ -14,9 +16,7 @@ export function updateNextMassScavengingTimeOperation(
     deps: UpdateNextMassScavengingTimeDependencies
 ): void {
     const { logger } = deps;
-    const baseMs = getInitialIntervalsOperation().massScavenging;
-    const jitterMs = Math.floor(Math.random() * 60_000);
-    const delayMs = baseMs + jitterMs;
+    const delayMs = computeRepeatDelayMsFromSpec(deps.scheduling.massScavenging.repeat);
     plan.massScavenging.nextExecutionTime = new Date(Date.now() + delayMs);
     plan.massScavenging.lastExecuted = new Date();
     logger.log(

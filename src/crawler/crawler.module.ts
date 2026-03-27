@@ -19,11 +19,12 @@ import { AdvancedScavengingModule } from '@/advanced-scavenging/advanced-scaveng
 import { CrawlerExecutionLogsModule } from '@/crawler-execution-logs/crawler-execution-logs.module';
 import { CrawlerActivityLogsModule } from '@/crawler-activity-logs/crawler-activity-logs.module';
 import { TwDatabaseModule } from '@/tw-database/tw-database.module';
+import { OrchestratorSchedulingConfigService } from './scheduling-config/orchestrator-scheduling-config.service';
 
 @Module({
   imports: [forwardRef(() => SettingsModule), ServersModule, VillagesModule, VillageConstructionQueueModule, BarbarianVillagesModule, PlemionaCookiesModule, MiniAttackStrategiesModule, ArmyTrainingModule, PlayerVillagesModule, NotificationsModule, ScavengingLimitsModule, AdvancedScavengingModule, CrawlerExecutionLogsModule, CrawlerActivityLogsModule, TwDatabaseModule],
   controllers: [CrawlerController, CrawlerOrchestratorController],
-  providers: [CrawlerService, CrawlerOrchestratorService, CrawlerStatusService],
-  exports: [CrawlerService, CrawlerOrchestratorService],
+  providers: [CrawlerService, CrawlerOrchestratorService, CrawlerStatusService, OrchestratorSchedulingConfigService],
+  exports: [CrawlerService, CrawlerOrchestratorService, OrchestratorSchedulingConfigService],
 })
 export class CrawlerModule { }

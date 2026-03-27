@@ -1,9 +1,10 @@
 import { ServerCrawlerPlan } from '../query/get-multi-server-status.operation';
-import { calculateRandomArmyTrainingIntervalOperation } from '../calculations/calculate-random-army-training-interval.operation';
+import type { ResolvedOrchestratorSchedulingConfig } from '@/crawler/scheduling-config/orchestrator-scheduling.types';
+import { computeRepeatDelayMsFromSpec } from '@/crawler/scheduling-config/compute-repeat-delay-ms.operation';
 
 export interface UpdateNextArmyTrainingTimeDependencies {
-    settingsService: any;
     logger: any;
+    scheduling: ResolvedOrchestratorSchedulingConfig;
 }
 
 export async function updateNextArmyTrainingTimeOperation(
@@ -11,7 +12,7 @@ export async function updateNextArmyTrainingTimeOperation(
     serverId: number,
     deps: UpdateNextArmyTrainingTimeDependencies
 ): Promise<void> {
-    const delay = await calculateRandomArmyTrainingIntervalOperation(serverId, deps);
+    const delay = computeRepeatDelayMsFromSpec(deps.scheduling.armyTraining.repeat);
     plan.armyTraining.nextExecutionTime = new Date(Date.now() + delay);
     plan.armyTraining.lastExecuted = new Date();
 }

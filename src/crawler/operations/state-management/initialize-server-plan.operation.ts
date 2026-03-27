@@ -1,7 +1,7 @@
 import { ServerResponseDto } from '@/servers/dto';
 import { Logger } from '@nestjs/common';
 import { ServerCrawlerPlan, CrawlerTask } from '../query/get-multi-server-status.operation';
-import { getInitialIntervalsOperation } from '../calculations/get-initial-intervals.operation';
+import { buildDefaultResolvedOrchestratorScheduling } from '@/crawler/scheduling-config/build-default-resolved-orchestrator-scheduling.operation';
 
 export interface InitializeServerPlanDependencies {
     logger: Logger;
@@ -19,7 +19,7 @@ export function initializeServerPlanOperation(
 ): ServerCrawlerPlan {
     const { logger } = deps;
     const now = new Date();
-    const intervals = getInitialIntervalsOperation();
+    const sched = buildDefaultResolvedOrchestratorScheduling();
 
     const serverPlan: ServerCrawlerPlan = {
         serverId: server.id,
@@ -27,26 +27,26 @@ export function initializeServerPlanOperation(
         serverName: server.serverName,
         isActive: server.isActive,
         constructionQueue: {
-            nextExecutionTime: new Date(now.getTime() + intervals.construction),
+            nextExecutionTime: new Date(now.getTime() + sched.constructionQueue.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'Construction Queue'
         },
         scavenging: {
-            nextExecutionTime: new Date(now.getTime() + intervals.scavenging),
+            nextExecutionTime: new Date(now.getTime() + sched.scavenging.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'Scavenging',
             optimalDelay: null
         },
         massScavenging: {
-            nextExecutionTime: new Date(now.getTime() + intervals.massScavenging),
+            nextExecutionTime: new Date(now.getTime() + sched.massScavenging.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'Mass Scavenging'
         },
         miniAttacks: {
-            nextExecutionTime: new Date(now.getTime() + intervals.miniAttack),
+            nextExecutionTime: new Date(now.getTime() + sched.miniAttacks.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'Mini Attacks',
@@ -54,7 +54,7 @@ export function initializeServerPlanOperation(
             lastAttackTime: null
         },
         playerVillageAttacks: {
-            nextExecutionTime: new Date(now.getTime() + intervals.playerVillageAttack),
+            nextExecutionTime: new Date(now.getTime() + sched.playerVillageAttacks.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'Player Village Attacks',
@@ -62,20 +62,20 @@ export function initializeServerPlanOperation(
             lastAttackTime: null
         },
         armyTraining: {
-            nextExecutionTime: new Date(now.getTime() + intervals.armyTraining),
+            nextExecutionTime: new Date(now.getTime() + sched.armyTraining.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'Army Training',
             villageId: null
         },
         twDatabase: {
-            nextExecutionTime: new Date(now.getTime() + intervals.twDatabase),
+            nextExecutionTime: new Date(now.getTime() + sched.twDatabase.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'TW Database'
         },
         accountManager: {
-            nextExecutionTime: new Date(now.getTime() + intervals.accountManager),
+            nextExecutionTime: new Date(now.getTime() + sched.accountManager.initialDelayMs),
             enabled: false,
             lastExecuted: null,
             name: 'Account Manager'

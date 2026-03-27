@@ -6,14 +6,10 @@ import { validateMiniAttacksEnabledOperation } from '../validation/validate-mini
 import { validateArmyTrainingEnabledOperation } from '../validation/validate-army-training-enabled.operation';
 import { validatePlayerVillageAttacksEnabledOperation } from '../validation/validate-player-village-attacks-enabled.operation';
 import { validateTwDatabaseEnabledOperation } from '../validation/validate-tw-database-enabled.operation';
-import { calculateRandomConstructionIntervalOperation } from '../calculations/calculate-random-construction-interval.operation';
-import { getInitialIntervalsOperation } from '../calculations/get-initial-intervals.operation';
-import { calculateRandomMiniAttackIntervalOperation } from '../calculations/calculate-random-mini-attack-interval.operation';
-import { calculateRandomArmyTrainingIntervalOperation } from '../calculations/calculate-random-army-training-interval.operation';
-import { calculateRandomTwDatabaseIntervalOperation } from '../calculations/calculate-random-tw-database-interval.operation';
 import { validateAccountManagerEnabledOperation } from '../validation/validate-account-manager-enabled.operation';
-import { calculateRandomAccountManagerIntervalOperation } from '../calculations/calculate-random-account-manager-interval.operation';
 import { validateAutoScavengingMassEnabledOperation } from '../validation/validate-auto-scavenging-mass-enabled.operation';
+import { OrchestratorSchedulingConfigService } from '@/crawler/scheduling-config/orchestrator-scheduling-config.service';
+import { getOnEnableDelayMs } from '@/crawler/scheduling-config/get-on-enable-delay-ms.operation';
 
 export interface UpdateServerTaskStatesDependencies {
     multiServerState: MultiServerState;
@@ -21,6 +17,7 @@ export interface UpdateServerTaskStatesDependencies {
     settingsService: any; // SettingsService
     encryptionService: any; // EncryptionService
     configService: any; // ConfigService
+    orchestratorSchedulingConfigService: OrchestratorSchedulingConfigService;
 }
 
 /**
@@ -33,7 +30,8 @@ export async function updateServerTaskStatesOperation(
     serverId: number,
     deps: UpdateServerTaskStatesDependencies
 ): Promise<void> {
-    const { multiServerState, logger, settingsService } = deps;
+    const { multiServerState, logger, orchestratorSchedulingConfigService } = deps;
+    const scheduling = await orchestratorSchedulingConfigService.resolveForServer(serverId);
     const plan = multiServerState.serverPlans.get(serverId);
 
     if (!plan) {
@@ -66,50 +64,49 @@ export async function updateServerTaskStatesOperation(
 
         // If task was just enabled (disabled -> enabled), set new nextExecutionTime
         if (!previousStates.constructionQueue && plan.constructionQueue.enabled) {
-            const delay = calculateRandomConstructionIntervalOperation();
+            const delay = getOnEnableDelayMs('constructionQueue', scheduling);
             plan.constructionQueue.nextExecutionTime = new Date(Date.now() + delay);
             logger.log(`🔄 Construction queue enabled for ${plan.serverCode}, next execution: ${plan.constructionQueue.nextExecutionTime.toLocaleString()}`);
         }
 
         if (!previousStates.scavenging && plan.scavenging.enabled) {
-            const defaultDelay = getInitialIntervalsOperation().scavenging;
+            const defaultDelay = getOnEnableDelayMs('scavenging', scheduling);
             plan.scavenging.nextExecutionTime = new Date(Date.now() + defaultDelay);
             logger.log(`🔄 Scavenging enabled for ${plan.serverCode}, next execution: ${plan.scavenging.nextExecutionTime.toLocaleString()}`);
         }
 
         if (!previousStates.miniAttacks && plan.miniAttacks.enabled) {
-            const delay = await calculateRandomMiniAttackIntervalOperation(serverId, { settingsService, logger });
+            const delay = getOnEnableDelayMs('miniAttacks', scheduling);
             plan.miniAttacks.nextExecutionTime = new Date(Date.now() + delay);
             logger.log(`🔄 Mini attacks enabled for ${plan.serverCode}, next execution: ${plan.miniAttacks.nextExecutionTime.toLocaleString()}`);
         }
 
         if (!previousStates.playerVillageAttacks && plan.playerVillageAttacks.enabled) {
-            // Use default 10 minute delay for player village attacks when newly enabled
-            const defaultDelay = 10 * 60 * 1000; // 10 minutes
+            const defaultDelay = getOnEnableDelayMs('playerVillageAttacks', scheduling);
             plan.playerVillageAttacks.nextExecutionTime = new Date(Date.now() + defaultDelay);
             logger.log(`🔄 Player village attacks enabled for ${plan.serverCode}, next execution: ${plan.playerVillageAttacks.nextExecutionTime.toLocaleString()}`);
         }
 
         if (!previousStates.armyTraining && plan.armyTraining.enabled) {
-            const delay = await calculateRandomArmyTrainingIntervalOperation(serverId, { settingsService, logger });
+            const delay = getOnEnableDelayMs('armyTraining', scheduling);
             plan.armyTraining.nextExecutionTime = new Date(Date.now() + delay);
             logger.log(`🔄 Army training enabled for ${plan.serverCode}, next execution: ${plan.armyTraining.nextExecutionTime.toLocaleString()}`);
         }
 
         if (!previousStates.twDatabase && plan.twDatabase.enabled) {
-            const delay = calculateRandomTwDatabaseIntervalOperation();
+            const delay = getOnEnableDelayMs('twDatabase', scheduling);
             plan.twDatabase.nextExecutionTime = new Date(Date.now() + delay);
             logger.log(`🔄 TW Database enabled for ${plan.serverCode}, next execution: ${plan.twDatabase.nextExecutionTime.toLocaleString()}`);
         }
 
         if (!previousStates.accountManager && plan.accountManager.enabled) {
-            const delay = await calculateRandomAccountManagerIntervalOperation(serverId, { settingsService, logger });
+            const delay = getOnEnableDelayMs('accountManager', scheduling);
             plan.accountManager.nextExecutionTime = new Date(Date.now() + delay);
             logger.log(`🔄 Account Manager enabled for ${plan.serverCode}, next execution: ${plan.accountManager.nextExecutionTime.toLocaleString()}`);
         }
 
         if (!previousStates.massScavenging && plan.massScavenging.enabled) {
-            const defaultDelay = getInitialIntervalsOperation().massScavenging;
+            const defaultDelay = getOnEnableDelayMs('massScavenging', scheduling);
             plan.massScavenging.nextExecutionTime = new Date(Date.now() + defaultDelay);
             logger.log(`🔄 Mass Scavenging enabled for ${plan.serverCode}, next execution: ${plan.massScavenging.nextExecutionTime.toLocaleString()}`);
         }

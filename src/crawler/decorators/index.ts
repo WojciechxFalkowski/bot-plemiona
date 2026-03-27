@@ -17,3 +17,5 @@ export { GetDefaultIntervalsDecorator } from './get-default-intervals.decorator'
 export { UpdateAccountManagerSettingDecorator } from './update-account-manager-setting.decorator';
 export { TriggerMassScavengingDecorator } from './trigger-mass-scavenging.decorator';
 export { UpdateMassScavengingSettingDecorator } from './update-mass-scavenging-setting.decorator';
+export { GetOrchestratorSchedulingConfigDecorators } from './get-orchestrator-scheduling-config.decorator';
+export { PutOrchestratorSchedulingConfigDecorators } from './put-orchestrator-scheduling-config.decorator';

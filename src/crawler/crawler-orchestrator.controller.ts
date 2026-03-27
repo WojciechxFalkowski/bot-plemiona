@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Logger, InternalServerErrorException, BadRequestException, Param, ParseIntPipe, Body } from '@nestjs/common';
+import { Controller, Post, Get, Put, Logger, InternalServerErrorException, BadRequestException, Param, ParseIntPipe, Body } from '@nestjs/common';
 import { CrawlerOrchestratorService } from './crawler-orchestrator.service';
 import { CrawlerStatusService } from './crawler-status.service';
 import { ServersService } from '@/servers/servers.service';
@@ -24,9 +24,14 @@ import {
     GetStatusDecorator,
     GetCrawlerStatusDecorator,
     GetDefaultIntervalsDecorator,
-    UpdateAccountManagerSettingDecorator
+    UpdateAccountManagerSettingDecorator,
+    GetOrchestratorSchedulingConfigDecorators,
+    PutOrchestratorSchedulingConfigDecorators
 } from './decorators';
 import { EncryptionService } from '@/utils/encryption/encryption.service';
+import { OrchestratorSchedulingConfigService } from './scheduling-config/orchestrator-scheduling-config.service';
+import { PutOrchestratorSchedulingConfigDto } from './dto/put-orchestrator-scheduling-config.dto';
+import type { OrchestratorSchedulingConfigJson } from './scheduling-config/orchestrator-scheduling.types';
 
 @ApiTags('Crawler Orchestrator')
 @Controller('crawler-orchestrator')
@@ -38,7 +43,8 @@ export class CrawlerOrchestratorController {
         private readonly settingsService: SettingsService,
         private readonly encryptionService: EncryptionService,
         private readonly crawlerStatusService: CrawlerStatusService,
-        private readonly serversService: ServersService
+        private readonly serversService: ServersService,
+        private readonly orchestratorSchedulingConfigService: OrchestratorSchedulingConfigService
     ) { }
 
     @Post(':serverId/trigger-scavenging')
@@ -588,5 +594,57 @@ export class CrawlerOrchestratorController {
             this.logger.error('Error getting default intervals:', error);
             throw new InternalServerErrorException(`Failed to get default intervals: ${error.message}`);
         }
+    }
+
+    @Get(':serverId/scheduling-config')
+    @GetOrchestratorSchedulingConfigDecorators()
+    async getOrchestratorSchedulingConfig(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Scheduling config requested for server ${serverId}`);
+        try {
+            const { storedPatch, effectivePatchMinutes } =
+                await this.orchestratorSchedulingConfigService.getSchedulingConfigForApi(serverId);
+            return {
+                success: true,
+                data: {
+                    storedPatch,
+                    effectivePatchMinutes,
+                },
+            };
+        } catch (error) {
+            this.logger.error(`Error getting scheduling config for server ${serverId}:`, error);
+            throw new InternalServerErrorException(
+                `Failed to get scheduling config: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+    }
+
+    @Put(':serverId/scheduling-config')
+    @PutOrchestratorSchedulingConfigDecorators()
+    async putOrchestratorSchedulingConfig(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: PutOrchestratorSchedulingConfigDto,
+    ) {
+        this.logger.log(`Scheduling config update for server ${serverId}`);
+        try {
+            const patch = this.mapPutDtoToPatch(dto);
+            await this.orchestratorSchedulingConfigService.saveSchedulingJson(serverId, patch);
+            await this.orchestratorService.updateServerTaskStates(serverId);
+            return {
+                success: true,
+                message: `Konfiguracja harmonogramu zapisana dla serwera ${serverId}.`,
+            };
+        } catch (error) {
+            this.logger.error(`Error saving scheduling config for server ${serverId}:`, error);
+            throw new InternalServerErrorException(
+                `Failed to save scheduling config: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Strips undefined nested fields and maps DTO to JSON patch shape.
+     */
+    private mapPutDtoToPatch(dto: PutOrchestratorSchedulingConfigDto): OrchestratorSchedulingConfigJson {
+        return JSON.parse(JSON.stringify(dto)) as OrchestratorSchedulingConfigJson;
     }
 } 

@@ -24,6 +24,7 @@ import { updateNextExecutionTimeForFailedTaskOperation, UpdateNextExecutionTimeF
 import { executeManualTaskOperation, ExecuteManualTaskDependencies } from '../manual-tasks/execute-manual-task.operation';
 import { executeRecaptchaCheckTaskOperation } from './execute-recaptcha-check-task.operation';
 import { NextTaskResult } from '../scheduling/find-next-task-to-execute.operation';
+import { OrchestratorSchedulingConfigService } from '@/crawler/scheduling-config/orchestrator-scheduling-config.service';
 
 export interface ExecuteServerTaskDependencies
     extends ExecuteConstructionQueueTaskDependencies,
@@ -34,12 +35,12 @@ export interface ExecuteServerTaskDependencies
     ExecuteTwDatabaseTaskDependencies,
     ExecuteAccountManagerTaskDependencies,
     ExecuteMassScavengingTaskDependencies,
-    UpdateNextConstructionTimeDependencies,
+    Omit<UpdateNextConstructionTimeDependencies, 'scheduling'>,
     Omit<UpdateNextScavengingTimeDependencies, 'scavengingTimeData'>,
-    UpdateNextMiniAttackTimeDependencies,
-    UpdateNextPlayerVillageAttackTimeDependencies,
-    UpdateNextArmyTrainingTimeDependencies,
-    UpdateNextAccountManagerTimeDependencies,
+    Omit<UpdateNextMiniAttackTimeDependencies, 'scheduling'>,
+    Omit<UpdateNextPlayerVillageAttackTimeDependencies, 'scheduling'>,
+    Omit<UpdateNextArmyTrainingTimeDependencies, 'scheduling'>,
+    Omit<UpdateNextAccountManagerTimeDependencies, 'scheduling'>,
     UpdateNextExecutionTimeForFailedTaskDependencies,
     Omit<ExecuteManualTaskDependencies, 'multiServerState' | 'logger'> {
     multiServerState: MultiServerState;
@@ -48,6 +49,7 @@ export interface ExecuteServerTaskDependencies
     crawlerStatusService: CrawlerStatusService;
     crawlerService: any; // CrawlerService - need to get scavengingTimeData
     logger: Logger;
+    orchestratorSchedulingConfigService: OrchestratorSchedulingConfigService;
 }
 
 /**
@@ -192,6 +194,8 @@ export async function executeServerTaskOperation(
         return;
     }
 
+    const scheduling = await deps.orchestratorSchedulingConfigService.resolveForServer(serverId);
+
     const runId = `${taskType.replace(/\s+/g, '_')}-${plan.serverCode}-${Date.now()}`;
     const startTs = Date.now();
     const startedAt = new Date(startTs);
@@ -287,7 +291,7 @@ export async function executeServerTaskOperation(
         switch (taskType) {
             case 'Construction Queue':
                 await executeConstructionQueueTaskOperation(serverId, taskDepsWithActivity);
-                updateNextConstructionTimeOperation(plan, deps);
+                updateNextConstructionTimeOperation(plan, { logger: deps.logger, scheduling });
                 break;
             case 'Scavenging':
                 await executeScavengingTaskOperation(serverId, taskDepsWithActivity);
@@ -299,27 +303,27 @@ export async function executeServerTaskOperation(
                 break;
             case 'Mini Attacks':
                 await executeMiniAttacksTaskOperation(serverId, taskDepsWithActivity);
-                await updateNextMiniAttackTimeOperation(plan, serverId, deps);
+                await updateNextMiniAttackTimeOperation(plan, serverId, { logger: deps.logger, scheduling });
                 break;
             case 'Player Village Attacks':
                 await executePlayerVillageAttacksTaskOperation(serverId, taskDepsWithActivity);
-                await updateNextPlayerVillageAttackTimeOperation(plan, serverId, deps);
+                await updateNextPlayerVillageAttackTimeOperation(plan, serverId, { logger: deps.logger, scheduling });
                 break;
             case 'Army Training':
                 await executeArmyTrainingTaskOperation(serverId, taskDepsWithActivity);
-                await updateNextArmyTrainingTimeOperation(plan, serverId, deps);
+                await updateNextArmyTrainingTimeOperation(plan, serverId, { logger: deps.logger, scheduling });
                 break;
             case 'TW Database':
                 await executeTwDatabaseTaskOperation(serverId, taskDepsWithActivity);
-                updateNextTwDatabaseTimeOperation(plan);
+                updateNextTwDatabaseTimeOperation(plan, { scheduling });
                 break;
             case 'Account Manager':
                 await executeAccountManagerTaskOperation(serverId, taskDepsWithActivity);
-                await updateNextAccountManagerTimeOperation(plan, serverId, deps);
+                await updateNextAccountManagerTimeOperation(plan, serverId, { logger: deps.logger, scheduling });
                 break;
             case 'Mass Scavenging':
                 await executeMassScavengingTaskOperation(serverId, taskDepsWithActivity);
-                updateNextMassScavengingTimeOperation(plan, { logger: deps.logger });
+                updateNextMassScavengingTimeOperation(plan, { logger: deps.logger, scheduling });
                 break;
             default:
                 logger.error(`❌ Unknown task type: ${taskType}`);

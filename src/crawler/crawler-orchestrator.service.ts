@@ -31,11 +31,6 @@ import { logDetailedTaskScheduleOperation } from './operations/monitoring/log-de
 import { refreshActiveServersOperation } from './operations/state-management/refresh-active-servers.operation';
 import { initializeServerPlanOperation } from './operations/state-management/initialize-server-plan.operation';
 import { initializeMultiServerStateOperation } from './operations/state-management/initialize-multi-server-state.operation';
-import { updateNextConstructionTimeOperation } from './operations/scheduling/update-next-construction-time.operation';
-import { updateNextScavengingTimeOperation } from './operations/scheduling/update-next-scavenging-time.operation';
-import { updateNextMiniAttackTimeOperation } from './operations/scheduling/update-next-mini-attack-time.operation';
-import { updateNextArmyTrainingTimeOperation } from './operations/scheduling/update-next-army-training-time.operation';
-import { updateNextPlayerVillageAttackTimeOperation } from './operations/scheduling/update-next-player-village-attack-time.operation';
 import { updateNextExecutionTimeForFailedTaskOperation } from './operations/scheduling/update-next-execution-time-for-failed-task.operation';
 import { getMultiServerStatusOperation } from './operations/query/get-multi-server-status.operation';
 import { executeServerTaskOperation } from './operations/execution/execute-server-task.operation';
@@ -46,11 +41,11 @@ import { executeArmyTrainingTaskOperation } from './operations/execution/execute
 import { executeTwDatabaseTaskOperation } from './operations/execution/execute-tw-database-task.operation';
 import { executePlayerVillageAttacksTaskOperation } from './operations/execution/execute-player-village-attacks-task.operation';
 import { validateOrchestratorEnabledOperation } from './operations/validation/validate-orchestrator-enabled.operation';
-import { getInitialIntervalsOperation } from './operations/calculations/get-initial-intervals.operation';
 import { TwDatabaseService } from '@/tw-database/tw-database.service';
 import { CrawlerActivityLogsService } from '@/crawler-activity-logs/crawler-activity-logs.service';
 import { EncryptionService } from '@/utils/encryption/encryption.service';
 import { CrawlerStatusService } from './crawler-status.service';
+import { OrchestratorSchedulingConfigService } from './scheduling-config/orchestrator-scheduling-config.service';
 
 @Injectable()
 export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy {
@@ -64,21 +59,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     private memoryMonitoringTimer: NodeJS.Timeout | null = null;
 
     // Configuration constants
-    private readonly MIN_CONSTRUCTION_INTERVAL = 1000 * 60 * 5; // 5 minutes
-    private readonly MAX_CONSTRUCTION_INTERVAL = 1000 * 60 * 8; // 8 minutes
     private readonly BATCH_EXECUTION_DELAY = 10000; // 10 seconds between tasks in batch
     private readonly PROXIMITY_THRESHOLD = 2 * 60 * 1000; // 2 minutes in milliseconds
     private readonly MONITORING_INTERVAL = 3 * 60 * 1000; // 3 minutes in milliseconds
     private readonly SERVER_ROTATION_DELAY = 5000; // 5 seconds between servers
-
-    // Mini attacks configuration
-    private readonly MIN_MINI_ATTACK_INTERVAL = 1000 * 60 * 10; // 10 minutes
-    private readonly MAX_MINI_ATTACK_INTERVAL = 1000 * 60 * 15; // 15 minutes
-
-    // Army training configuration - will be loaded from settings with defaults
-    private readonly DEFAULT_MIN_ARMY_TRAINING_INTERVAL = 1000 * 60 * 10; // 10 minutes
-    private readonly DEFAULT_MAX_ARMY_TRAINING_INTERVAL = 1000 * 60 * 15; // 15 minutes
-
 
 
     constructor(
@@ -100,7 +84,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         private readonly globalSettingsService: GlobalSettingsService,
         private readonly twDatabaseService: TwDatabaseService,
         private readonly encryptionService: EncryptionService,
-        private readonly crawlerStatusService: CrawlerStatusService
+        private readonly crawlerStatusService: CrawlerStatusService,
+        private readonly orchestratorSchedulingConfigService: OrchestratorSchedulingConfigService
     ) {
         // Initialize multi-server state
         this.initializeMultiServerState();
@@ -269,7 +254,8 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 logger: this.logger,
                 settingsService: this.settingsService,
                 encryptionService: this.encryptionService,
-                configService: this.configService
+                configService: this.configService,
+                orchestratorSchedulingConfigService: this.orchestratorSchedulingConfigService
             });
             this.logDetailedTaskSchedule();
             this.scheduleNextExecution();
@@ -439,7 +425,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
                 armyTrainingService: this.armyTrainingService,
                 armyTrainingStrategiesService: this.armyTrainingStrategiesService,
                 twDatabaseService: this.twDatabaseService,
-                settingsService: this.settingsService,
+                orchestratorSchedulingConfigService: this.orchestratorSchedulingConfigService,
                 logger: this.logger
             }, nextTaskResult);
         } finally {
@@ -544,61 +530,11 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     }
 
     /**
-     * Updates next construction queue execution time
-     */
-    private updateNextConstructionTime(plan: ServerCrawlerPlan): void {
-        updateNextConstructionTimeOperation(plan, {
-            logger: this.logger
-        });
-    }
-
-    /**
-     * Updates next scavenging execution time based on optimal calculation
-     */
-    private async updateNextScavengingTime(plan: ServerCrawlerPlan): Promise<void> {
-        const scavengingData = this.crawlerService.getScavengingTimeData();
-        updateNextScavengingTimeOperation(plan, {
-            scavengingTimeData: scavengingData,
-            logger: this.logger
-        });
-    }
-
-    /**
-     * Updates next mini attacks execution time
-     */
-    private async updateNextMiniAttackTime(plan: ServerCrawlerPlan): Promise<void> {
-        await updateNextMiniAttackTimeOperation(plan, plan.serverId, {
-            settingsService: this.settingsService,
-            logger: this.logger
-        });
-    }
-
-    /**
      * Executes player village attacks for a server
      */
     private async executePlayerVillageAttacksTask(serverId: number): Promise<void> {
         await executePlayerVillageAttacksTaskOperation(serverId, {
             playerVillagesService: this.playerVillagesService,
-            logger: this.logger
-        });
-    }
-
-    /**
-     * Updates next player village attacks execution time
-     */
-    private async updateNextPlayerVillageAttackTime(plan: ServerCrawlerPlan): Promise<void> {
-        await updateNextPlayerVillageAttackTimeOperation(plan, plan.serverId, {
-            settingsService: this.settingsService,
-            logger: this.logger
-        });
-    }
-
-    /**
-     * Updates next army training execution time
-     */
-    private async updateNextArmyTrainingTime(plan: ServerCrawlerPlan): Promise<void> {
-        await updateNextArmyTrainingTimeOperation(plan, plan.serverId, {
-            settingsService: this.settingsService,
             logger: this.logger
         });
     }
@@ -906,7 +842,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
             armyTrainingService: this.armyTrainingService,
             armyTrainingStrategiesService: this.armyTrainingStrategiesService,
             twDatabaseService: this.twDatabaseService,
-            settingsService: this.settingsService,
+            orchestratorSchedulingConfigService: this.orchestratorSchedulingConfigService,
             logger: this.logger
         };
 
@@ -1076,17 +1012,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         armyTraining: number;
         twDatabase: number;
     } {
-        const intervals = getInitialIntervalsOperation();
-
-        return {
-            constructionQueue: intervals.construction,
-            scavenging: intervals.scavenging,
-            massScavenging: intervals.massScavenging,
-            miniAttacks: intervals.miniAttack,
-            playerVillageAttacks: intervals.playerVillageAttack,
-            armyTraining: intervals.armyTraining,
-            twDatabase: intervals.twDatabase
-        };
+        return this.orchestratorSchedulingConfigService.getDefaultIntervalSnapshotMs();
     }
 
     // ========================

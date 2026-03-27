@@ -1,9 +1,10 @@
 import { ServerCrawlerPlan } from '../query/get-multi-server-status.operation';
-import { calculateRandomMiniAttackIntervalOperation } from '../calculations/calculate-random-mini-attack-interval.operation';
+import type { ResolvedOrchestratorSchedulingConfig } from '@/crawler/scheduling-config/orchestrator-scheduling.types';
+import { computeRepeatDelayMsFromSpec } from '@/crawler/scheduling-config/compute-repeat-delay-ms.operation';
 
 export interface UpdateNextPlayerVillageAttackTimeDependencies {
-    settingsService: any;
     logger: any;
+    scheduling: ResolvedOrchestratorSchedulingConfig;
 }
 
 export async function updateNextPlayerVillageAttackTimeOperation(
@@ -11,7 +12,7 @@ export async function updateNextPlayerVillageAttackTimeOperation(
     serverId: number,
     deps: UpdateNextPlayerVillageAttackTimeDependencies
 ): Promise<void> {
-    const delay = await calculateRandomMiniAttackIntervalOperation(serverId, deps);
+    const delay = computeRepeatDelayMsFromSpec(deps.scheduling.playerVillageAttacks.repeat);
     plan.playerVillageAttacks.nextExecutionTime = new Date(Date.now() + delay);
     plan.playerVillageAttacks.lastExecuted = new Date();
     plan.playerVillageAttacks.lastAttackTime = new Date();
