@@ -2,6 +2,7 @@
 export * from './config-management/get-village-units-config.operation';
 export * from './config-management/update-village-units-config.operation';
 export * from './config-management/get-server-villages-units-config.operation';
+export * from './config-management/batch-update-units-config.operation';
 
 // Validation operations
 export * from './validation/validate-at-least-one-unit-enabled.operation';

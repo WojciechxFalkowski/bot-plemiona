@@ -12,6 +12,7 @@ import { VILLAGE_SCAVENGING_UNITS_CONFIG_ENTITY_REPOSITORY } from './advanced-sc
 import { CrawlerService } from '@/crawler/crawler.service';
 import { getVillageUnitsConfigOperation } from './operations/config-management/get-village-units-config.operation';
 import { updateVillageUnitsConfigOperation } from './operations/config-management/update-village-units-config.operation';
+import { batchUpdateUnitsConfigOperation } from './operations/config-management/batch-update-units-config.operation';
 import { getServerVillagesUnitsConfigOperation } from './operations/config-management/get-server-villages-units-config.operation';
 import { testLoginOperation } from './operations/browser/test-login.operation';
 import { triggerScavengingForVillageOperation } from './operations/scavenging/trigger-scavenging-for-village.operation';
@@ -111,22 +112,11 @@ export class AdvancedScavengingService {
     serverId: number,
     units: { spear?: boolean; sword?: boolean; axe?: boolean; archer?: boolean; light?: boolean; marcher?: boolean; heavy?: boolean },
   ): Promise<{ updatedCount: number; skippedCount: number }> {
-    const configs = await this.getServerVillagesUnitsConfig(serverId);
-    let updatedCount = 0;
-    let skippedCount = 0;
-
-    for (const config of configs) {
-      try {
-        const updateDto = { units };
-        await this.updateVillageUnitsConfig(serverId, config.villageId, updateDto);
-        updatedCount++;
-      } catch {
-        skippedCount++;
-      }
-    }
-
-    this.logger.log(`Batch update for server ${serverId}: ${updatedCount} updated, ${skippedCount} skipped`);
-    return { updatedCount, skippedCount };
+    return batchUpdateUnitsConfigOperation(serverId, units, {
+      configRepository: this.configRepository,
+      villagesService: this.villagesService,
+      logger: this.logger,
+    });
   }
 
   /**

@@ -1,4 +1,4 @@
-﻿import { Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
 import { VillagesService } from '@/villages/villages.service';
 import { VillageScavengingUnitsConfigEntity } from '../../entities/village-scavenging-units-config.entity';
@@ -91,30 +91,15 @@ export async function updateVillageUnitsConfigOperation(
 
   validateAtLeastOneUnitEnabledOperation(updatedUnits);
 
-  await configRepository.save(config);
-
-  const refreshedConfig = await configRepository.findOne({
-    where: { villageId },
-  });
-
-  if (refreshedConfig) {
-    const refreshedUnits = mapEntityToUnitsConfigOperation(refreshedConfig);
-    
-    return mapConfigToVillageUnitsConfigOperation({
-      villageId: village.id,
-      villageName: village.name,
-      serverId: village.serverId,
-      isAutoScavengingEnabled: village.isAutoScavengingEnabled,
-      units: refreshedUnits,
-    });
-  }
+  const savedConfig = await configRepository.save(config);
+  const unitsAfterSave = mapEntityToUnitsConfigOperation(savedConfig);
 
   return mapConfigToVillageUnitsConfigOperation({
     villageId: village.id,
     villageName: village.name,
     serverId: village.serverId,
     isAutoScavengingEnabled: village.isAutoScavengingEnabled,
-    units: updatedUnits,
+    units: unitsAfterSave,
   });
 }
 
