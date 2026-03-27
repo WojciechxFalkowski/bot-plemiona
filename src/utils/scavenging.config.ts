@@ -70,6 +70,20 @@ export const unitSettings: Record<ScavengingUnit, {
 // Kolejność jednostek zgodna z interfejsem gry i skryptem JS
 export const unitOrder: ScavengingUnit[] = ['spear', 'sword', 'axe', 'archer', 'light', 'marcher', 'heavy'];
 
+/**
+ * Polish labels used in Account Manager combined table / units overview (img data-title).
+ * Used when aggregating scraped troop counts for mass scavenging.
+ */
+export const scavengingUnitPolishColumnTitle: Record<ScavengingUnit, string> = {
+	spear: 'Pikinier',
+	sword: 'Miecznik',
+	axe: 'Topornik',
+	archer: 'Łucznik',
+	light: 'Lekki kawalerzysta',
+	marcher: 'Łucznik na koniu',
+	heavy: 'Ciężki kawalerzysta',
+};
+
 // Współczynniki "packs" dla poziomów zbieractwa (wg skryptu JS)
 // Klucz: poziom (1-4), Wartość: współczynnik proporcjonalności
 export const levelPacks: Record<number, number> = {

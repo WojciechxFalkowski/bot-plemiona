@@ -74,6 +74,15 @@ export function logDetailedTaskScheduleOperation(
             {
                 serverCode: plan.serverCode,
                 serverName: plan.serverName,
+                taskType: 'Mass Scavenging',
+                enabled: plan.massScavenging.enabled,
+                nextExecution: plan.massScavenging.nextExecutionTime,
+                timeUntilExecution: plan.massScavenging.nextExecutionTime.getTime() - now.getTime(),
+                lastExecuted: plan.massScavenging.lastExecuted
+            },
+            {
+                serverCode: plan.serverCode,
+                serverName: plan.serverName,
                 taskType: 'Mini Attacks',
                 enabled: plan.miniAttacks.enabled,
                 nextExecution: plan.miniAttacks.nextExecutionTime,

@@ -7,6 +7,7 @@ import { SettingsService } from '@/settings/settings.service';
 import { SettingsKey } from '@/settings/settings-keys.enum';
 import {
     TriggerScavengingDecorator,
+    TriggerMassScavengingDecorator,
     TriggerConstructionQueueDecorator,
     TriggerMiniAttacksDecorator,
     TriggerArmyTrainingDecorator,
@@ -16,6 +17,7 @@ import {
     UpdateConstructionQueueSettingDecorator,
     UpdateMiniAttacksSettingDecorator,
     UpdateScavengingSettingDecorator,
+    UpdateMassScavengingSettingDecorator,
     UpdateArmyTrainingSettingDecorator,
     UpdateTwDatabaseSettingDecorator,
     GetTwDatabaseSettingDecorator,
@@ -61,6 +63,31 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error during manual scavenging trigger for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Scavenging process failed: ${error.message}`);
+        }
+    }
+
+    @Post(':serverId/trigger-mass-scavenging')
+    @TriggerMassScavengingDecorator()
+    async triggerMassScavenging(@Param('serverId', ParseIntPipe) serverId: number) {
+        this.logger.log(`Manual mass scavenging trigger requested for server ${serverId}`);
+
+        try {
+            const result = await this.orchestratorService.triggerMassScavenging(serverId);
+
+            if (!result.massScavengingEnabled) {
+                return {
+                    success: true,
+                    message: `Masowe zbieractwo jest wyłączone dla serwera ${result.serverCode} (${result.serverName}). Bot nie został uruchomiony.`
+                };
+            }
+
+            return {
+                success: true,
+                message: `Masowe zbieractwo zostało pomyślnie uruchomione dla serwera ${result.serverCode} (${result.serverName})`
+            };
+        } catch (error) {
+            this.logger.error(`Error during manual mass scavenging trigger for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Mass scavenging process failed: ${error.message}`);
         }
     }
 
@@ -301,6 +328,33 @@ export class CrawlerOrchestratorController {
         } catch (error) {
             this.logger.error(`Error updating scavenging setting for server ${serverId}:`, error);
             throw new InternalServerErrorException(`Failed to update scavenging setting: ${error.message}`);
+        }
+    }
+
+    @Post('settings/:serverId/scavenging-mass')
+    @UpdateMassScavengingSettingDecorator()
+    async updateMassScavengingSetting(
+        @Param('serverId', ParseIntPipe) serverId: number,
+        @Body() dto: { value: boolean }
+    ) {
+        this.logger.log(`Updating mass scavenging setting for server ${serverId}: value=${dto.value}`);
+
+        try {
+            await this.settingsService.setSetting(serverId, SettingsKey.AUTO_SCAVENGING_MASS_ENABLED, { value: dto.value });
+            await this.orchestratorService.updateServerTaskStates(serverId);
+
+            return {
+                success: true,
+                message: `Ustawienie masowego zbieractwa zaktualizowane na ${dto.value} dla serwera ${serverId}`,
+                setting: {
+                    serverId,
+                    key: SettingsKey.AUTO_SCAVENGING_MASS_ENABLED,
+                    value: dto.value
+                }
+            };
+        } catch (error) {
+            this.logger.error(`Error updating mass scavenging setting for server ${serverId}:`, error);
+            throw new InternalServerErrorException(`Failed to update mass scavenging setting: ${error.message}`);
         }
     }
 

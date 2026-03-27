@@ -50,6 +50,7 @@ export interface ServerCrawlerPlan {
     scavenging: CrawlerTask & {
         optimalDelay: number | null;
     };
+    massScavenging: CrawlerTask;
     miniAttacks: CrawlerTask & {
         nextTargetIndex: number;
         lastAttackTime: Date | null;
@@ -122,6 +123,11 @@ export interface MultiServerStatusResponse {
                 lastExecuted: Date | null;
                 optimalDelay: number | null;
             };
+            massScavenging: {
+                enabled: boolean;
+                nextExecution: Date;
+                lastExecuted: Date | null;
+            };
             miniAttacks: {
                 enabled: boolean;
                 nextExecution: Date;
@@ -181,6 +187,11 @@ export function getMultiServerStatusOperation(
                 nextExecution: plan.scavenging.nextExecutionTime,
                 lastExecuted: plan.scavenging.lastExecuted,
                 optimalDelay: plan.scavenging.optimalDelay
+            },
+            massScavenging: {
+                enabled: plan.massScavenging.enabled,
+                nextExecution: plan.massScavenging.nextExecutionTime,
+                lastExecuted: plan.massScavenging.lastExecuted
             },
             miniAttacks: {
                 enabled: plan.miniAttacks.enabled,

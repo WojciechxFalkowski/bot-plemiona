@@ -15,3 +15,5 @@ export { GetStatusDecorator } from './get-status.decorator';
 export { GetCrawlerStatusDecorator } from './get-crawler-status.decorator';
 export { GetDefaultIntervalsDecorator } from './get-default-intervals.decorator';
 export { UpdateAccountManagerSettingDecorator } from './update-account-manager-setting.decorator';
+export { TriggerMassScavengingDecorator } from './trigger-mass-scavenging.decorator';
+export { UpdateMassScavengingSettingDecorator } from './update-mass-scavenging-setting.decorator';

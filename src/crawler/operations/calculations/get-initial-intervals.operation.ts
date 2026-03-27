@@ -4,6 +4,8 @@
 export interface InitialIntervals {
     construction: number;
     scavenging: number;
+    /** Mass scavenging (scavenge_mass) default spacing */
+    massScavenging: number;
     miniAttack: number;
     playerVillageAttack: number;
     armyTraining: number;
@@ -23,6 +25,7 @@ export function getInitialIntervalsOperation(): InitialIntervals {
     return {
         construction: 10000, // 10 seconds
         scavenging: 30000, // 30 seconds
+        massScavenging: 20 * 60 * 1000, // 20 minutes
         miniAttack: 20000, // 20 seconds
         playerVillageAttack: 5000, // 5 seconds
         armyTraining: 30000, // 30 seconds

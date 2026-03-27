@@ -11,6 +11,7 @@ import { executePlayerVillageAttacksTaskOperation, ExecutePlayerVillageAttacksTa
 import { executeArmyTrainingTaskOperation, ExecuteArmyTrainingTaskDependencies } from './execute-army-training-task.operation';
 import { executeTwDatabaseTaskOperation, ExecuteTwDatabaseTaskDependencies } from './execute-tw-database-task.operation';
 import { executeAccountManagerTaskOperation, ExecuteAccountManagerTaskDependencies } from './execute-account-manager-task.operation';
+import { executeMassScavengingTaskOperation, ExecuteMassScavengingTaskDependencies } from './execute-mass-scavenging-task.operation';
 import { updateNextConstructionTimeOperation, UpdateNextConstructionTimeDependencies } from '../scheduling/update-next-construction-time.operation';
 import { updateNextScavengingTimeOperation, UpdateNextScavengingTimeDependencies } from '../scheduling/update-next-scavenging-time.operation';
 import { updateNextMiniAttackTimeOperation, UpdateNextMiniAttackTimeDependencies } from '../scheduling/update-next-mini-attack-time.operation';
@@ -18,6 +19,7 @@ import { updateNextPlayerVillageAttackTimeOperation, UpdateNextPlayerVillageAtta
 import { updateNextArmyTrainingTimeOperation, UpdateNextArmyTrainingTimeDependencies } from '../scheduling/update-next-army-training-time.operation';
 import { updateNextTwDatabaseTimeOperation } from '../scheduling/update-next-tw-database-time.operation';
 import { updateNextAccountManagerTimeOperation, UpdateNextAccountManagerTimeDependencies } from '../scheduling/update-next-account-manager-time.operation';
+import { updateNextMassScavengingTimeOperation } from '../scheduling/update-next-mass-scavenging-time.operation';
 import { updateNextExecutionTimeForFailedTaskOperation, UpdateNextExecutionTimeForFailedTaskDependencies } from '../scheduling/update-next-execution-time-for-failed-task.operation';
 import { executeManualTaskOperation, ExecuteManualTaskDependencies } from '../manual-tasks/execute-manual-task.operation';
 import { executeRecaptchaCheckTaskOperation } from './execute-recaptcha-check-task.operation';
@@ -31,6 +33,7 @@ export interface ExecuteServerTaskDependencies
     ExecuteArmyTrainingTaskDependencies,
     ExecuteTwDatabaseTaskDependencies,
     ExecuteAccountManagerTaskDependencies,
+    ExecuteMassScavengingTaskDependencies,
     UpdateNextConstructionTimeDependencies,
     Omit<UpdateNextScavengingTimeDependencies, 'scavengingTimeData'>,
     UpdateNextMiniAttackTimeDependencies,
@@ -313,6 +316,10 @@ export async function executeServerTaskOperation(
             case 'Account Manager':
                 await executeAccountManagerTaskOperation(serverId, taskDepsWithActivity);
                 await updateNextAccountManagerTimeOperation(plan, serverId, deps);
+                break;
+            case 'Mass Scavenging':
+                await executeMassScavengingTaskOperation(serverId, taskDepsWithActivity);
+                updateNextMassScavengingTimeOperation(plan, { logger: deps.logger });
                 break;
             default:
                 logger.error(`❌ Unknown task type: ${taskType}`);

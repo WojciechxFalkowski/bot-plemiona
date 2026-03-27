@@ -20,6 +20,9 @@ export function updateNextExecutionTimeForFailedTaskOperation(
         case 'Scavenging':
             plan.scavenging.nextExecutionTime = new Date(Date.now() + retryDelay);
             break;
+        case 'Mass Scavenging':
+            plan.massScavenging.nextExecutionTime = new Date(Date.now() + retryDelay);
+            break;
         case 'Mini Attacks':
             plan.miniAttacks.nextExecutionTime = new Date(Date.now() + retryDelay);
             break;

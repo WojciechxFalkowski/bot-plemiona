@@ -39,6 +39,12 @@ export function initializeServerPlanOperation(
             name: 'Scavenging',
             optimalDelay: null
         },
+        massScavenging: {
+            nextExecutionTime: new Date(now.getTime() + intervals.massScavenging),
+            enabled: false,
+            lastExecuted: null,
+            name: 'Mass Scavenging'
+        },
         miniAttacks: {
             nextExecutionTime: new Date(now.getTime() + intervals.miniAttack),
             enabled: false,

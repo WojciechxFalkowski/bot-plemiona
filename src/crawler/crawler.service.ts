@@ -34,6 +34,7 @@ import { updateVillageStateAfterDispatchOperation } from './operations/scavengin
 import { minutesToMillisecondsOperation } from './operations/utilities/minutes-to-milliseconds.operation';
 import { processVillageScavengingOperation } from './operations/scavenging/process-village-scavenging.operation';
 import { performScavengingOperation } from './operations/scavenging/perform-scavenging.operation';
+import { performMassScavengingOperation } from './operations/scavenging-mass/perform-mass-scavenging.operation';
 import { performScavengingForVillageOperation } from './operations/scavenging/perform-scavenging-for-village.operation';
 import { performAttackOperation, AttackConfig } from './operations/attacks/perform-attack.operation';
 import { performSupportOperation } from './operations/attacks/perform-support.operation';
@@ -317,6 +318,31 @@ export class CrawlerService implements OnModuleInit, OnModuleDestroy {
             scavengingLimitsService: this.scavengingLimitsService,
             settingsService: this.settingsService,
             scavengingTimeData: this.scavengingTimeData,
+            activityContext
+        });
+    }
+
+    /**
+     * Premium mass scavenging flow (mode=scavenge_mass). Does not modify classic scavenging.
+     */
+    public async performMassScavenging(
+        serverId: number,
+        activityContext?: {
+            executionLogId: number | null;
+            serverId: number;
+            logActivity: (evt: { eventType: string; message: string }) => Promise<void>;
+            onRecaptchaBlocked?: (serverId: number) => void;
+        }
+    ): Promise<void> {
+        return await performMassScavengingOperation(serverId, {
+            logger: this.logger,
+            credentials: this.credentials,
+            plemionaCookiesService: this.plemionaCookiesService,
+            villagesService: this.villagesService,
+            serversService: this.serversService,
+            advancedScavengingService: this.advancedScavengingService,
+            scavengingLimitsService: this.scavengingLimitsService,
+            settingsService: this.settingsService,
             activityContext
         });
     }

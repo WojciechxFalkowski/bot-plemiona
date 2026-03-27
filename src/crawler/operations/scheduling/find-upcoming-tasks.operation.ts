@@ -41,6 +41,7 @@ export function findUpcomingTasksOperation(
             const regularTasks: Array<{ task: CrawlerTask; type: string }> = [
                 { task: plan.constructionQueue, type: 'Construction Queue' },
                 { task: plan.scavenging, type: 'Scavenging' },
+                { task: plan.massScavenging, type: 'Mass Scavenging' },
                 { task: plan.miniAttacks, type: 'Mini Attacks' },
                 { task: plan.playerVillageAttacks, type: 'Player Village Attacks' },
                 { task: plan.armyTraining, type: 'Army Training' },

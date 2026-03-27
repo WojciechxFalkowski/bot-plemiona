@@ -19,6 +19,7 @@ export async function createDefaultSettingsOperation(
     const defaultSettings = [
         { key: SettingsKey.PLEMIONA_COOKIES, value: [] },
         { key: SettingsKey.AUTO_SCAVENGING_ENABLED, value: { value: false } },
+        { key: SettingsKey.AUTO_SCAVENGING_MASS_ENABLED, value: { value: false } },
         { key: SettingsKey.AUTO_CONSTRUCTION_QUEUE_ENABLED, value: { value: false } },
         { key: SettingsKey.CRAWLER_ORCHESTRATOR_ENABLED, value: { value: false } },
         { key: SettingsKey.MINI_ATTACKS_ENABLED, value: { value: false } },

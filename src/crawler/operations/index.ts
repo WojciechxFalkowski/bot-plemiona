@@ -41,6 +41,7 @@ export * from './scavenging/collect-scavenging-time-data.operation';
 export * from './scavenging/process-village-scavenging.operation';
 export * from './scavenging/perform-scavenging.operation';
 export * from './scavenging/perform-scavenging-for-village.operation';
+export * from './scavenging-mass/perform-mass-scavenging.operation';
 export * from './scavenging/dispatch-scavenging-level.operation';
 export * from './scavenging/update-village-state-after-dispatch.operation';
 export * from './scavenging/calculate-optimal-schedule-time.operation';
@@ -59,6 +60,7 @@ export * from './scheduling/find-next-task-to-execute.operation';
 
 // Execution operations
 export * from './execution/execute-scavenging-task.operation';
+export * from './execution/execute-mass-scavenging-task.operation';
 export * from './execution/execute-construction-queue-task.operation';
 export * from './execution/execute-mini-attacks-task.operation';
 export * from './execution/execute-army-training-task.operation';

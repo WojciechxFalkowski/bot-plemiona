@@ -13,6 +13,7 @@ import { calculateRandomArmyTrainingIntervalOperation } from '../calculations/ca
 import { calculateRandomTwDatabaseIntervalOperation } from '../calculations/calculate-random-tw-database-interval.operation';
 import { validateAccountManagerEnabledOperation } from '../validation/validate-account-manager-enabled.operation';
 import { calculateRandomAccountManagerIntervalOperation } from '../calculations/calculate-random-account-manager-interval.operation';
+import { validateAutoScavengingMassEnabledOperation } from '../validation/validate-auto-scavenging-mass-enabled.operation';
 
 export interface UpdateServerTaskStatesDependencies {
     multiServerState: MultiServerState;
@@ -49,12 +50,14 @@ export async function updateServerTaskStatesOperation(
             playerVillageAttacks: plan.playerVillageAttacks.enabled,
             armyTraining: plan.armyTraining.enabled,
             twDatabase: plan.twDatabase.enabled,
-            accountManager: plan.accountManager.enabled
+            accountManager: plan.accountManager.enabled,
+            massScavenging: plan.massScavenging.enabled
         };
 
         // Update enabled states for all tasks
         plan.constructionQueue.enabled = await validateConstructionQueueEnabledOperation(serverId, deps);
         plan.scavenging.enabled = await validateAutoScavengingEnabledOperation(serverId, deps);
+        plan.massScavenging.enabled = await validateAutoScavengingMassEnabledOperation(serverId, deps);
         plan.miniAttacks.enabled = await validateMiniAttacksEnabledOperation(serverId, deps);
         plan.playerVillageAttacks.enabled = await validatePlayerVillageAttacksEnabledOperation(serverId, deps);
         plan.armyTraining.enabled = await validateArmyTrainingEnabledOperation(serverId, deps);
@@ -105,7 +108,15 @@ export async function updateServerTaskStatesOperation(
             logger.log(`🔄 Account Manager enabled for ${plan.serverCode}, next execution: ${plan.accountManager.nextExecutionTime.toLocaleString()}`);
         }
 
-        logger.debug(`📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}, TwDatabase=${plan.twDatabase.enabled}, AccountManager=${plan.accountManager.enabled}`);
+        if (!previousStates.massScavenging && plan.massScavenging.enabled) {
+            const defaultDelay = getInitialIntervalsOperation().massScavenging;
+            plan.massScavenging.nextExecutionTime = new Date(Date.now() + defaultDelay);
+            logger.log(`🔄 Mass Scavenging enabled for ${plan.serverCode}, next execution: ${plan.massScavenging.nextExecutionTime.toLocaleString()}`);
+        }
+
+        logger.debug(
+            `📋 Server ${plan.serverCode} tasks: Construction=${plan.constructionQueue.enabled}, Scavenging=${plan.scavenging.enabled}, MassScavenging=${plan.massScavenging.enabled}, MiniAttacks=${plan.miniAttacks.enabled}, PlayerVillageAttacks=${plan.playerVillageAttacks.enabled}, ArmyTraining=${plan.armyTraining.enabled}, TwDatabase=${plan.twDatabase.enabled}, AccountManager=${plan.accountManager.enabled}`
+        );
     } catch (error) {
         logger.error(`❌ Error updating task states for server ${serverId}:`, error);
         throw error;

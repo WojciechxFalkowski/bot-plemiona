@@ -688,6 +688,61 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Public method to manually trigger scavenging for a specific server
      * @returns Object with serverCode, serverName and autoScavengingEnabled flag for response message
      */
+    /**
+     * Manual trigger for mass scavenging (scavenge_mass). Requires AUTO_SCAVENGING_MASS_ENABLED.
+     */
+    public async triggerMassScavenging(serverId: number): Promise<{
+        serverCode: string;
+        serverName: string;
+        massScavengingEnabled: boolean;
+    }> {
+        const plan = this.multiServerState.serverPlans.get(serverId);
+        if (!plan) {
+            throw new Error(`Server ${serverId} not found`);
+        }
+
+        this.logger.log(`Manually triggering mass scavenging for server ${plan.serverCode}...`);
+
+        try {
+            const setting = await this.settingsService.getSetting<{ value: boolean }>(
+                serverId,
+                SettingsKey.AUTO_SCAVENGING_MASS_ENABLED
+            );
+            const massScavengingEnabled = setting?.value === true;
+
+            if (!massScavengingEnabled) {
+                this.logger.warn(
+                    `Mass scavenging is disabled for server ${plan.serverCode} (${plan.serverName}). Manual trigger will not run the bot.`
+                );
+                return {
+                    serverCode: plan.serverCode,
+                    serverName: plan.serverName,
+                    massScavengingEnabled: false
+                };
+            }
+        } catch (error) {
+            this.logger.error(`Failed to check mass scavenging setting for server ${plan.serverCode}:`, error);
+            return {
+                serverCode: plan.serverCode,
+                serverName: plan.serverName,
+                massScavengingEnabled: false
+            };
+        }
+
+        try {
+            await this.executeServerTaskManually(serverId, 'Mass Scavenging');
+            this.logger.log(`Manual mass scavenging completed successfully for server ${plan.serverCode}`);
+            return {
+                serverCode: plan.serverCode,
+                serverName: plan.serverName,
+                massScavengingEnabled: true
+            };
+        } catch (error) {
+            this.logger.error(`Error during manual mass scavenging for server ${plan.serverCode}:`, error);
+            throw error;
+        }
+    }
+
     public async triggerScavenging(serverId: number): Promise<{ serverCode: string; serverName: string; autoScavengingEnabled: boolean }> {
         const plan = this.multiServerState.serverPlans.get(serverId);
         if (!plan) {
@@ -826,7 +881,10 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
      * Executes a task via executeServerTaskOperation with triggeredManually flag.
      * Used by all manual trigger methods to ensure execution logs and activity events are created.
      */
-    private async executeServerTaskManually(serverId: number, taskType: 'Construction Queue' | 'Scavenging' | 'Mini Attacks' | 'Army Training' | 'TW Database'): Promise<void> {
+    private async executeServerTaskManually(
+        serverId: number,
+        taskType: 'Construction Queue' | 'Scavenging' | 'Mass Scavenging' | 'Mini Attacks' | 'Army Training' | 'TW Database'
+    ): Promise<void> {
         const { serverCode, serverName } = await this.getServerDisplayInfo(serverId);
 
         this.crawlerStatusService.clearNextScheduled();
@@ -1012,6 +1070,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
     public getDefaultIntervals(): {
         constructionQueue: number;
         scavenging: number;
+        massScavenging: number;
         miniAttacks: number;
         playerVillageAttacks: number;
         armyTraining: number;
@@ -1022,6 +1081,7 @@ export class CrawlerOrchestratorService implements OnModuleInit, OnModuleDestroy
         return {
             constructionQueue: intervals.construction,
             scavenging: intervals.scavenging,
+            massScavenging: intervals.massScavenging,
             miniAttacks: intervals.miniAttack,
             playerVillageAttacks: intervals.playerVillageAttack,
             armyTraining: intervals.armyTraining,
