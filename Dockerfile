@@ -7,8 +7,8 @@ COPY package.json package-lock.json ./
 
 # Instalacja zależności (bez NODE_ENV=production, żeby zainstalować devDependencies potrzebne do builda)
 RUN npm install
-RUN npx playwright install
-RUN npx playwright install-deps
+# App uses only chromium.launch (see browser.utils.ts); skip firefox/webkit to shrink image and build time
+RUN npx playwright install --with-deps chromium
 # Kopiowanie całego kodu źródłowego
 COPY . .
 
